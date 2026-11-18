@@ -3,7 +3,7 @@
 Panel pengelolaan server open-core (setara aaPanel + cPanel versi berbayar) dengan **agen AI bawaan yang mendalam** (OpenAI-compatible, persetujuan manusia). Migrasi dan pemeriksaan kesetaraan adalah fitur unggulan di dalamnya.
 Dijual sebagai self-host gratis (terbatas), self-host berlisensi, atau cloud berlangganan.
 
-**Status: tahap rencana, belum ada kode.** Baca [docs/plan.md](docs/plan.md) dan [docs/design.md](docs/design.md) sebelum mengerjakan apa pun. Sudah diputuskan: tetap dibangun, dogfooding dulu, pasar internasional, ID/EN (`docs/decisions/0002`). Belum final: nama, lisensi, kerangka UI, cakupan MVP (bagian 11 rencana). Jangan memilih sendiri; tanyakan atau catat sebagai usulan.
+**Status: tahap rencana, kode baru fondasi M0 (crate `core`, `i18n`, `db`, prototipe `proto-server` + `ui/`).** Baca [docs/plan.md](docs/plan.md) dan [docs/design.md](docs/design.md) sebelum mengerjakan apa pun. Sudah diputuskan: tetap dibangun, dogfooding dulu, pasar internasional, ID/EN (`docs/decisions/0002`). Belum final: nama, lisensi, kerangka UI, cakupan MVP (bagian 11 rencana). Jangan memilih sendiri; tanyakan atau catat sebagai usulan.
 
 ## Klaim produk (jangan melenceng)
 
@@ -58,11 +58,12 @@ Skill proyek, dibuat dari dokumentasi resmi v2.tauri.app dan Context7 (dibaca 20
 
 - Bahasa percakapan: Indonesia. Kode, komentar, nama, dan commit: Inggris.
 - **Produk internasional, bahasa minimal ID/EN sejak awal.** Tidak ada teks tampilan yang ditulis tetap di kode; semua lewat katalog i18n (bahasa bawaan Inggris). AI, bot Telegram, dan notifikasi mengikuti locale pengguna. Lihat `docs/design.md` bagian 14.
-- **Commit:** Conventional Commits, Inggris, tanpa baris `Co-Authored-By` atau sebutan Claude. Jangan commit/push kecuali diminta; Anda (pemilik) yang menjalankannya. Saran: pisahkan commit docs dari kode.
+- **Commit:** Conventional Commits, Inggris, tanpa baris `Co-Authored-By` atau sebutan Claude. Commit `git commit -s` (DCO). Commit hanya bila diminta; **bila pemilik meminta commit, setiap selesai commit langsung `git push`** (instruksi tetap pemilik, 2026-11-19). Jangan push tanpa commit yang diminta, dan jangan `--force`. Saran: pisahkan commit docs dari kode.
 - Keputusan arsitektur dicatat di `docs/decisions/NNNN-judul.md` (konteks, keputusan, alasan, alternatif). Jangan ubah rencana tanpa mencatatnya di sana.
 - **Kebijakan dokumen publik (0006):** README, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, LICENSING punya versi Inggris (`X.md`, utama) dan Indonesia (`X.id.md`); ubah keduanya bersamaan. `LICENSE` hanya teks asli; `CHANGELOG.md` hanya Inggris. Sebelum publik, ikuti `docs/RELEASE-CHECKLIST.md`; kontak pada Kode Etik dan keamanan masih penanda yang harus diisi.
 - **Aturan penulisan dokumen publik (SEO, AEO, GEO):** tulis untuk manusia; jawaban langsung di awal bagian; kalimat definisi 40-60 kata; FAQ dengan pertanyaan bernada alami; tabel untuk perbandingan; setiap fakta tentang produk lain bertanggal dan bersumber; sertakan "Terakhir diperbarui". **Jangan mengklaim fitur yang belum ada** (tulis "direncanakan"), jangan menjejalkan kata kunci, jangan menulis versi terpisah "untuk AI", dan jangan membuat sebutan atau ulasan palsu. Mesin AI mengutip apa adanya, jadi klaim yang salah akan menyebar.
 - Dokumen/laporan ditulis sebagai file `.md` lokal (jangan memakai Artifact tool).
+- **Dokumen ikut diperbarui sekalian.** Setiap perubahan yang memengaruhi isi dokumen, perbarui di perubahan yang sama (jangan ditunda): `CHANGELOG.md` (Inggris, bagian `[Unreleased]`), `README.md` dan `README.id.md` bersamaan (status, struktur repositori, tanggal "Terakhir diperbarui"), `docs/NEXT-STEPS.md` (status langkah), bagian Struktur dan Status di `CLAUDE.md`, dan keputusan di `docs/decisions/`. Jangan mengklaim fitur yang belum ada. Jalankan `python3 scripts/check-docs.py` sebelum selesai.
 - **Jangan mengambil referensi dari `monitoring-dashboard`.** Monitor produk ini berasal dari Stack Panel (`panel_v2`), bukan dari proyek itu.
 - Jangan menambah dependensi atau fitur di luar tahap yang sedang dikerjakan (lihat tabel tahapan di rencana).
 - Uji fungsional, bukan hanya status HTTP. Klaim "sudah jalan" hanya setelah diverifikasi; laporkan yang belum diuji apa adanya.
@@ -78,6 +79,8 @@ docs/plan.md          rencana produk (sumber kebenaran tahapan)
 docs/design.md        desain teknis: skema DB, format inventaris, protokol agen, alur persetujuan
 docs/market-research.md  riset pasar (fakta vs inferensi, sumber)
 docs/decisions/       catatan keputusan (0000 templat, 0001 tertunda, 0002 bangun/dogfood/ID-EN)
-scripts/              skrip bantu (check-personal-data.sh)
+crates/               workspace Rust: core, i18n, db, proto-server (prototipe sementara)
+ui/                   prototipe Svelte 5 + Vite
+scripts/              skrip bantu (check-personal-data.sh, check-docs.py, measure.sh)
 .claude/skills/       skill khusus proyek
 ```

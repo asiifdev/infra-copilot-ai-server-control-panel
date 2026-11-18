@@ -20,3 +20,16 @@ cannot drift apart. Release notes may get an Indonesian summary.
 - Provisional license: `AGPL-3.0-only` (see `LICENSING.md`).
 - Continuous integration: format, lint, tests on Linux and macOS, dependency policy (`deny.toml`), advisory scan, full-history secret scan, and a documentation check.
 - Funding and support policy (`FUNDING.md`), in English and Indonesian.
+- `i18n` crate: en/id message catalog with stable keys, English fallback and a scanner that rejects
+  hardcoded text in the UI.
+- `db` crate: SQLite schema for organizations, users, memberships, API tokens, nodes, agents and node
+  secrets; tenant-scoped queries; hash-chained append-only audit log with chain verification.
+- `proto-server` crate and `ui/` prototype (Svelte 5 + Vite embedded in an axum binary) with
+  `scripts/measure.sh`, used to set the performance budget (proposed in decision 0010).
+- Decision records 0007 (core libraries), 0008 (own message catalog), 0009 (SQLite schema) and 0010
+  (performance budget), all proposed.
+
+### Changed
+
+- `cargo-deny` allows workspace path dependencies; the docs check skips `ui/node_modules`.
+- Contributor rules: documentation is updated in the same change, and commits are pushed right after they are made when the owner asks for a commit.

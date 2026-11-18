@@ -9,7 +9,7 @@ English | [Bahasa Indonesia](README.id.md)
 Last updated: 2026-11-19.
 
 > **Status: pre-alpha.** There is no installable release yet. This repository currently holds the
-> design, the architecture decisions and the first core crate. "Infra Copilot" is a provisional
+> design, the architecture decisions and the first foundation crates (domain types, message catalog, database schema) plus a size and speed prototype. "Infra Copilot" is a provisional
 > name and may change.
 
 ## What it is
@@ -57,10 +57,14 @@ Everything below is **planned**, not shipped:
 
 ```
 crates/core         shared domain types: risk tiers, secret redaction (no external dependencies)
+crates/i18n         en/id message catalog with stable keys and fallback
+crates/db           SQLite schema, tenant-scoped queries, hash-chained audit log
+crates/proto-server throwaway prototype used to measure binary size, memory and startup
+ui/                 Svelte 5 + Vite prototype page (embedded into the prototype binary)
 docs/design.md      technical design: schema, inventory format, agent protocol, approval flow
 docs/decisions/     architecture decision records
 docs/market-research.md   market research with facts separated from inference
-scripts/            helper scripts
+scripts/            helper scripts (including measure.sh for the performance budget)
 .claude/ .agents/   configuration and skills for AI-assisted development
 ```
 

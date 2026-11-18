@@ -9,7 +9,8 @@
 Terakhir diperbarui: 2026-11-19.
 
 > **Status: pra-alfa.** Belum ada rilis yang bisa dipasang. Repositori ini saat ini berisi desain,
-> keputusan arsitektur, dan crate inti pertama. "Infra Copilot" adalah nama sementara dan bisa
+> keputusan arsitektur, crate fondasi pertama (tipe domain, katalog pesan, skema database), dan prototipe
+> pengukur ukuran dan kecepatan. "Infra Copilot" adalah nama sementara dan bisa
 > berubah.
 
 ## Apa ini
@@ -61,10 +62,14 @@ Semua yang tertulis di bawah ini **direncanakan**, belum dirilis:
 
 ```
 crates/core         tipe domain bersama: tingkat risiko, penyaring rahasia (tanpa dependensi luar)
+crates/i18n         katalog pesan en/id dengan kunci stabil dan fallback
+crates/db           skema SQLite, kueri per organisasi, log audit berantai-hash
+crates/proto-server prototipe sementara untuk mengukur ukuran biner, memori, dan waktu mulai
+ui/                 halaman prototipe Svelte 5 + Vite (ditanam ke biner prototipe)
 docs/design.md      desain teknis: skema, format inventaris, protokol agen, alur persetujuan
 docs/decisions/     catatan keputusan arsitektur
 docs/market-research.md   riset pasar, fakta dipisahkan dari inferensi
-scripts/            skrip bantu
+scripts/            skrip bantu (termasuk measure.sh untuk anggaran kinerja)
 .claude/ .agents/   konfigurasi dan skill untuk pengembangan dibantu AI
 ```
 
