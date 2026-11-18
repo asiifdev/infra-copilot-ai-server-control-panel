@@ -1,0 +1,8 @@
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { margin: 0; padding: 1rem; }
+header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+caption { text-align: left; font-weight: 600; padding: 0.25rem 0; }
+th, td { text-align: left; padding: 0.25rem 0.5rem; border-bottom: 1px solid #8884; }
+.status-offline { color: #c0392b; }
+.status-degraded { color: #b9770e; }

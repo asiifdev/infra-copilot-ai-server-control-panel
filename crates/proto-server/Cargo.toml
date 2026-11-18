@@ -1,0 +1,20 @@
+[package]
+name = "proto-server"
+description = "Temporary M0 prototype: serves the embedded UI to measure the performance budget (docs/decisions/0010)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
+tokio = { version = "1", default-features = false, features = ["rt", "net", "signal", "macros"] }
+rust-embed = { version = "8", default-features = false, features = ["debug-embed"] }
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std", "ansi"] }
+
+[dev-dependencies]
+tokio = { version = "1", default-features = false, features = ["rt", "net", "macros", "io-util", "time"] }
+
+[lints]
+workspace = true
