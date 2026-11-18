@@ -1,0 +1,27 @@
+[workspace]
+resolver = "3"
+members = ["crates/core"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+
+[profile.release]
+# Size/speed tuning is measured, not guessed (docs/decisions/0005). Placeholder baseline:
+opt-level = 3
+lto = "thin"
+strip = true
+panic = "abort"
+codegen-units = 1

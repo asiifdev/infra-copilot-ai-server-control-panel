@@ -1,0 +1,18 @@
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.token
+node_modules/
+dist/
+.next/
+*.log
+.DS_Store
+.claude/hygiene-patterns.local
+.claude/settings.local.json
+target/
+# raw research kept locally; the deliverable is docs/market-research.md
+reports/
+research_notes/
+CLAUDE.local.md
