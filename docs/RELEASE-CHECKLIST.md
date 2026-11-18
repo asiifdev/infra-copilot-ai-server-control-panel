@@ -23,7 +23,7 @@ Repositori ini privat sampai semua butir di bawah selesai. Tandai `[x]` bila sud
 - [x] Pindai riwayat git untuk rahasia: gitleaks, 6 commit, bersih (2026-11-19). Ulangi sebelum rilis dan pasang di CI
 
 ## Kualitas
-- [ ] CI: `cargo fmt`, `clippy -D warnings`, `cargo test`, `cargo audit`, `cargo deny`
+- [x] CI GitHub Actions: `fmt`, `clippy -D warnings`, `test` (Linux dan macOS), `cargo deny`, `cargo audit`, gitleaks riwayat penuh, pemeriksaan dokumen dua bahasa. Aksi pihak ketiga dikunci ke SHA; Dependabot memperbarui mingguan. Windows menyusul
 - [ ] Anggaran kinerja (ukuran biner, memori diam, waktu mulai) terukur dan dijaga di CI
 - [ ] Perlindungan cabang `main`, tinjauan wajib untuk area sensitif
 - [ ] README dan dokumen tidak menjanjikan fitur yang belum ada

@@ -52,6 +52,7 @@ cargo test --workspace
 
 - Tanpa kode `unsafe` (workspace melarangnya), tanpa `unwrap()` atau `expect()` di jalur produksi,
   tanpa `println!` di kode pustaka.
+- CI menjalankan pemeriksaan yang sama di Linux dan macOS, ditambah `cargo deny` dan `cargo audit` (advisori, lisensi, sumber), pemindaian `gitleaks` atas seluruh riwayat, dan pemeriksaan dokumentasi (`python3 scripts/check-docs.py`: setiap dokumen publik butuh versi Inggris dan Indonesia yang saling menaut, dan setiap tautan relatif harus valid). Jalankan yang terakhir secara lokal bila Anda menyentuh dokumen.
 - Tambahkan tes bersama perubahan. Adapter baru harus lulus uji kontrak bersama. Aturan kesetaraan
   baru butuh fixture anonim yang memicunya dan satu yang tidak.
 - Jaga perubahan tetap terfokus. Beberapa pull request kecil lebih mudah ditinjau daripada satu

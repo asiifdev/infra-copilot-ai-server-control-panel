@@ -51,6 +51,7 @@ cargo test --workspace
 
 - No `unsafe` code (the workspace forbids it), no `unwrap()` or `expect()` on production paths, no
   `println!` in library code.
+- CI runs the same checks on Linux and macOS, plus `cargo deny` and `cargo audit` (advisories, licenses, sources), a `gitleaks` scan of the full history, and a documentation check (`python3 scripts/check-docs.py`: every public document needs an English and an Indonesian version, linked to each other, and every relative link must resolve). Run the last one locally if you touch the docs.
 - Add tests with the change. New adapters need to pass the shared contract tests. New parity rules
   need an anonymous fixture that triggers them and one that does not.
 - Keep the change focused. Several small pull requests are easier to review than one large one.
