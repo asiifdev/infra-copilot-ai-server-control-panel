@@ -32,4 +32,5 @@ cannot drift apart. Release notes may get an Indonesian summary.
 ### Changed
 
 - `cargo-deny` allows workspace path dependencies; the docs check skips `ui/node_modules`.
-- Contributor rules: documentation is updated in the same change, and commits are pushed right after they are made when the owner asks for a commit.
+- Replaced `chunks_exact` with `as_chunks` in the SHA-256 code and removed an unused dependency from `i18n`, found by the latest stable clippy.
+- Contributor rules: documentation is updated in the same change, and commits are pushed right after they are made when the owner asks for a commit; CI must be green after each push; toolchain and dependencies track the latest stable versions.
