@@ -13,7 +13,7 @@
 |---|---|---|---|---|
 | Runtime async | `tokio` (fitur minimal: `rt`, `net`, `time`, `signal`, `sync`, `process`) | 1.54 | Dasar `axum` dan `russh`; tidak ada pilihan lain yang kompatibel dengan keduanya | `smol` (tidak didukung `axum`/`russh`) |
 | HTTP server + WebSocket | `axum` | 0.8.9 | Tipis di atas `hyper`/`tower`, WebSocket dan graceful shutdown bawaan (terverifikasi di dokumentasi) | `hyper` mentah (lebih kecil, lebih banyak kode sendiri), `actix-web` (lebih berat) |
-| Basis data bawaan | `rusqlite` fitur `bundled` + `rusqlite_migration` | 0.41 / 2.7 (koreksi 2026-11-19: migration 2.7 memerlukan rusqlite 0.41, bukan 0.43; lihat 0009) | SQLite tertanam sesuai 0005, tanpa ORM; migrasi memakai `user_version` (cepat, tanpa tabel tambahan) | `sqlx` (async, tapi lebih berat dan makro kompilasi), `tokio-rusqlite` bila perlu pembungkus async |
+| Basis data bawaan | `rusqlite` fitur `bundled` | 0.43 | SQLite tertanam sesuai 0005, tanpa ORM. Migrasi: migrator sendiri berbasis `user_version` (diubah di 0011; `rusqlite_migration` tidak dipakai karena menahan `rusqlite` di 0.41) | `sqlx` (async, tapi lebih berat dan makro kompilasi), `tokio-rusqlite` bila perlu pembungkus async |
 | PostgreSQL (cloud) | ditunda ke M6 | - | Tidak dibutuhkan MVP; antarmuka `db` dirancang agar bisa diganti | - |
 | SSH klien | `russh` | 0.65 | Rust murni, async, tanpa ikatan ke libssh2 (C); exec dan autentikasi kunci terverifikasi | `ssh2` (ikatan C, sinkron) |
 | Klien HTTP (AI, Telegram, Cloudflare) | `ureq` (sinkron, di thread terpisah) dulu, `reqwest` hanya bila perlu | 3.5 / 0.13 | Lebih kecil; `reqwest` menarik banyak dependensi | `reqwest` (nyaman, lebih besar) |

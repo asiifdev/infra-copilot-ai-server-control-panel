@@ -65,3 +65,6 @@ Migrasi 0001 dan 0003 diubah langsung (belum ada rilis atau DB nyata); setelah r
 - `audit_log`: trigger `BEFORE INSERT` memaksa `seq` berurutan dan `prev_hash` sama dengan hash entri sebelumnya, sehingga `INSERT OR REPLACE` tidak bisa menimpa entri diam-diam.
 - Redaksi subjek audit tidak sadar-JSON dan bisa merusak JSON (mis. kunci `token_count` tanpa tanda kutip). Bila masukan valid tetapi hasil redaksi tidak, teks hasil disimpan sebagai string di `{"redacted_subject": ...}`. Redaktor di `core-domain` sendiri belum diperbaiki; usulan: buat sadar-JSON saat dibutuhkan.
 - Belum diperbaiki (catatan tinjauan): `append_audit` membuka transaksinya sendiri, sehingga belum bisa dipakai di dalam transaksi pemanggil; `node_id` audit tidak diperiksa milik org yang sama.
+
+## Pembaruan (2026-11-19, 0011)
+`rusqlite_migration` dihapus dan `rusqlite` dinaikkan ke 0.43; migrasi dijalankan oleh `crates/db/src/migrate.rs`. Catatan ketidakcocokan versi di atas sudah tidak berlaku.

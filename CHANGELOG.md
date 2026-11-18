@@ -27,10 +27,11 @@ cannot drift apart. Release notes may get an Indonesian summary.
 - `proto-server` crate and `ui/` prototype (Svelte 5 + Vite embedded in an axum binary) with
   `scripts/measure.sh`, used to set the performance budget (proposed in decision 0010).
 - Decision records 0007 (core libraries), 0008 (own message catalog), 0009 (SQLite schema) and 0010
-  (performance budget), all proposed.
+  (performance budget), all proposed; 0011 (own migrator, latest `rusqlite`), accepted.
 
 ### Changed
 
+- `db` now uses `rusqlite` 0.43 with its own `user_version` migrator instead of `rusqlite_migration` (decision 0011); a database newer than the build is refused.
 - `cargo-deny` allows workspace path dependencies; the docs check skips `ui/node_modules`.
 - Replaced `chunks_exact` with `as_chunks` in the SHA-256 code and removed an unused dependency from `i18n`, found by the latest stable clippy.
 - Contributor rules: documentation is updated in the same change, and commits are pushed right after they are made when the owner asks for a commit; CI must be green after each push; toolchain and dependencies track the latest stable versions.
