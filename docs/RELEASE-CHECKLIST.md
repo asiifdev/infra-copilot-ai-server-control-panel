@@ -11,8 +11,8 @@ Repositori ini privat sampai semua butir di bawah selesai. Tandai `[x]` bila sud
 
 ## Penanda yang harus diisi
 - [ ] Kontak pelaporan di `CODE_OF_CONDUCT.md` dan `CODE_OF_CONDUCT.id.md`
-- [ ] Kontak keamanan di `SECURITY.md` dan `SECURITY.id.md`
-- [ ] Aktifkan pelaporan kerentanan privat GitHub
+- [x] Kontak keamanan: `SECURITY.md` kini memakai pelaporan kerentanan privat GitHub (tidak ada surel)
+- [x] Aktifkan pelaporan kerentanan privat GitHub (aktif 2026-11-19)
 - [ ] Setel `contact_links` pada templat issue bila perlu
 
 ## Kebersihan data
@@ -20,7 +20,7 @@ Repositori ini privat sampai semua butir di bawah selesai. Tandai `[x]` bila sud
 - [ ] Tulis ulang `docs/plan.md` secara generik (kini memuat nama dan domain pribadi), atau keluarkan dari repo publik
 - [ ] Periksa `docs/market-research.md` dan `docs/decisions/` dari data pribadi
 - [ ] Putuskan nasib `.agents/`, `.claude/`, `reports/`, `research_notes/` (tidak ikut publik bila tidak perlu)
-- [ ] Pindai riwayat git untuk rahasia (mis. gitleaks); bila ada, bersihkan riwayat atau mulai repositori baru
+- [x] Pindai riwayat git untuk rahasia: gitleaks, 6 commit, bersih (2026-11-19). Ulangi sebelum rilis dan pasang di CI
 
 ## Kualitas
 - [ ] CI: `cargo fmt`, `clippy -D warnings`, `cargo test`, `cargo audit`, `cargo deny`

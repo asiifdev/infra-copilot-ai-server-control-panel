@@ -14,11 +14,13 @@ rilis, bagian ini akan mendaftar versi mana yang mendapat perbaikan keamanan.
 
 **Jangan membuka issue, pull request, atau diskusi publik untuk masalah keamanan.**
 
-Laporkan secara privat lewat salah satu cara ini:
+Laporkan secara privat lewat **pelaporan kerentanan privat GitHub**: buka tab **Security** di
+repositori lalu pilih **Report a vulnerability**, atau langsung ke
+[formulir laporan privat](https://github.com/asiifdev/infra-copilot-ai-server-control-panel/security/advisories/new). Hanya Anda dan pengelola yang bisa melihat laporan itu.
 
-1. **Pelaporan kerentanan privat GitHub** di repositori ini (tombol "Report a vulnerability" di tab
-   Security), setelah diaktifkan.
-2. **Surel:** **[kontak keamanan: akan diisi pengelola sebelum repositori dibuka ke publik]**
+Belum ada jalur privat lain. Bila Anda tidak bisa memakai GitHub, buka issue publik yang hanya
+menyatakan bahwa Anda punya laporan keamanan dan minta cara privat untuk mengirimkannya; jangan
+sertakan detail apa pun.
 
 Sertakan yang Anda temukan, di mana, cara mereproduksinya, dan dampak menurut Anda. Jangan
 menyertakan rahasia asli, data pelanggan asli, atau akses ke sistem yang bukan milik Anda.

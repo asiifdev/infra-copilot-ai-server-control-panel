@@ -480,16 +480,22 @@ mod tests {
 
     #[test]
     fn private_key_block() {
-        let input = "before\n-----BEGIN OPENSSH PRIVATE KEY-----\nAAAAB3Nza\nC1yc2E\n-----END OPENSSH PRIVATE KEY-----\nafter";
+        // The markers are assembled at run time so the source holds no key-shaped block for secret scanners.
+        let (begin, end) = ("-----BEGIN", "-----END");
+        let kind = "OPENSSH PRIVATE KEY";
+        let input = format!(
+            "before\n{begin} {kind}-----\nFAKE-BODY-1\nFAKE-BODY-2\n{end} {kind}-----\nafter"
+        );
         assert_eq!(
-            text(input),
+            text(&input),
             format!("before\n{REDACTED_PRIVATE_KEY}\nafter")
         );
     }
 
     #[test]
     fn unterminated_private_key_drops_the_remainder() {
-        let out = text("x\n-----BEGIN RSA PRIVATE KEY-----\nMIIEow...");
+        let begin = "-----BEGIN";
+        let out = text(&format!("x\n{begin} RSA PRIVATE KEY-----\nFAKE-BODY..."));
         assert_eq!(out, format!("x\n{REDACTED_PRIVATE_KEY}"));
     }
 

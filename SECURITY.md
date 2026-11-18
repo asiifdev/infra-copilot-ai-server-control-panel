@@ -14,12 +14,12 @@ releases exist, this section will list which versions receive security fixes.
 
 **Do not open a public issue, pull request or discussion for a security problem.**
 
-Report privately using one of these:
+Report privately with **GitHub private vulnerability reporting**: open the repository's **Security** tab
+and choose **Report a vulnerability**, or go directly to
+[the private report form](https://github.com/asiifdev/infra-copilot-ai-server-control-panel/security/advisories/new). Only you and the maintainers can see the report.
 
-1. **GitHub private vulnerability reporting** on this repository (the "Report a vulnerability"
-   button under the Security tab), once it is enabled.
-2. **Email:** **[security contact: to be set by the maintainer before the repository is made
-   public]**
+There is no other private channel yet. If you cannot use GitHub, open a public issue that says only
+that you have a security report and ask for a private way to send it; do not include any details.
 
 Please include what you found, where, how to reproduce it, and what you think the impact is. Do not
 include real secrets, real customer data, or access to systems you do not own.
