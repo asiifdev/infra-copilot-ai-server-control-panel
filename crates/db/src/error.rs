@@ -16,8 +16,20 @@ pub enum Error {
     Config(&'static str),
     /// The database refused the operation (constraint, lock, I/O).
     Sqlite(rusqlite::Error),
-    /// A migration failed.
-    Migration(rusqlite_migration::Error),
+    /// A migration failed and was rolled back.
+    Migration {
+        /// The 1-based migration that failed.
+        version: usize,
+        /// The underlying database error.
+        source: rusqlite::Error,
+    },
+    /// The database was created by a newer build; refusing to touch it.
+    DatabaseNewer {
+        /// Schema version found in the database.
+        found: usize,
+        /// Newest schema version this build knows.
+        supported: usize,
+    },
 }
 
 impl fmt::Display for Error {
@@ -27,7 +39,13 @@ impl fmt::Display for Error {
             Self::Invalid(what) => write!(f, "invalid value: {what}"),
             Self::Config(what) => write!(f, "database configuration error: {what}"),
             Self::Sqlite(err) => write!(f, "database error: {err}"),
-            Self::Migration(err) => write!(f, "migration error: {err}"),
+            Self::Migration { version, source } => {
+                write!(f, "migration {version} failed: {source}")
+            }
+            Self::DatabaseNewer { found, supported } => write!(
+                f,
+                "database schema version {found} is newer than the supported {supported}"
+            ),
         }
     }
 }
@@ -36,7 +54,7 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Sqlite(err) => Some(err),
-            Self::Migration(err) => Some(err),
+            Self::Migration { source, .. } => Some(source),
             _ => None,
         }
     }
@@ -45,12 +63,6 @@ impl std::error::Error for Error {
 impl From<rusqlite::Error> for Error {
     fn from(err: rusqlite::Error) -> Self {
         Self::Sqlite(err)
-    }
-}
-
-impl From<rusqlite_migration::Error> for Error {
-    fn from(err: rusqlite_migration::Error) -> Self {
-        Self::Migration(err)
     }
 }
 

@@ -15,12 +15,12 @@ mod audit;
 mod error;
 mod identity;
 mod ids;
+mod migrate;
 mod nodes;
 mod secret;
 mod sha256;
 
 use rusqlite::Connection;
-use rusqlite_migration::{M, Migrations};
 use std::path::Path;
 use std::time::Duration;
 
@@ -35,6 +35,7 @@ pub use identity::{
     revoke_api_token, set_member_role,
 };
 pub use ids::{AgentId, ApiTokenId, AuditId, MembershipId, NodeId, OrgId, SecretId, UserId};
+pub use migrate::{LATEST_VERSION, migrate, schema_version};
 pub use nodes::{
     Agent, NewAgent, NewNode, Node, NodeAccess, NodeKind, NodeSecretMeta, NodeStatus, create_node,
     delete_node, delete_node_secret, get_node, get_node_secret, list_agents, list_node_secrets,
@@ -42,21 +43,8 @@ pub use nodes::{
 };
 pub use secret::{SealedSecret, SecretText};
 
-/// SQL migrations in order. Never edit an applied one; append a new file instead.
-const MIGRATION_SQL: [&str; 3] = [
-    include_str!("../migrations/0001_identity.sql"),
-    include_str!("../migrations/0002_nodes.sql"),
-    include_str!("../migrations/0003_audit_log.sql"),
-];
-
 /// How long a writer waits for a lock before failing with `SQLITE_BUSY`.
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
-
-/// The migration set, built from [`MIGRATION_SQL`].
-#[must_use]
-pub fn migrations() -> Migrations<'static> {
-    Migrations::new(MIGRATION_SQL.iter().map(|sql| M::up(sql)).collect())
-}
 
 /// Opens (creating if needed) a database file, configures the connection and migrates it.
 ///
@@ -65,7 +53,7 @@ pub fn migrations() -> Migrations<'static> {
 pub fn open(path: &Path) -> Result<Connection> {
     let mut conn = Connection::open(path)?;
     configure(&conn, true)?;
-    migrations().to_latest(&mut conn)?;
+    migrate(&mut conn)?;
     Ok(conn)
 }
 
@@ -76,7 +64,7 @@ pub fn open(path: &Path) -> Result<Connection> {
 pub fn open_in_memory() -> Result<Connection> {
     let mut conn = Connection::open_in_memory()?;
     configure(&conn, false)?;
-    migrations().to_latest(&mut conn)?;
+    migrate(&mut conn)?;
     Ok(conn)
 }
 

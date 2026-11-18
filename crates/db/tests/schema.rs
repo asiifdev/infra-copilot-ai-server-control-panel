@@ -27,9 +27,9 @@ fn user_version(conn: &Connection) -> rusqlite::Result<i64> {
 
 #[test]
 fn migrations_are_valid_and_reach_the_latest_version_from_empty() -> TestResult {
-    migrations().validate()?;
     let conn = open_in_memory()?;
     assert_eq!(user_version(&conn)?, 3);
+    assert_eq!(schema_version(&conn)?, LATEST_VERSION);
     let tables: i64 = conn.query_row(
         "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name IN \
          ('organizations','users','memberships','api_tokens','nodes','agents','node_secrets','audit_log')",
@@ -49,7 +49,7 @@ fn migrations_are_idempotent_and_keep_data() -> TestResult {
         populate(&conn, "alpha")?.org
     };
     let mut conn = open(&path)?; // second open migrates again: must be a no-op
-    migrations().to_latest(&mut conn)?;
+    migrate(&mut conn)?;
     assert_eq!(user_version(&conn)?, 3);
     assert_eq!(list_nodes(&conn, &org)?.len(), 1);
     assert_eq!(
@@ -212,4 +212,26 @@ fn unknown_stored_ids_are_rejected_at_parse() {
     assert!(OrgId::parse("DROP TABLE users").is_err());
     assert!(Role::parse("root").is_err());
     assert!(NodeStatus::parse("zombie").is_err());
+}
+
+#[test]
+fn a_newer_database_is_refused_and_a_failed_migration_rolls_back() -> TestResult {
+    let mut conn = rusqlite::Connection::open_in_memory()?;
+    conn.pragma_update(None, "user_version", 99)?;
+    assert!(matches!(
+        migrate(&mut conn),
+        Err(Error::DatabaseNewer { .. })
+    ));
+
+    // A half-migrated database (version 1 recorded, but a later table already exists) must fail
+    // on the conflicting migration and stay at the last good version.
+    let mut broken = rusqlite::Connection::open_in_memory()?;
+    migrate(&mut broken)?;
+    broken.pragma_update(None, "user_version", 1)?;
+    assert!(matches!(
+        migrate(&mut broken),
+        Err(Error::Migration { version: 2, .. })
+    ));
+    assert_eq!(schema_version(&broken)?, 1);
+    Ok(())
 }

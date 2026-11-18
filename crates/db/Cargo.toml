@@ -8,9 +8,8 @@ publish.workspace = true
 
 [dependencies]
 core-domain = { path = "../core" }
-# Versions and feature choices: docs/decisions/0007 and 0009. Minimal features only (0005).
-rusqlite = { version = "0.41", default-features = false, features = ["bundled"] }
-rusqlite_migration = { version = "2.7", default-features = false }
+# Versions and feature choices: docs/decisions/0007, 0009 and 0011. Minimal features only (0005).
+rusqlite = { version = "0.43", default-features = false, features = ["bundled"] }
 
 [lints]
 workspace = true
