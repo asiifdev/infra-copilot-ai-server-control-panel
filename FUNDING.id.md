@@ -4,13 +4,27 @@
 
 Terakhir diperbarui: 2026-11-19.
 
-## Keadaan saat ini
+Infra Copilot masih **pra-alfa**. Belum ada paket berbayar.
 
-Infra Copilot masih **pra-alfa** dan saat ini didanai dari waktu dan uang pengelolanya sendiri.
-**Belum ada akun sponsor, tautan donasi, atau paket berbayar.**
+## Dukung pengelola
 
-Waspadai halaman, akun, atau pesan apa pun yang mengaku mengumpulkan uang untuk proyek ini. Satu-satunya
-kanal resmi adalah yang tercantum di repositori ini.
+Pengelola membangun proyek ini dengan waktunya sendiri. Bila Anda ingin mendukung pekerjaan itu:
+
+- [GitHub Sponsors](https://github.com/sponsors/asiifdev)
+- [Ko-fi](https://ko-fi.com/asiifdev)
+- [Buy Me a Coffee](https://www.buymeacoffee.com/asiifdev)
+
+Tombol **Sponsor** di repositori menampilkan kanal yang sama (lihat
+[.github/FUNDING.yml](.github/FUNDING.yml)).
+
+Kanal-kanal ini mendukung karya open source pengelola secara umum. Tidak terikat pada peta jalan
+proyek ini, dan memberi dukungan tidak membeli fitur, prioritas, atau bantuan kecuali diumumkan
+terpisah.
+
+## Hanya kanal resmi
+
+Kanal di atas dan yang ada di `.github/FUNDING.yml` adalah satu-satunya yang resmi. Waspadai
+halaman, akun, atau pesan apa pun yang mengaku mengumpulkan uang untuk proyek ini lewat jalur lain.
 
 ## Cara proyek ini berencana bertahan
 
@@ -29,12 +43,3 @@ Belum ada harga yang ditetapkan dan belum ada edisi berbayar saat ini.
 - **Ceritakan pengalaman migrasi Anda.** Bila Anda baru memindahkan server dan ada yang tertinggal
   yang baru Anda sadari belakangan, menceritakannya (tanpa rahasia atau data pribadi) membantu
   membentuk pemeriksaan kesetaraan.
-
-## Bila kanal sponsor ditambahkan
-
-Kanal itu akan dicantumkan di sini, dan di `.github/FUNDING.yml` agar GitHub menampilkan tombol
-Sponsor. Niat pengelola saat ini, yang bukan janji yang mengikat secara hukum:
-
-- Sponsor tidak akan mengubah lisensi inti open source.
-- Melaporkan kerentanan, atau menerima perbaikan keamanan, tidak akan pernah mensyaratkan sponsor.
-- Penggunaan dana akan dipublikasikan di sini.

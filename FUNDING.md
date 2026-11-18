@@ -4,13 +4,28 @@ English | [Bahasa Indonesia](FUNDING.id.md)
 
 Last updated: 2026-11-19.
 
-## Current state
+Infra Copilot is **pre-alpha**. There is no paid plan yet.
 
-Infra Copilot is **pre-alpha** and is currently funded by its maintainer's own time and money.
-There are **no sponsorship accounts, donation links, or paid plans yet**.
+## Support the maintainer
 
-Be careful with any page, account, or message that claims to collect money for this project. The
-only official channels are the ones listed in this repository.
+The maintainer builds this project in their own time. If you want to support that work:
+
+- [GitHub Sponsors](https://github.com/sponsors/asiifdev)
+- [Ko-fi](https://ko-fi.com/asiifdev)
+- [Buy Me a Coffee](https://www.buymeacoffee.com/asiifdev)
+
+The repository's **Sponsor** button lists the same channels (see
+[.github/FUNDING.yml](.github/FUNDING.yml)).
+
+These channels support the maintainer's open-source work in general. They are not tied to this
+project's roadmap, and supporting does not buy features, priority, or support unless that is
+announced separately.
+
+## Official channels only
+
+The channels above and the ones in `.github/FUNDING.yml` are the only official ones. Be careful
+with any page, account, or message that claims to collect money for this project through another
+route.
 
 ## How the project intends to sustain itself
 
@@ -27,12 +42,3 @@ no paid edition exists today.
 - **Share your migration story.** If you recently moved a server and something was left behind
   that you only noticed later, describing it (without secrets or personal data) helps shape the
   parity checks.
-
-## If a sponsorship channel is added
-
-It will be listed here, and in `.github/FUNDING.yml` so that GitHub shows a Sponsor button. The
-maintainer's current intentions, which are not contractual promises:
-
-- Sponsorship will not change the license of the open-source core.
-- Reporting a vulnerability, or receiving a security fix, will never require a sponsorship.
-- How funds are used will be published here.
