@@ -81,10 +81,11 @@ const H0: [u32; 8] = [
     0x5be0_cd19,
 ];
 
-fn compress(state: &mut [u32; 8], block: &[u8]) {
+fn compress(state: &mut [u32; 8], block: &[u8; 64]) {
     let mut w = [0u32; 64];
-    for (slot, bytes) in w.iter_mut().zip(block.chunks_exact(4)) {
-        *slot = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+    let (words, _) = block.as_chunks::<4>();
+    for (slot, bytes) in w.iter_mut().zip(words) {
+        *slot = u32::from_be_bytes(*bytes);
     }
     for i in 16..64 {
         let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
@@ -123,18 +124,18 @@ fn compress(state: &mut [u32; 8], block: &[u8]) {
 /// SHA-256 of `data` as 64 lowercase hex characters.
 pub(crate) fn sha256_hex(data: &[u8]) -> String {
     let mut state = H0;
-    let mut chunks = data.chunks_exact(64);
-    for block in &mut chunks {
+    let (blocks, rest) = data.as_chunks::<64>();
+    for block in blocks {
         compress(&mut state, block);
     }
-    let rest = chunks.remainder();
     let mut tail = rest.to_vec();
     tail.push(0x80);
     while tail.len() % 64 != 56 {
         tail.push(0);
     }
     tail.extend_from_slice(&((data.len() as u64).wrapping_mul(8)).to_be_bytes());
-    for block in tail.chunks_exact(64) {
+    let (tail_blocks, _) = tail.as_chunks::<64>();
+    for block in tail_blocks {
         compress(&mut state, block);
     }
     state.iter().map(|word| format!("{word:08x}")).collect()

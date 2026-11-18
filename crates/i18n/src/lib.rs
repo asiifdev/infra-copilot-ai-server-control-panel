@@ -1,6 +1,6 @@
 //! Translation catalog loader (en, id) with stable keys. Display text never lives in code.
 //!
-//! Depends on `core-domain` only (see docs/decisions/0007 and the rust-conventions skill).
+//! No dependencies (see docs/decisions/0005 and 0008).
 //! Catalog format and rationale: docs/decisions/0008. No external dependencies.
 //!
 //! ```
