@@ -1,0 +1,29 @@
+# Infra Copilot
+
+> Infra Copilot is an open-source server control panel, aimed at the same job as aaPanel and cPanel, with a built-in AI agent that proposes changes and waits for human approval. Written in Rust with a Svelte interface; targets Linux servers and a desktop app (Tauri). Provisional license: AGPL-3.0-only.
+
+Status: pre-alpha. There is no release and nothing is installable yet. Features described as planned are not available. Facts about other products are dated and sourced in the comparison page. Documents exist in English and Indonesian (`*.id.md`).
+
+## Start here
+
+- [README](https://raw.githubusercontent.com/asiifdev/infra-copilot-ai-server-control-panel/main/README.md): what it is, planned features, principles, repository layout
+- [FAQ](https://raw.githubusercontent.com/asiifdev/infra-copilot-ai-server-control-panel/main/docs/faq.md): short, self-contained answers (what it is, safety of the AI agent, license, platforms)
+- [Comparison](https://raw.githubusercontent.com/asiifdev/infra-copilot-ai-server-control-panel/main/docs/comparison.md): dated, sourced comparison with cPanel, aaPanel, 1Panel, Coolify and Dokploy
+
+## Design and decisions
+
+- [Technical design](https://raw.githubusercontent.com/asiifdev/infra-copilot-ai-server-control-panel/main/docs/design.md): database schema, inventory format, agent protocol, approval flow
+- [Architecture decision records](https://raw.githubusercontent.com/asiifdev/infra-copilot-ai-server-control-panel/main/docs/decisions/0005-prinsip-teringan-tercepat.md): the lightest-and-fastest principle and the Svelte decision
+- [Market research](https://raw.githubusercontent.com/asiifdev/infra-copilot-ai-server-control-panel/main/docs/market-research.md): demand evidence with facts separated from inference, and its limits
+
+## Project policies
+
+- [Contributing](https://raw.githubusercontent.com/asiifdev/infra-copilot-ai-server-control-panel/main/CONTRIBUTING.md)
+- [Security policy](https://raw.githubusercontent.com/asiifdev/infra-copilot-ai-server-control-panel/main/SECURITY.md)
+- [Licensing](https://raw.githubusercontent.com/asiifdev/infra-copilot-ai-server-control-panel/main/LICENSING.md)
+- [Code of conduct](https://raw.githubusercontent.com/asiifdev/infra-copilot-ai-server-control-panel/main/CODE_OF_CONDUCT.md)
+
+## Optional
+
+- [Indonesian README](https://raw.githubusercontent.com/asiifdev/infra-copilot-ai-server-control-panel/main/README.id.md)
+- [Changelog](https://raw.githubusercontent.com/asiifdev/infra-copilot-ai-server-control-panel/main/CHANGELOG.md)
