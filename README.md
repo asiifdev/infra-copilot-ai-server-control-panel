@@ -2,6 +2,8 @@ English | [Bahasa Indonesia](README.id.md)
 
 # Infra Copilot
 
+[![CI](https://github.com/asiifdev/infra-copilot-ai-server-control-panel/actions/workflows/ci.yml/badge.svg)](https://github.com/asiifdev/infra-copilot-ai-server-control-panel/actions/workflows/ci.yml)
+
 **Infra Copilot is an open-source server control panel, aimed at the same job as aaPanel and cPanel, with a built-in AI agent that proposes changes and waits for human approval.** It is written in Rust with a Svelte interface, targets Linux servers and a desktop app, and is pre-alpha: nothing is installable yet.
 
 Last updated: 2026-11-19.
