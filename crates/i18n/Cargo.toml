@@ -1,0 +1,13 @@
+[package]
+name = "i18n"
+description = "Translation catalog loader (en, id) with stable keys. Display text never lives in code."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+core-domain = { path = "../core" }
+
+[lints]
+workspace = true

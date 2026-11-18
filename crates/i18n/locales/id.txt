@@ -1,0 +1,26 @@
+# Katalog Indonesia. Format: kunci = teks dengan {placeholder}
+# Kunci stabil dan identik dengan en.txt. Pakai {{ dan }} untuk kurung kurawal literal.
+
+# Tabel node
+nodes.table.title = Node
+nodes.column.name = Nama
+nodes.column.kind = Jenis
+nodes.column.access = Akses
+nodes.column.status = Status
+nodes.status.pending = Menunggu
+nodes.status.online = Daring
+nodes.status.offline = Luring
+nodes.status.revoked = Dicabut
+nodes.list.empty = Belum ada node.
+
+# Tingkat risiko (lihat skill ai-tool-tiers)
+tier.read.label = Baca
+tier.plan.label = Rencana
+tier.change_light.label = Ubah ringan
+tier.change_risky.label = Ubah berisiko
+tier.destructive.label = Merusak
+
+# Galat umum
+error.generic.unknown = Terjadi kesalahan. Silakan coba lagi.
+error.access.denied = Anda tidak punya izin untuk melakukan ini.
+error.node.unreachable = Node {name} tidak dapat dijangkau.

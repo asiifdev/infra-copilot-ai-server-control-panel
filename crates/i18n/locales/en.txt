@@ -1,0 +1,26 @@
+# English catalog (default locale). Format: key = text with {placeholder}
+# Keys are stable: area.subject.action, lowercase. Use {{ and }} for literal braces.
+
+# Nodes table
+nodes.table.title = Nodes
+nodes.column.name = Name
+nodes.column.kind = Type
+nodes.column.access = Access
+nodes.column.status = Status
+nodes.status.pending = Pending
+nodes.status.online = Online
+nodes.status.offline = Offline
+nodes.status.revoked = Revoked
+nodes.list.empty = No nodes yet.
+
+# Risk tiers (see the ai-tool-tiers skill)
+tier.read.label = Read
+tier.plan.label = Plan
+tier.change_light.label = Light change
+tier.change_risky.label = Risky change
+tier.destructive.label = Destructive
+
+# Common errors
+error.generic.unknown = Something went wrong. Please try again.
+error.access.denied = You do not have permission to do this.
+error.node.unreachable = Node {name} is unreachable.

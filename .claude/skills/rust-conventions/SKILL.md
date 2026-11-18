@@ -21,6 +21,12 @@ Satu workspace, crate kecil dengan tanggung jawab sempit: `core` (tipe domain, t
 - **Komponen reusable:** sebelum membuat tipe/fungsi baru, cari yang sudah ada. Tidak ada duplikasi antar crate.
 - **i18n:** tidak ada teks tampilan tetap di kode; kunci katalog, bahasa bawaan Inggris.
 
+## Kunci i18n
+- Format `area.subjek.aksi`: tepat tiga segmen, huruf kecil, `[a-z][a-z0-9_]*` per segmen (mis. `nodes.column.name`, `error.node.unreachable`). Kunci stabil: jangan diubah maknanya; kunci baru untuk teks baru.
+- Kunci ditulis sebagai `const MessageKey` di kode; tidak ada teks tampilan tetap di Rust maupun `.svelte` (teks, `title`, `aria-label`, `placeholder`).
+- Katalog di `crates/i18n/locales/{en,id}.txt`; kunci dan placeholder `{nama}` harus identik di kedua bahasa (diuji). `{{` dan `}}` untuk kurung kurawal literal.
+- Nilai dinamis lewat placeholder bernama, bukan penyambungan string. Rahasia tidak pernah menjadi argumen. Keputusan: `docs/decisions/0008`.
+
 ## Uji
 - Uji unit per crate, **uji kontrak bersama** untuk setiap trait adapter (satu rangkaian dijalankan ke semua implementasi).
 - Fixture inventaris anonim untuk aturan kesetaraan (skill `parity-rules`).
