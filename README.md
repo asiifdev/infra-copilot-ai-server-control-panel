@@ -79,7 +79,7 @@ There is nothing to run yet beyond the tests.
 - [FAQ](docs/faq.md) | [Comparison with other panels](docs/comparison.md)
 - [Design](docs/design.md) and [decision records](docs/decisions/)
 - [Contributing](CONTRIBUTING.md) | [Code of Conduct](CODE_OF_CONDUCT.md) | [Security policy](SECURITY.md)
-- [Licensing](LICENSING.md) | [Changelog](CHANGELOG.md)
+- [Licensing](LICENSING.md) | [Funding and support](FUNDING.md) | [Changelog](CHANGELOG.md)
 
 Each document has an Indonesian version next to it (`*.id.md`), except the license text and the
 changelog (see [LICENSING.md](LICENSING.md)).

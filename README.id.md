@@ -83,7 +83,7 @@ Belum ada yang bisa dijalankan selain pengujian.
 - [FAQ](docs/faq.id.md) | [Perbandingan dengan panel lain](docs/comparison.id.md)
 - [Desain](docs/design.md) dan [catatan keputusan](docs/decisions/)
 - [Kontribusi](CONTRIBUTING.id.md) | [Kode Etik](CODE_OF_CONDUCT.id.md) | [Kebijakan keamanan](SECURITY.id.md)
-- [Lisensi](LICENSING.id.md) | [Changelog](CHANGELOG.md)
+- [Lisensi](LICENSING.id.md) | [Pendanaan dan dukungan](FUNDING.id.md) | [Changelog](CHANGELOG.md)
 
 Setiap dokumen punya versi Indonesia di sebelahnya (`*.id.md`), kecuali teks lisensi dan changelog
 (lihat [LICENSING.id.md](LICENSING.id.md)).

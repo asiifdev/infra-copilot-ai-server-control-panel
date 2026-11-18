@@ -36,3 +36,4 @@ Repositori ini privat sampai semua butir di bawah selesai. Tandai `[x]` bila sud
 - [ ] Setelah ada situs web: `robots.txt` yang membedakan crawler pencarian dan pelatihan, JSON-LD (`SoftwareApplication`, `FAQPage`), `llms.txt`
 - [ ] Setelah publik: uji sebulan sekali 10-20 pertanyaan di ChatGPT, Perplexity, Google, Claude (3-5 kali per pertanyaan) dan catat apakah proyek dikutip dan apakah isinya benar
 - [ ] Hanya kehadiran yang asli: tidak ada ulasan, bintang, atau sebutan palsu; umumkan dengan jujur sebagai pra-alfa
+- [ ] Bila ada kanal sponsor: isi `FUNDING.md`/`FUNDING.id.md` dan buat `.github/FUNDING.yml` (butuh akun milik pemilik; jangan memakai tautan yang belum ada)

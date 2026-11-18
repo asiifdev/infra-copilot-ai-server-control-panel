@@ -18,3 +18,4 @@ cannot drift apart. Release notes may get an Indonesian summary.
 - Project documents for open source: README, contributing guide, code of conduct, security policy,
   and licensing notes, each in English and Indonesian.
 - Provisional license: `AGPL-3.0-only` (see `LICENSING.md`).
+- Funding and support policy (`FUNDING.md`), in English and Indonesian.
