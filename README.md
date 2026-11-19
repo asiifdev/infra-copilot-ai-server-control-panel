@@ -170,6 +170,7 @@ crates/notifier     NotificationChannel contract, Telegram send channel, localiz
 crates/watch        glue: probes via net, incidents via monitor, Telegram alerts via notifier (library)
 crates/agent        AI tool layer: tool contract, strict argument schemas, tier-gated registry and executor (library, no model yet)
 crates/vault        AES-256-GCM sealing of secrets at rest, key rotation (library)
+crates/ai           OpenAI-compatible chat client: tool calls, SSE streaming, retries, circuit breaker (library, not yet run against a live provider)
 crates/cli          `infra collect` and `infra compare` (offline, read-only)
 crates/db           SQLite schema, tenant-scoped queries, hash-chained audit log
 crates/proto-server throwaway prototype used to measure binary size, memory and startup

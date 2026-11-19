@@ -15,6 +15,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ai"
+version = "0.0.0"
+dependencies = [
+ "bytes",
+ "core-domain",
+ "net",
+ "rcgen",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "asn1-rs"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

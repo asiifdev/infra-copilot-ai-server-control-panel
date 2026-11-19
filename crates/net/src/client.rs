@@ -4,7 +4,7 @@ use crate::target::Target;
 use crate::tls::{self, CertInfo, RecordingVerifier};
 use bytes::{Buf, Bytes};
 use http::header::{ACCEPT, ACCEPT_ENCODING, CONNECTION, CONTENT_TYPE, HOST, LOCATION, USER_AGENT};
-use http::{HeaderName, HeaderValue, Method, Request};
+use http::{HeaderMap, HeaderName, HeaderValue, Method, Request};
 use http_body_util::{BodyExt, Full};
 use hyper::body::Incoming;
 use hyper::client::conn::http1;
@@ -92,6 +92,7 @@ impl Drop for AbortOnDrop {
 struct Opened {
     status: u16,
     location: Option<String>,
+    headers: HeaderMap,
     body: Incoming,
     tls: Option<CertInfo>,
     url: String,
@@ -129,6 +130,7 @@ impl Default for StreamLimits {
 /// connection. Everything in it is data from the server, never instructions.
 pub struct BodyStream {
     status: u16,
+    headers: HeaderMap,
     body: Incoming,
     started: Instant,
     limits: StreamLimits,
@@ -141,6 +143,12 @@ impl BodyStream {
     #[must_use]
     pub fn status(&self) -> u16 {
         self.status
+    }
+
+    /// A response header as text, if present and valid. Server data: never instructions.
+    #[must_use]
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers.get(name).and_then(|v| v.to_str().ok())
     }
 
     /// The next piece of the body, `None` at the end. Fails with [`NetError::Timeout`] when no
@@ -263,6 +271,7 @@ impl Client {
         .await?;
         Ok(BodyStream {
             status: opened.status,
+            headers: opened.headers,
             body: opened.body,
             started,
             limits,
@@ -500,9 +509,11 @@ where
         .get(LOCATION)
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned);
+    let headers = response.headers().clone();
     Ok(Opened {
         status,
         location,
+        headers,
         body: response.into_body(),
         tls,
         url: target.url(),
