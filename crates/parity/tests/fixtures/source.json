@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "taken_at": "2026-01-01T00:00:00Z",
+  "collector_version": "0.0.0",
+  "platform": {
+    "os": "linux",
+    "arch": "x86_64"
+  },
+  "status": "complete",
+  "warnings": [],
+  "items": [
+    {
+      "kind": "listener",
+      "key": "tcp:80",
+      "data": {
+        "proto": "tcp",
+        "port": 80,
+        "bind": "0.0.0.0",
+        "process": "nginx",
+        "pid_hint": null,
+        "exposed": "public"
+      },
+      "seen_via": "proc"
+    },
+    {
+      "kind": "listener",
+      "key": "tcp:5432",
+      "data": {
+        "proto": "tcp",
+        "port": 5432,
+        "bind": "127.0.0.1",
+        "process": "postgres",
+        "pid_hint": null,
+        "exposed": "loopback"
+      },
+      "seen_via": "proc"
+    },
+    {
+      "kind": "listener",
+      "key": "tcp:6379",
+      "data": {
+        "proto": "tcp",
+        "port": 6379,
+        "bind": "127.0.0.1",
+        "process": "redis-server",
+        "pid_hint": null,
+        "exposed": "loopback"
+      },
+      "seen_via": "proc"
+    },
+    {
+      "kind": "listener",
+      "key": "tcp:7700",
+      "data": {
+        "proto": "tcp",
+        "port": 7700,
+        "bind": "127.0.0.1",
+        "process": "searchd",
+        "pid_hint": null,
+        "exposed": "loopback"
+      },
+      "seen_via": "proc"
+    },
+    {
+      "kind": "process",
+      "key": "proc:nginx",
+      "data": {
+        "cmd": "nginx",
+        "cwd": "/srv/app",
+        "mode": "unknown",
+        "supervised": null,
+        "env_refs": []
+      },
+      "seen_via": "proc"
+    },
+    {
+      "kind": "cron",
+      "key": "user:root:0 3 * * *:backup-db",
+      "data": {
+        "schedule": "0 3 * * *",
+        "command_hint": "backup-db",
+        "owner": "root",
+        "source": "crontab"
+      },
+      "seen_via": "config"
+    },
+    {
+      "kind": "cron",
+      "key": "user:www:*/5 * * * *:queue-run",
+      "data": {
+        "schedule": "*/5 * * * *",
+        "command_hint": "queue-run",
+        "owner": "www",
+        "source": "crontab"
+      },
+      "seen_via": "config"
+    }
+  ]
+}

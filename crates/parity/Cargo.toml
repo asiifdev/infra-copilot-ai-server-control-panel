@@ -1,0 +1,15 @@
+[package]
+name = "parity"
+description = "Parity rules (PAR-001, PAR-008, PAR-010), the comparer and the localized finding renderer."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+core-domain = { path = "../core" }
+inventory = { path = "../inventory" }
+i18n = { path = "../i18n" }
+
+[lints]
+workspace = true

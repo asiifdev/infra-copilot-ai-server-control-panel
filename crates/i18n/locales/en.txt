@@ -24,3 +24,49 @@ tier.destructive.label = Destructive
 error.generic.unknown = Something went wrong. Please try again.
 error.access.denied = You do not have permission to do this.
 error.node.unreachable = Node {name} is unreachable.
+
+# Parity findings (crates/parity)
+parity.severity.critical = Critical
+parity.severity.important = Important
+parity.severity.info = Info
+parity.side.source = source server
+parity.side.target = target server
+parity.arg.unknown = (unknown)
+parity.note.partial = The inventory of this server is incomplete, so this result is only a hint, not proof. Review the inventory warnings and collect again before relying on it.
+
+parity.par001.title = Port {port} has no counterpart on the target
+parity.par001.explanation = On the source, {process} listens on port {port} (bind address {bind}). The target has no listener on that port. If {process} did not move, whatever depends on it will fail after cutover; if it runs on the target on a different port, anything still configured with port {port} will break.
+parity.par001.advice = Check whether {process} is meant to run on the target. If so, install and start it there and have it listen on port {port}, or update every configuration that points to port {port}. If it is no longer needed, record why. This tool does not fix this automatically yet.
+
+parity.par008.title = A scheduled job has no counterpart on the target
+parity.par008.explanation = The source runs a scheduled job for {owner} ({schedule}): {command}. The target has no matching job. Jobs such as backups or cleanups that do not move are easy to miss, and the gap may go unnoticed until the result is needed.
+parity.par008.advice = Check whether this job is still needed. If so, recreate it on the target and confirm that it runs there; if not, record why it can be dropped. This tool does not copy scheduled jobs automatically yet.
+
+parity.par010.title = Port {port} is reachable from the internet on the {side}
+parity.par010.explanation = {process} listens on port {port} on a public address of the {side}. Anything that can reach the machine from the internet can try to connect to it, unless a firewall blocks it. This tool does not check firewall rules yet, so it cannot tell whether one does.
+parity.par010.advice = If port {port} does not need to be public, bind {process} to a loopback address or block the port with a firewall. If it must stay public, make sure it requires authentication and is kept up to date. This tool does not change this automatically.
+
+parity.unknown.title = Finding from rule {rule_id}
+parity.unknown.explanation = This version has no description for rule {rule_id}.
+parity.unknown.advice = Update the application, or review the evidence of this finding by hand.
+
+# infra command line
+cli.usage.collect = Usage: infra collect [--root PATH] [--os NAME] [--arch NAME] [--lang en|id]   (read-only; prints the inventory as JSON)
+cli.usage.compare = Usage: infra compare SOURCE.json TARGET.json [--lang en|id]   (prints the parity report; exit code 1 if a critical finding exists)
+cli.error.usage = Cannot run the command: {detail}
+cli.error.read = Cannot read {path}: {reason}
+cli.error.inventory = {path} is not a valid inventory: {reason}
+cli.error.collect = Collection failed: {reason}
+cli.error.write = Cannot write the output: {reason}
+cli.report.none = No differences found by the {rules} rule(s) that ran.
+cli.report.count = {count} finding(s) from {rules} rule(s):
+cli.report.head = [{severity}] {rule}: {title}
+cli.report.subject = ({kind} {key})
+cli.report.advice = Advice: {advice}
+cli.kind.listener = listener
+cli.kind.process = process
+cli.kind.cron = cron
+cli.reason.notfile = not a regular file
+cli.reason.toolarge = file too large
+cli.report.partial = Note: the source or target inventory is partial, so absence is not proof. Unreadable sources: {warnings}
+cli.report.limits = This is a read-only comparison of two inventories. It does not prove the servers are equivalent: only these rules were checked: {ids}.

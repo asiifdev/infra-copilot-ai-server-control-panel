@@ -24,3 +24,49 @@ tier.destructive.label = Merusak
 error.generic.unknown = Terjadi kesalahan. Silakan coba lagi.
 error.access.denied = Anda tidak punya izin untuk melakukan ini.
 error.node.unreachable = Node {name} tidak dapat dijangkau.
+
+# Temuan kesetaraan (crates/parity)
+parity.severity.critical = Kritis
+parity.severity.important = Penting
+parity.severity.info = Info
+parity.side.source = server sumber
+parity.side.target = server target
+parity.arg.unknown = (tidak diketahui)
+parity.note.partial = Inventaris server ini tidak lengkap, jadi hasil ini hanya petunjuk, bukan bukti. Periksa peringatan inventaris dan kumpulkan ulang sebelum mengandalkannya.
+
+parity.par001.title = Port {port} tidak punya padanan di target
+parity.par001.explanation = Di sumber, {process} mendengarkan di port {port} (alamat bind {bind}). Di target tidak ada yang mendengarkan di port itu. Jika {process} tidak ikut pindah, apa pun yang bergantung padanya akan gagal setelah peralihan; jika ia berjalan di target pada port lain, semua yang masih memakai port {port} akan putus.
+parity.par001.advice = Periksa apakah {process} memang harus berjalan di target. Jika ya, pasang dan jalankan di sana agar mendengarkan di port {port}, atau ubah semua konfigurasi yang menunjuk ke port {port}. Jika sudah tidak diperlukan, catat alasannya. Alat ini belum memperbaikinya secara otomatis.
+
+parity.par008.title = Ada tugas terjadwal yang tidak punya padanan di target
+parity.par008.explanation = Sumber menjalankan tugas terjadwal untuk {owner} ({schedule}): {command}. Di target tidak ada tugas yang cocok. Tugas seperti pencadangan atau pembersihan yang tidak ikut pindah mudah terlewat, dan kekurangannya bisa tidak disadari sampai hasilnya dibutuhkan.
+parity.par008.advice = Periksa apakah tugas ini masih diperlukan. Jika ya, buat ulang di target dan pastikan tugas itu berjalan di sana; jika tidak, catat alasan tugas ini boleh dihapus. Alat ini belum menyalin tugas terjadwal secara otomatis.
+
+parity.par010.title = Port {port} dapat dijangkau dari internet di {side}
+parity.par010.explanation = {process} mendengarkan di port {port} pada alamat publik {side}. Siapa pun yang bisa menjangkau mesin itu dari internet dapat mencoba terhubung, kecuali firewall memblokirnya. Alat ini belum memeriksa aturan firewall, jadi tidak bisa memastikan apakah ada yang memblokir.
+parity.par010.advice = Jika port {port} tidak perlu publik, ikat {process} ke alamat loopback atau blokir port itu dengan firewall. Jika harus tetap publik, pastikan memakai autentikasi dan selalu diperbarui. Alat ini tidak mengubahnya secara otomatis.
+
+parity.unknown.title = Temuan dari aturan {rule_id}
+parity.unknown.explanation = Versi ini belum punya uraian untuk aturan {rule_id}.
+parity.unknown.advice = Perbarui aplikasi, atau tinjau bukti temuan ini secara manual.
+
+# baris perintah infra
+cli.usage.collect = Pemakaian: infra collect [--root JALUR] [--os NAMA] [--arch NAMA] [--lang en|id]   (hanya-baca; mencetak inventaris sebagai JSON)
+cli.usage.compare = Pemakaian: infra compare SUMBER.json TARGET.json [--lang en|id]   (mencetak laporan kesetaraan; kode keluar 1 bila ada temuan kritis)
+cli.error.usage = Perintah tidak bisa dijalankan: {detail}
+cli.error.read = Tidak bisa membaca {path}: {reason}
+cli.error.inventory = {path} bukan inventaris yang valid: {reason}
+cli.error.collect = Pengumpulan gagal: {reason}
+cli.error.write = Tidak bisa menulis keluaran: {reason}
+cli.report.none = Tidak ada perbedaan yang ditemukan oleh {rules} aturan yang dijalankan.
+cli.report.count = {count} temuan dari {rules} aturan:
+cli.report.head = [{severity}] {rule}: {title}
+cli.report.subject = ({kind} {key})
+cli.report.advice = Saran: {advice}
+cli.kind.listener = pendengar
+cli.kind.process = proses
+cli.kind.cron = tugas terjadwal
+cli.reason.notfile = bukan berkas biasa
+cli.reason.toolarge = berkas terlalu besar
+cli.report.partial = Catatan: inventaris sumber atau target tidak lengkap, jadi "tidak ada" belum tentu benar. Sumber yang tidak terbaca: {warnings}
+cli.report.limits = Ini perbandingan hanya-baca dari dua inventaris. Ini tidak membuktikan kedua server setara: hanya aturan berikut yang diperiksa: {ids}.

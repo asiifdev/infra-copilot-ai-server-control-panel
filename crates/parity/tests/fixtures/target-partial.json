@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "taken_at": "2026-01-01T00:00:00Z",
+  "collector_version": "0.0.0",
+  "platform": {
+    "os": "linux",
+    "arch": "x86_64"
+  },
+  "status": "partial",
+  "warnings": [
+    "cannot read /proc/1/fd: permission denied",
+    "crontab of user root not readable"
+  ],
+  "items": [
+    {
+      "kind": "listener",
+      "key": "tcp:80",
+      "data": {
+        "proto": "tcp",
+        "port": 80,
+        "bind": "0.0.0.0",
+        "process": "nginx",
+        "pid_hint": null,
+        "exposed": "public"
+      },
+      "seen_via": "proc"
+    },
+    {
+      "kind": "listener",
+      "key": "tcp:5432",
+      "data": {
+        "proto": "tcp",
+        "port": 5432,
+        "bind": "127.0.0.1",
+        "process": "postgres",
+        "pid_hint": null,
+        "exposed": "loopback"
+      },
+      "seen_via": "proc"
+    },
+    {
+      "kind": "listener",
+      "key": "tcp:6380",
+      "data": {
+        "proto": "tcp",
+        "port": 6380,
+        "bind": "127.0.0.1",
+        "process": "redis-server",
+        "pid_hint": null,
+        "exposed": "loopback"
+      },
+      "seen_via": "proc"
+    },
+    {
+      "kind": "listener",
+      "key": "tcp:8081",
+      "data": {
+        "proto": "tcp",
+        "port": 8081,
+        "bind": "0.0.0.0",
+        "process": "dashboard",
+        "pid_hint": null,
+        "exposed": "public"
+      },
+      "seen_via": "proc"
+    },
+    {
+      "kind": "process",
+      "key": "proc:nginx",
+      "data": {
+        "cmd": "nginx",
+        "cwd": "/srv/app",
+        "mode": "unknown",
+        "supervised": null,
+        "env_refs": []
+      },
+      "seen_via": "proc"
+    },
+    {
+      "kind": "cron",
+      "key": "user:www:*/5 * * * *:queue-run",
+      "data": {
+        "schedule": "*/5 * * * *",
+        "command_hint": "queue-run",
+        "owner": "www",
+        "source": "crontab"
+      },
+      "seen_via": "config"
+    }
+  ]
+}
