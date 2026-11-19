@@ -19,8 +19,8 @@ mod migrate;
 mod nodes;
 mod secret;
 mod sha256;
+mod snapshots;
 
-use rusqlite::Connection;
 use std::path::Path;
 use std::time::Duration;
 
@@ -34,7 +34,10 @@ pub use identity::{
     create_user, get_org, get_user_by_email, list_api_tokens, list_members, remove_member,
     revoke_api_token, set_member_role,
 };
-pub use ids::{AgentId, ApiTokenId, AuditId, MembershipId, NodeId, OrgId, SecretId, UserId};
+pub use ids::{
+    AgentId, ApiTokenId, AuditId, ComparisonId, InventoryId, MembershipId, NodeId, OrgId, SecretId,
+    UserId,
+};
 pub use migrate::{LATEST_VERSION, migrate, schema_version};
 pub use nodes::{
     Agent, NewAgent, NewNode, Node, NodeAccess, NodeKind, NodeSecretMeta, NodeStatus, create_node,
@@ -42,6 +45,16 @@ pub use nodes::{
     list_nodes, put_node_secret, register_agent, revoke_agent, set_node_status, touch_agent,
 };
 pub use secret::{SealedSecret, SecretText};
+pub use snapshots::{
+    ComparisonRow, FindingRow, FindingSeverity, FindingStatus, InventoryRow, InventoryStatus,
+    ItemKind, ItemRow, ItemSource, NewFinding, NewInventory, NewInventoryItem,
+    count_inventory_items, get_inventory, latest_comparison, latest_inventory, list_findings,
+    list_inventory_items, save_comparison, save_inventory,
+};
+
+/// The SQLite connection type returned by [`open`], re-exported so dependents need no direct
+/// `rusqlite` dependency.
+pub use rusqlite::Connection;
 
 /// How long a writer waits for a lock before failing with `SQLITE_BUSY`.
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);

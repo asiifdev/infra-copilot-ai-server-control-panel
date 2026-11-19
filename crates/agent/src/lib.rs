@@ -16,14 +16,20 @@
 //! the [`Executor`] from a blocking task.
 
 mod exec;
+mod persist;
 mod registry;
 mod schema;
+mod store;
 pub mod testing;
 mod tool;
+mod tools;
 mod untrusted;
 
 pub use exec::{CallRecord, CallStatus, Executor, Limits, Outcome};
+pub use persist::{persist_comparison, persist_inventory};
 pub use registry::{RegisterError, Registry, ToolDefinition};
 pub use schema::{ArgError, ArgSchema, Args, FORBIDDEN_FIELD_NAMES, Field, Kind};
+pub use store::{DbStore, FindingsView, NodeInfo, ReadStore, StoreError};
 pub use tool::{AiTool, ToolContext, ToolError, ToolOutput, ToolSpec};
+pub use tools::read_only_registry;
 pub use untrusted::{CLOSE_TAG, OPEN_TAG, wrap_untrusted};

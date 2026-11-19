@@ -1,9 +1,9 @@
 //! A misbehaving model must be stopped by code, not by the prompt (skill `ai-tool-tiers`).
 
-use agent::testing::{FakeTool, test_org};
+use agent::testing::{FakeTool, with_null_context};
 use agent::{
-    ArgSchema, CallStatus, Executor, Field, Kind, Limits, RegisterError, Registry, ToolContext,
-    ToolError, ToolSpec, wrap_untrusted,
+    ArgSchema, CallStatus, Executor, Field, Kind, Limits, RegisterError, Registry, ToolError,
+    ToolSpec, wrap_untrusted,
 };
 use core_domain::tier::Tier;
 
@@ -40,8 +40,7 @@ fn executor_with(tools: Vec<FakeTool>) -> Executor {
 }
 
 fn call(executor: &Executor, name: &str, args: &str) -> agent::Outcome {
-    let org = test_org();
-    executor.call(&ToolContext { org: &org }, name, args)
+    with_null_context(|ctx| executor.call(ctx, name, args))
 }
 
 #[test]

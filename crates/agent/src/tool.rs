@@ -1,8 +1,10 @@
 //! The `AiTool` contract (docs/design.md 12.4, skill `ai-tool-tiers`).
 
 use crate::schema::{ArgSchema, Args};
+use crate::store::ReadStore;
 use core_domain::tier::Tier;
 use db::OrgId;
+use i18n::{Catalog, Locale};
 use std::fmt;
 
 /// What a tool declares about itself. All of it is fixed in the tool's code.
@@ -23,10 +25,15 @@ pub struct ToolSpec {
 
 /// Who and what a call acts for. Built by the server from the logged-in session; a model never
 /// supplies any of it.
-#[derive(Debug)]
 pub struct ToolContext<'a> {
     /// The organization every read is scoped to.
     pub org: &'a OrgId,
+    /// Everything a tool may read. Every method takes the org again, so no read can forget it.
+    pub store: &'a dyn ReadStore,
+    /// Message catalog for localized explanations.
+    pub catalog: &'a Catalog,
+    /// The language of the person asking; text a tool writes follows it.
+    pub locale: Locale,
 }
 
 /// Text a tool returns. It is redacted, capped and fenced by the executor, so a tool does not

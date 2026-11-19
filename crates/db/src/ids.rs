@@ -73,6 +73,14 @@ id_type!(
     SecretId
 );
 id_type!(
+    /// Inventory (snapshot) identifier.
+    InventoryId
+);
+id_type!(
+    /// Comparison identifier.
+    ComparisonId
+);
+id_type!(
     /// Audit entry identifier.
     AuditId
 );

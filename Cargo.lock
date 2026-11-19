@@ -8,6 +8,9 @@ version = "0.0.0"
 dependencies = [
  "core-domain",
  "db",
+ "i18n",
+ "inventory",
+ "parity",
  "serde_json",
 ]
 

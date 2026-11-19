@@ -9,6 +9,9 @@ publish.workspace = true
 [dependencies]
 core-domain = { path = "../core" }
 db = { path = "../db" }
+i18n = { path = "../i18n" }
+inventory = { path = "../inventory" }
+parity = { path = "../parity" }
 # JSON is the wire format of tool calls. Default features off, `std` only (ADR 0005).
 serde_json = { version = "1", default-features = false, features = ["std"] }
 

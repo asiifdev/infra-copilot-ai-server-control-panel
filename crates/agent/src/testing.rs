@@ -4,10 +4,54 @@
 //! tools in their tests (docs/design.md 12.4: one suite, every implementation).
 
 use crate::{
-    AiTool, Args, CallStatus, Executor, Registry, ToolContext, ToolError, ToolOutput, ToolSpec,
+    AiTool, Args, CallStatus, Executor, FindingsView, NodeInfo, ReadStore, Registry, StoreError,
+    ToolContext, ToolError, ToolOutput, ToolSpec,
 };
 use core_domain::tier::Tier;
 use db::OrgId;
+use i18n::{Catalog, Locale};
+use inventory::{Inventory, Severity};
+
+/// A store with nothing in it, for tests that do not read data.
+pub struct NullStore;
+
+impl ReadStore for NullStore {
+    fn nodes(&self, _org: &OrgId) -> Result<Vec<NodeInfo>, StoreError> {
+        Ok(Vec::new())
+    }
+
+    fn latest_inventory(&self, _org: &OrgId, _node: &str) -> Result<Inventory, StoreError> {
+        Err(StoreError::NotFound)
+    }
+
+    fn latest_findings(
+        &self,
+        _org: &OrgId,
+        _min: Option<Severity>,
+        _limit: u32,
+    ) -> Result<FindingsView, StoreError> {
+        Err(StoreError::NotFound)
+    }
+}
+
+/// Runs `f` with a context over [`NullStore`], the built-in catalog and English.
+///
+/// # Panics
+/// If the built-in catalog is broken (its own tests catch that first).
+pub fn with_null_context<R>(f: impl FnOnce(&ToolContext<'_>) -> R) -> R {
+    let org = test_org();
+    let catalog = match Catalog::builtin() {
+        Ok(c) => c,
+        Err(_) => unreachable!("built-in catalog is valid"),
+    };
+    let ctx = ToolContext {
+        org: &org,
+        store: &NullStore,
+        catalog: &catalog,
+        locale: Locale::En,
+    };
+    f(&ctx)
+}
 
 /// A fixed organization id for tests.
 ///
@@ -66,10 +110,12 @@ pub fn contract_suite(tool: Box<dyn AiTool>, valid_args: &str) {
     );
 
     let executor = Executor::new(registry);
-    let org = test_org();
-    let ctx = ToolContext { org: &org };
+    with_null_context(|ctx| run_suite(&executor, ctx, spec, valid_args));
+}
 
-    let ok = executor.call(&ctx, spec.name, valid_args);
+fn run_suite(executor: &Executor, ctx: &ToolContext<'_>, spec: ToolSpec, valid_args: &str) {
+    let ctx = &ctx;
+    let ok = executor.call(ctx, spec.name, valid_args);
     assert_eq!(
         ok.record.status,
         CallStatus::Ok,
@@ -85,7 +131,7 @@ pub fn contract_suite(tool: Box<dyn AiTool>, valid_args: &str) {
 
     // A field the schema does not declare must be refused, including an identity field.
     for extra in [r#"{"zz_unknown":1}"#, r#"{"org_id":"someone-else"}"#] {
-        let out = executor.call(&ctx, spec.name, extra);
+        let out = executor.call(ctx, spec.name, extra);
         assert!(
             matches!(out.record.status, CallStatus::BadArguments(_)),
             "{}: accepted {extra}",
@@ -94,7 +140,7 @@ pub fn contract_suite(tool: Box<dyn AiTool>, valid_args: &str) {
     }
     // Garbage must not reach the tool or crash the executor.
     for garbage in ["{", "null", "[]", "\u{0}"] {
-        let out = executor.call(&ctx, spec.name, garbage);
+        let out = executor.call(ctx, spec.name, garbage);
         assert!(
             matches!(out.record.status, CallStatus::BadArguments(_)),
             "{}: accepted {garbage:?}",
