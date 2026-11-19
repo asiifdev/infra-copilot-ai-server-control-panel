@@ -1,2 +1,5 @@
 # Historical false positive: a fake private-key fixture in a unit test (commit 7709f17). The fixture is not a key. The test has since been changed to build the markers at run time.
 7709f17173b8863113a0a5ab197d3a52afd0c38e:crates/core/src/redact.rs:private-key:483
+
+# Historical false positive: a fake `curl -u user:pw` in a redaction test (commit 2f456e5). Not a credential; it is the input the test proves is hidden.
+2f456e54c793cb072a4d0224cce7cd6eae13427c:crates/collectors/tests/collect.rs:curl-auth-user:539
