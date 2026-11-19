@@ -2,7 +2,7 @@
 
 - Tanggal: 2026-11-19
 - Status: diterima (pemilik, 2026-11-19). Ukuran di Linux dan jalur `openat2` diverifikasi di CI Linux saat implementasi.
-- Pengambil keputusan: pemilik proyek (belum diputuskan; dokumen ini hanya evaluasi)
+- Pengambil keputusan: pemilik proyek
 
 ## Konteks
 `crates/collectors/src/rootfs.rs` meresolusi jalur di dalam root secara gaya chroot (komponen demi komponen, `symlink_metadata` + `read_link`), lalu membuka hasilnya dengan `fs::File`. Batas yang diterima (keputusan 0013): proses lain yang bisa **menulis di dalam root saat dibaca** dapat menukar sebuah komponen induk menjadi symlink di antara resolusi dan pembukaan (TOCTOU) sehingga pembukaan keluar dari root. Komponen terakhir sudah ditutup lewat `read_to_string_nolink` (cek setelah buka, dev+inode). Menutup celah induk membutuhkan `openat2(RESOLVE_IN_ROOT)` atau penelusuran `openat` per komponen dari fd direktori, dan keduanya butuh syscall mentah. Aturan ruang kerja `unsafe_code = "forbid"` melarang kita memanggilnya sendiri, dan `std` tidak menyediakan `openat`. Pertanyaan: apakah `rustix` layak sebagai satu-satunya dependensi baru untuk itu (prinsip 0005: teringan dan tercepat, dependensi dibenarkan oleh biayanya).
