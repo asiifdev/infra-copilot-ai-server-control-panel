@@ -37,3 +37,7 @@ Aturan (`parity`) tidak bergantung pada kolektor, dan kolektor tidak bergantung 
 - **Jalur dibuka setelah diresolusi (TOCTOU).** `RootFs` meresolusi symlink di dalam akar lalu membuka jalur; proses lain yang bisa menulis di dalam akar saat dibaca dapat menukar komponen menjadi symlink di antaranya. Menutupnya butuh `openat2(RESOLVE_IN_ROOT)` atau penelusuran `openat` per komponen (`unsafe` atau dependensi baru). Diterima: kumpulkan dari akar yang tidak dimodifikasi bersamaan (disk lama yang dipasang, snapshot, atau `/` host tempat pengguna biasa tidak bisa menulis ke `/etc`).
 - **Redaksi argumen itu heuristik.** Bentuk yang dikenali: `--nama=nilai` dengan nama sensitif, flag sensitif tanpa `=`, `-p`/`-a`/`-u user:pw`, `--user`/`--proxy-user`, URL `user:pw@`, dan perintah berkutip bersarang (`sh -c '...'`, tiga tingkat). Rahasia sebagai argumen posisi biasa (`tool secret`) tidak bisa dikenali. Redaksi sengaja berlebih (mis. `-p 8080` ikut tersamar).
 - **Keluaran CLI menyanitasi teks dari inventaris** (karakter kontrol diganti U+FFFD) karena inventaris dari sumber lain adalah masukan tak tepercaya.
+
+
+## Pembaruan (2026-11-19)
+Batas TOCTOU pada komponen induk jalur di `RootFs` ditutup oleh keputusan 0017 (`rustix`, penelusuran `openat` per komponen dan `openat2` di Linux).
