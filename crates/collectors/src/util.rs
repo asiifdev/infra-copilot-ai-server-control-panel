@@ -76,6 +76,41 @@ fn is_shell_operator(arg: &str) -> bool {
 /// acceptable, leaking a secret is not. A secret in a bare positional argument that matches none
 /// of these shapes (`tool secret`) cannot be recognised.
 pub(crate) fn redact_command_args<'a>(args: impl Iterator<Item = &'a str>) -> String {
+    redact_args_at(args, 0)
+}
+
+/// How many levels of quoted command lines are looked into (`sh -c 'bash -c "..."'`).
+const MAX_NESTING: usize = 3;
+
+/// A quoted argument that holds a whole command line (`'mysql -p secret'`): its words are split
+/// again and redacted like top-level arguments. Nesting beyond [`MAX_NESTING`] is left as it is
+/// (the plain-text pass in [`redact`] still runs on it).
+fn redact_nested(text: &str, depth: usize) -> String {
+    let quote = text.chars().next().filter(|c| matches!(c, '\'' | '"'));
+    let body = match quote {
+        Some(q) => {
+            let inner = &text[q.len_utf8()..];
+            inner.strip_suffix(q).unwrap_or(inner)
+        }
+        None => text,
+    };
+    let inner = redact_args_at(split_shell_words(body).into_iter(), depth + 1);
+    match quote {
+        Some(q) => format!("{q}{inner}{q}"),
+        None => inner,
+    }
+}
+
+fn has_whitespace(text: &str) -> bool {
+    text.chars().any(char::is_whitespace)
+}
+
+/// `--user`, `--proxy-user`: their value is often `name:password`.
+fn is_user_flag(name: &str) -> bool {
+    name == "user" || name.ends_with("-user")
+}
+
+fn redact_args_at<'a>(args: impl Iterator<Item = &'a str>, depth: usize) -> String {
     let mut out: Vec<String> = Vec::new();
     let mut pending = Hide::No;
     for arg in args {
@@ -90,15 +125,27 @@ pub(crate) fn redact_command_args<'a>(args: impl Iterator<Item = &'a str>) -> St
             }
             _ => {}
         }
+        if !arg.starts_with('-') && has_whitespace(arg) && depth < MAX_NESTING {
+            out.push(redact_nested(arg, depth));
+            continue;
+        }
         if let Some(long) = arg.strip_prefix("--") {
             out.push(match long.split_once('=') {
                 Some((name, value)) if is_sensitive_flag_name(name) && !value.is_empty() => {
                     format!("--{name}={REDACTED}")
                 }
+                Some((name, value)) if is_user_flag(name) && value.contains(':') => {
+                    format!("--{name}={REDACTED}")
+                }
+                Some((name, value)) if has_whitespace(value) && depth < MAX_NESTING => {
+                    format!("--{name}={}", redact_nested(value, depth))
+                }
                 Some(_) => arg.to_owned(),
                 None => {
                     if is_sensitive_flag_name(long) {
                         pending = Hide::NextValue;
+                    } else if is_user_flag(long) {
+                        pending = Hide::NextIfColon;
                     }
                     arg.to_owned()
                 }

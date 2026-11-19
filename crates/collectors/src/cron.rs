@@ -18,7 +18,7 @@
 
 use std::collections::BTreeMap;
 
-use core_domain::redact::redact;
+use core_domain::redact::{REDACTED, redact};
 use inventory::{CollectError, Collection, Collector, Item, Kind, SeenVia};
 use serde_json::{Map, Value};
 
@@ -275,7 +275,9 @@ fn hint_word(command: &str, depth: usize) -> Option<String> {
             }
             break;
         }
-        if INTERPRETER_FLAGS_WITH_ARG.contains(&arg) {
+        if unquote(arg) == REDACTED {
+            i += 1;
+        } else if INTERPRETER_FLAGS_WITH_ARG.contains(&arg) {
             i += 2;
         } else if arg.starts_with('-') {
             i += 1;
@@ -299,7 +301,10 @@ fn hint_word(command: &str, depth: usize) -> Option<String> {
 /// (`artisan queue:work` and `artisan schedule:run`) still get one key and are merged, counted in
 /// `occurrences`; PAR-008 therefore cannot tell them apart.
 pub(crate) fn command_hint(command: &str) -> String {
-    match hint_word(command, 0) {
+    // The hint is picked from the already redacted command, so a value hidden by redaction
+    // (`node --password abc app.js`) can never become the hint.
+    let redacted = redact_command_args(split_shell_words(command).into_iter());
+    match hint_word(&redacted, 0) {
         Some(hint) if !hint.is_empty() => clean(&redact(&hint).text, MAX_HINT_CHARS),
         _ => "unknown".to_owned(),
     }

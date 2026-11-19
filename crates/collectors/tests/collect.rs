@@ -529,6 +529,32 @@ mod review_fixes {
     }
 
     #[test]
+    fn nested_shell_commands_are_redacted() -> TestResult {
+        let tree = Tree::new("cron-nested")?;
+        tree.write(
+            "var/spool/cron/crontabs/eve",
+            b"0 1 * * * bash -c 'mysql -u root -p nested1 db'\n\
+              0 2 * * * sh -c \"cd /srv && curl -u admin:nested2 https://h\"\n\
+              0 3 * * * sh -c 'bash -c \"mysqldump --password nested3 db\"'\n\
+              0 4 * * * node --password hintleak4 app.js\n\
+              0 5 * * * curl --user admin:userflag5 https://h\n\
+              0 6 * * * curl --proxy-user=px:userflag6 https://h\n",
+        )?;
+        let json = inventory_of(&tree.fs())?.to_json()?;
+        for secret in [
+            "nested1",
+            "nested2",
+            "nested3",
+            "hintleak4",
+            "userflag5",
+            "userflag6",
+        ] {
+            assert!(!json.contains(secret), "{secret} leaked:\n{json}");
+        }
+        Ok(())
+    }
+
+    #[test]
     fn cron_commands_hide_separate_argument_secrets() -> TestResult {
         let tree = Tree::new("cron-secrets")?;
         tree.write(
@@ -586,7 +612,7 @@ mod review_fixes {
     #[test]
     fn long_multibyte_keys_do_not_fail_the_whole_collection() -> TestResult {
         let tree = Tree::new("multibyte")?;
-        let owner = "\u{1F600}".repeat(64);
+        let owner = "\u{1F600}".repeat(60);
         let hint = "\u{1F680}".repeat(100);
         tree.write(
             &format!("var/spool/cron/crontabs/{owner}"),
@@ -610,7 +636,7 @@ mod review_fixes {
     #[test]
     fn truncated_duplicate_keys_merge_and_count() -> TestResult {
         let tree = Tree::new("multibyte-dup")?;
-        let owner = "\u{1F600}".repeat(64);
+        let owner = "\u{1F600}".repeat(60);
         // Two hints that differ only after the cut point collapse into one key.
         let a = format!("/bin/{}a", "\u{1F680}".repeat(99));
         let b = format!("/bin/{}b", "\u{1F680}".repeat(99));

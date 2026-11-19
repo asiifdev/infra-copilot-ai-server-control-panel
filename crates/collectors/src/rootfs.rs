@@ -13,6 +13,14 @@
 //! a link such as `/etc/crontab -> /etc/shadow` therefore reads the old disk's file (or is not
 //! found), never the host's. More than 40 links in one path is [`FsError::SymlinkLoop`].
 //! [`RootFs::read_link`] resolves only the parent components and returns the last link's text.
+//!
+//! Limit (accepted, see decision 0013): a path is resolved and then opened, so another process that
+//! can **write inside the root while it is being read** could swap a component for a symlink in
+//! between (time-of-check to time-of-use) and make the open follow it out of the root. Closing that
+//! gap needs `openat2(RESOLVE_IN_ROOT)` or a per-component `openat` walk, which requires `unsafe`
+//! or a new dependency; both are outside the current rules. Collect from a root nobody can modify
+//! concurrently (the live `/` is not writable by unprivileged users where it matters, `/proc` is
+//! kernel-managed, and a mounted old disk or a snapshot is quiescent).
 
 use std::ffi::OsString;
 use std::fmt;
