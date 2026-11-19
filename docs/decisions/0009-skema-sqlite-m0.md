@@ -1,7 +1,7 @@
 # 0009. Skema SQLite M0 dan lapisan kueri `db` (usulan)
 
 - Tanggal: 2026-11-19
-- Status: diusulkan (menunggu persetujuan pemilik)
+- Status: diterima oleh pemilik ("setuju", 2026-11-19)
 - Pengambil keputusan: pemilik proyek
 
 ## Konteks
@@ -68,3 +68,6 @@ Migrasi 0001 dan 0003 diubah langsung (belum ada rilis atau DB nyata); setelah r
 
 ## Pembaruan (2026-11-19, 0011)
 `rusqlite_migration` dihapus dan `rusqlite` dinaikkan ke 0.43; migrasi dijalankan oleh `crates/db/src/migrate.rs`. Catatan ketidakcocokan versi di atas sudah tidak berlaku.
+
+## Pembaruan (2026-11-19, 0012)
+SHA-256 tulisan sendiri diganti crate `sha2`; hash tersimpan tetap kompatibel.

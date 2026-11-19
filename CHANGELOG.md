@@ -31,6 +31,7 @@ cannot drift apart. Release notes may get an Indonesian summary.
 
 ### Changed
 
+- `db` hashes the audit chain with the `sha2` crate instead of in-house SHA-256 (decision 0012); decisions 0008, 0009 and 0010 are accepted.
 - CI now has a `perf-budget` job (Linux and macOS) that builds the prototype, measures it with `scripts/measure.sh` and fails when `scripts/check-budget.py` finds a metric over `docs/perf-budget.json`.
 - `db` now uses `rusqlite` 0.43 with its own `user_version` migrator instead of `rusqlite_migration` (decision 0011); a database newer than the build is refused.
 - `cargo-deny` allows workspace path dependencies; the docs check skips `ui/node_modules`.

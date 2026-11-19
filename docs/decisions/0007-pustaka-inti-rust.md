@@ -17,6 +17,7 @@
 | PostgreSQL (cloud) | ditunda ke M6 | - | Tidak dibutuhkan MVP; antarmuka `db` dirancang agar bisa diganti | - |
 | SSH klien | `russh` | 0.65 | Rust murni, async, tanpa ikatan ke libssh2 (C); exec dan autentikasi kunci terverifikasi | `ssh2` (ikatan C, sinkron) |
 | Klien HTTP (AI, Telegram, Cloudflare) | `ureq` (sinkron, di thread terpisah) dulu, `reqwest` hanya bila perlu | 3.5 / 0.13 | Lebih kecil; `reqwest` menarik banyak dependensi | `reqwest` (nyaman, lebih besar) |
+| Hash audit | `sha2` 0.11, tanpa fitur bawaan (0012) | 0.11 | Kripto diaudit, bukan buatan sendiri | tulis sendiri (ditolak) |
 | Serialisasi | `serde` + `serde_json` | 1.0 | Standar de facto | - |
 | Galat | `thiserror` | 2.0 | Sesuai `rust-conventions` | - |
 | Log | `tracing` + lapisan redaksi sendiri | 0.1 | Sesuai `rust-conventions` | `log` (tanpa konteks terstruktur) |

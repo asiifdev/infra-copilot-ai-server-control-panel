@@ -1,7 +1,7 @@
 # 0008. Katalog i18n sendiri (tanpa Fluent)
 
 - Tanggal: 2026-11-19
-- Status: diusulkan
+- Status: diterima oleh pemilik ("setuju", 2026-11-19)
 - Pengambil keputusan: pemilik proyek (menunggu persetujuan)
 
 ## Konteks

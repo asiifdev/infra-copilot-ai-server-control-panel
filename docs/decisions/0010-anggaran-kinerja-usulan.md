@@ -1,7 +1,7 @@
 # 0010. Anggaran kinerja M0 (usulan)
 
 - Tanggal: 2026-11-19
-- Status: diusulkan; pemeriksaan di CI dipasang atas persetujuan pemilik ("gas", 2026-11-19), angka dikunci setelah kalibrasi (lihat Pembaruan)
+- Status: diterima oleh pemilik ("setuju", 2026-11-19) ; angka Linux dikalibrasi setelah beberapa run CI
 - Pengambil keputusan: pemilik proyek
 
 ## Konteks
