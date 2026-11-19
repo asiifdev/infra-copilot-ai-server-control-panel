@@ -250,7 +250,7 @@ fn key_segments(key: &str) -> Vec<String> {
 }
 
 fn is_sensitive_key(key: &str) -> bool {
-    const SENSITIVE: [&str; 11] = [
+    const SENSITIVE: [&str; 13] = [
         "SECRET",
         "TOKEN",
         "PASSWORD",
@@ -261,6 +261,8 @@ fn is_sensitive_key(key: &str) -> bool {
         "KEY",
         "APIKEY",
         "PWD",
+        "PASS",
+        "AUTH",
         "AUTHORIZATION",
     ];
     // `key` segments that are not secrets: database keys.
@@ -374,6 +376,30 @@ fn redact_assignments(input: &str, count: &mut usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::{REDACTED, REDACTED_PRIVATE_KEY, redact};
+
+    #[test]
+    fn pass_and_auth_segments_are_sensitive() {
+        for input in [
+            "DB_PASS=s3cret",
+            "db-pass=s3cret",
+            "pass: s3cret",
+            "authPass=s3cret",
+            "AUTH=s3cret",
+            "redis.auth=s3cret",
+            "\"pass\": \"s3cret\"",
+        ] {
+            let out = text(input);
+            assert!(!out.contains("s3cret"), "{input} -> {out}");
+            assert!(out.contains(REDACTED), "{input} -> {out}");
+        }
+    }
+
+    #[test]
+    fn pass_and_auth_do_not_match_inside_other_words() {
+        for input in ["PASSENGER=1", "AUTHOR=jane", "bypass=1", "compass=n"] {
+            assert_eq!(text(input), input);
+        }
+    }
 
     fn text(input: &str) -> String {
         redact(input).text
