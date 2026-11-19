@@ -31,6 +31,7 @@ cannot drift apart. Release notes may get an Indonesian summary.
 
 ### Changed
 
+- CI now has a `perf-budget` job (Linux and macOS) that builds the prototype, measures it with `scripts/measure.sh` and fails when `scripts/check-budget.py` finds a metric over `docs/perf-budget.json`.
 - `db` now uses `rusqlite` 0.43 with its own `user_version` migrator instead of `rusqlite_migration` (decision 0011); a database newer than the build is refused.
 - `cargo-deny` allows workspace path dependencies; the docs check skips `ui/node_modules`.
 - Replaced `chunks_exact` with `as_chunks` in the SHA-256 code and removed an unused dependency from `i18n`, found by the latest stable clippy.

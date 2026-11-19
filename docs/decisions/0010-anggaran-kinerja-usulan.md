@@ -1,7 +1,7 @@
 # 0010. Anggaran kinerja M0 (usulan)
 
 - Tanggal: 2026-11-19
-- Status: diusulkan (menunggu persetujuan pemilik)
+- Status: diusulkan; pemeriksaan di CI dipasang atas persetujuan pemilik ("gas", 2026-11-19), angka dikunci setelah kalibrasi (lihat Pembaruan)
 - Pengambil keputusan: pemilik proyek
 
 ## Konteks
@@ -59,3 +59,10 @@ Alasan margin: waktu mulai dan RSS berfluktuasi antar run dan antar mesin CI, ja
 ## Dampak
 - 0007 bisa mengisi baris ukuran: `axum` + `tokio` (fitur minimal) + `rust-embed` + UI 39 KB menghasilkan biner 856 KiB pada macOS arm64.
 - `crates/proto-server` bersifat sementara dan dihapus atau diganti `crates/api` saat M1.
+
+## Pembaruan (2026-11-19): pemeriksaan CI dipasang
+- `scripts/check-budget.py` membandingkan keluaran `scripts/measure.sh` dengan `docs/perf-budget.json` (blok `default`, ditimpa per OS oleh `Linux`/`Darwin`), mencetak tabel ke ringkasan job, dan gagal bila ada metrik melewati batas atau hilang. Diuji lokal: lolos pada angka nyata, gagal pada anggaran yang diperketat.
+- Job `perf-budget` di `.github/workflows/ci.yml` (matriks Ubuntu dan macOS) menjalankan pengukuran, pemeriksaan, dan mengunggah `measure.json` sebagai artefak. Action `setup-node` dan `upload-artifact` dipin dengan SHA, Node 24.
+- Ukur ulang di Rust 1.100.0 (stable terbaru), macOS arm64: biner 895.024 B (sebelumnya 876.128 B di Rust 1.95.0, +2,2%), RSS 2.544 KiB, waktu sampai 200 sekitar 12 ms, bundel UI tidak berubah.
+- Angka awal di `perf-budget.json` sama untuk kedua OS (anggaran bagian "Usulan anggaran"). **Belum dikalibrasi**: angka Linux dari CI belum ada. Langkah 7 rancangan tetap berlaku: setelah beberapa run di `main`, isi blok `Linux` dan `Darwin` dari median + margin dan perketat margin.
+- Belum ada: penyimpanan riwayat tren di luar artefak per run.
