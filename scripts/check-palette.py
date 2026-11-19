@@ -1,27 +1,23 @@
 #!/usr/bin/env python3
-"""Checks the Nodivara colour tokens (ui/src/tokens.css): WCAG 2.2 contrast for text and UI pairs
+"""Checks the Nodivara colour tokens (ui/src/tokens.css): WCAG 2.2 contrast (AAA 7:1 for every text token on every surface, 3:1 for UI boundaries)
 in the light and dark themes, and that the two dark blocks are identical. Exit 1 on failure."""
 import re
 import sys
 from pathlib import Path
 
 CSS = Path(__file__).resolve().parent.parent / "ui" / "src" / "tokens.css"
-TEXT = 4.5  # normal text
-UI = 3.0  # non-text UI (focus ring, control borders)
+TEXT = 7.0  # WCAG AAA, normal text
+UI = 3.0  # non-text UI: focus ring, control borders, button fill (WCAG 2.2 1.4.11)
 
-PAIRS = [
-    ("text", "bg", TEXT), ("text", "surface", TEXT), ("text", "surface-2", TEXT),
-    ("text-muted", "bg", TEXT), ("text-muted", "surface", TEXT), ("text-muted", "surface-2", TEXT),
-    ("on-primary", "primary", TEXT), ("on-primary", "primary-hover", TEXT),
-    ("on-accent", "accent", TEXT),
-    ("link", "bg", TEXT), ("link", "surface", TEXT),
-    ("success", "bg", TEXT), ("success", "surface", TEXT),
-    ("warning", "bg", TEXT), ("warning", "surface", TEXT),
-    ("danger", "bg", TEXT), ("danger", "surface", TEXT),
-    ("info", "bg", TEXT), ("info", "surface", TEXT),
-    ("primary", "bg", UI), ("focus", "bg", UI), ("focus", "surface", UI),
-    ("border-strong", "bg", UI), ("border-strong", "surface", UI),
-]
+SURFACES = ["bg", "surface", "surface-2"]
+TEXT_TOKENS = ["text", "text-muted", "link", "success", "warning", "danger", "info"]
+UI_TOKENS = ["primary", "primary-hover", "focus", "border-strong"]
+PAIRS = (
+    [(t, s, TEXT) for t in TEXT_TOKENS for s in SURFACES]
+    + [("on-primary", "primary", TEXT), ("on-primary", "primary-hover", TEXT),
+       ("on-accent", "accent", TEXT)]
+    + [(u, s, UI) for u in UI_TOKENS for s in SURFACES]
+)
 
 
 def lum(hexcolor):

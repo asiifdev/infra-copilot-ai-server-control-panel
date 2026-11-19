@@ -3,6 +3,9 @@
 :root { font-family: system-ui, sans-serif; }
 body { margin: 0; padding: 1rem; background: var(--nv-bg); color: var(--nv-text); }
 a { color: var(--nv-link); }
+select, input, button { font: inherit; color: var(--nv-text); background: var(--nv-surface); border: 1px solid var(--nv-border-strong); border-radius: 6px; padding: 0.25rem 0.5rem; }
+button { cursor: pointer; }
+button:hover { background: var(--nv-surface-2); }
 :focus-visible { outline: 2px solid var(--nv-focus); outline-offset: 2px; }
 ::selection { background: var(--nv-accent); color: var(--nv-on-accent); }
 header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }

@@ -11,26 +11,40 @@ Jangan menulis kode warna langsung di komponen; pakai variabel `--nv-*`. Tema te
 | `--nv-bg` | `#f6f8f2` | `#070812` | latar halaman |
 | `--nv-surface` / `-2` | `#ffffff` / `#eef2e6` | `#0d1020` / `#151a2c` | kartu, tabel, panel |
 | `--nv-text` | `#0b1020` | `#eef1f8` | teks utama |
-| `--nv-text-muted` | `#4b556b` | `#a9b3c7` | teks sekunder |
-| `--nv-primary` | `#2c7a0b` | `#b6f205` | tombol utama (teks `--nv-on-primary`) |
-| `--nv-link`, `--nv-focus` | `#2c7a0b` | `#b6f205`, `#e9fc61` | tautan, cincin fokus |
+| `--nv-text-muted` | `#434c61` | `#a9b3c7` | teks sekunder |
+| `--nv-primary` / `-hover` | `#1f5a07` / `#174804` | `#b6f205` / `#e9fc61` | tombol utama (teks `--nv-on-primary`) |
+| `--nv-link`, `--nv-focus` | `#1f5a07`, `#1f5a07` | `#b6f205`, `#e9fc61` | tautan, cincin fokus |
 | `--nv-accent` | `#b6f205` | `#b6f205` | sorotan dan pilihan teks (teks `--nv-on-accent`), bukan teks di latar terang |
-| `--nv-success/warning/danger/info` | `#2c7a0b #8a5a00 #b42318 #1d4ed8` | `#5fd01a #f5b83d #ff7b7b #7aa7ff` | status |
-| `--nv-border`, `--nv-border-strong` | `#d5dccb`, `#7d8a6f` | `#262d44`, `#5a6685` | garis dekoratif, batas kontrol input |
+| `--nv-success/warning/danger/info` | `#1f5a07 #6a4300 #951c12 #1740b3` | `#5fd01a #f5b83d #ff8a8a #7aa7ff` | status |
+| `--nv-border`, `--nv-border-strong` | `#d5dccb`, `#6f7c62` | `#262d44`, `#6c789a` | garis dekoratif, batas kontrol input |
 
 ## Kontras terukur (rasio WCAG)
 
-| Pasangan | Terang | Gelap |
-|---|---|---|
-| teks / latar | 17,7 | 17,6 |
-| teks muted / latar | 7,0 | 9,5 |
-| tautan / latar | 5,0 | 14,9 |
-| teks tombol / tombol utama | 5,4 | 14,9 |
-| fokus / latar | 5,0 | 17,6 |
-| status terendah (success, warning, danger, info) | 5,0 | 8,0 |
-| batas kontrol / latar | 3,4 | 3,5 |
+| Pasangan (nilai terendah dari tiga permukaan) | Terang | Gelap | Syarat |
+|---|---|---|---|
+| teks utama | 16,7 | 15,3 | 7 (AAA) |
+| teks sekunder | 7,6 | 8,2 | 7 (AAA) |
+| tautan | 7,3 | 12,9 | 7 (AAA) |
+| status (success, warning, danger, info) | 7,3 | 7,2 | 7 (AAA) |
+| teks tombol di tombol utama (normal dan hover) | 8,3 | 14,9 | 7 (AAA) |
+| teks di atas sorotan (`accent`) | 14,9 | 14,9 | 7 (AAA) |
+| isi tombol utama dan cincin fokus terhadap permukaan | 7,3 | 12,9 | 3 |
+| batas kontrol input | 3,9 | 3,9 | 3 |
 
-Batas: 4,5:1 untuk teks, 3:1 untuk elemen UI. Diperiksa `python3 scripts/check-palette.py` (dan di CI). Mengubah token tanpa lulus pemeriksa tidak boleh digabung.
+Teks: AAA (7:1) di **semua tiga permukaan** (`bg`, `surface`, `surface-2`), bukan hanya di latar halaman. Elemen UI: 3:1 (WCAG 2.2, 1.4.11). Diperiksa `python3 scripts/check-palette.py` (36 pasangan per tema; rumusnya diuji pada nilai WCAG yang diketahui, dan pemeriksa gagal bila nilai diturunkan) dan di CI. Mengubah token tanpa lulus pemeriksa tidak boleh digabung. Pemeriksa hanya menjangkau token warna: gambar, logo, dan warna yang ditulis langsung di komponen tidak tercakup (pemindaian terakhir: tidak ada warna tertulis langsung di `ui/src`).
+
+## Diukur pada halaman yang dirender (2026-11-19)
+
+Selain menghitung token, halaman prototipe dibuka di browser dan setiap teks diukur dari warna terhitung dan latar efektifnya:
+
+| | Terang | Gelap |
+|---|---|---|
+| teks terendah di halaman | 7,78 | 8,79 |
+| teks isi kotak pilihan | 18,9 | di atas 7 (token yang sama) |
+| batas kotak pilihan terhadap halaman | 4,1 | 3,9 (token) |
+| override manual `data-theme` | bekerja | bekerja |
+
+Temuan dari pengukuran ini: kotak pilihan bahasa semula memakai warna bawaan browser (lolos kontras tetapi tidak senada); kini memakai token. Yang **belum** tercakup: keadaan yang belum ada di prototipe (nonaktif, hover tombol utama, tautan terkunjungi, grafik), dan layar nyata di Windows dengan mode kontras tinggi (`forced-colors`). Tambahkan ke pemeriksaan setiap komponen baru yang memakai warna.
 
 ## Aturan pakai
 

@@ -9,8 +9,8 @@ Nama sementara "Infra Copilot" (keputusan 0001 dan 0006) diganti. Pemilik memili
 
 ## Keputusan
 1. **Nodivara adalah nama produk dan platform.** Nama repositori (`infra-copilot-ai-server-control-panel`), nama crate, nama biner (`infra`), dan konstanta protokol (domain hash audit `infra-copilot/audit/v1`, yang jika diubah memutus rantai hash yang ada) **tidak diganti**; pemilik menyatakan penggantian nama repo tidak diperlukan. Dokumen publik, `llms.txt`, dan judul UI memakai nama baru. Keputusan 0001 dan 0006 tetap sebagai catatan sejarah.
-2. **Palet diambil dari piksel logo** (latar `#070812`, lime merek `#b6f205`, lime terang `#e9fc61`, hijau `#429004`, perak `#d9deea`) dan ditetapkan sebagai token di `ui/src/tokens.css`. Tema gelap mengikuti logo; tema terang memakai hijau tua `#2c7a0b` untuk teks, tautan, dan tombol karena lime di atas putih hanya 1,3:1.
-3. **Kontras diperiksa otomatis**: `scripts/check-palette.py` memeriksa 24 pasangan di kedua tema (WCAG 2.2 AA: 4,5:1 teks, 3:1 elemen UI) dan bahwa dua blok gelap sama. Pemeriksa diuji dengan nilai buruk dan dengan blok yang berbeda; keduanya membuatnya gagal. Dijalankan di CI.
+2. **Palet diambil dari piksel logo** (latar `#070812`, lime merek `#b6f205`, lime terang `#e9fc61`, hijau `#429004`, perak `#d9deea`) dan ditetapkan sebagai token di `ui/src/tokens.css`. Tema gelap mengikuti logo; tema terang memakai hijau tua `#1f5a07` untuk teks, tautan, dan tombol karena lime di atas putih hanya 1,3:1.
+3. **Kontras diperiksa otomatis**: `scripts/check-palette.py` memeriksa 36 pasangan di kedua tema: **AAA 7:1 untuk setiap teks di ketiga permukaan** (`bg`, `surface`, `surface-2`) dan 3:1 untuk elemen UI (WCAG 2.2). Pada pemeriksaan pertama nilai tema terang hanya 5,0 sampai 6,3:1 (AA) dan diperketat sampai lolos AAA dan bahwa dua blok gelap sama. Pemeriksa diuji dengan nilai buruk dan dengan blok yang berbeda; keduanya membuatnya gagal. Dijalankan di CI.
 4. **Aset logo** yang dioptimalkan ada di `brand/` (tanda 512 dan 128 px, lockup gelap 1000 px, palet terkuantisasi). Berkas induk asli tetap milik pemilik di luar repo.
 
 ## Belum diselesaikan (jangan diklaim bebas)
