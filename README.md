@@ -59,7 +59,7 @@ Everything below is **planned**, not shipped:
 crates/core         shared domain types: risk tiers, secret redaction (no external dependencies)
 crates/i18n         en/id message catalog with stable keys and fallback
 crates/inventory    inventory model and the Collector / ParityRule contracts
-crates/collectors   read-only Linux collectors (listeners, processes, cron)
+crates/collectors   read-only Linux collectors (listeners, processes, cron, PM2, systemd, Docker)
 crates/parity       parity rules PAR-001, PAR-006, PAR-008, PAR-010, comparer and localized report
 crates/cli          `infra collect` and `infra compare` (offline, read-only)
 crates/db           SQLite schema, tenant-scoped queries, hash-chained audit log

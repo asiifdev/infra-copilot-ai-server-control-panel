@@ -65,7 +65,7 @@ Semua yang tertulis di bawah ini **direncanakan**, belum dirilis:
 crates/core         tipe domain bersama: tingkat risiko, penyaring rahasia (tanpa dependensi luar)
 crates/i18n         katalog pesan en/id dengan kunci stabil dan fallback
 crates/inventory    model inventaris dan kontrak Collector / ParityRule
-crates/collectors   kolektor Linux hanya-baca (port mendengar, proses, cron)
+crates/collectors   kolektor Linux hanya-baca (port mendengar, proses, cron, PM2, systemd, Docker)
 crates/parity       aturan kesetaraan PAR-001, PAR-006, PAR-008, PAR-010, pembanding, dan laporan terlokalisasi
 crates/cli          `infra collect` dan `infra compare` (offline, hanya-baca)
 crates/db           skema SQLite, kueri per organisasi, log audit berantai-hash
