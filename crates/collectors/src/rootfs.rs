@@ -51,9 +51,11 @@ use rustix::io::Errno;
 /// Most symbolic links followed while resolving one path (Linux uses the same limit).
 const MAX_SYMLINKS: usize = 40;
 
-/// Open flags for a file read: never blocks on a FIFO, never leaks into children.
+/// Open flags for a file read: never blocks on a FIFO, never becomes a controlling terminal,
+/// never leaks into children.
 const FILE_FLAGS: OFlags = OFlags::RDONLY
     .union(OFlags::NONBLOCK)
+    .union(OFlags::NOCTTY)
     .union(OFlags::CLOEXEC);
 /// Open flags for a directory.
 const DIR_FLAGS: OFlags = OFlags::RDONLY
@@ -336,6 +338,20 @@ fn open_with_walk(
     // Everything on the way is resolved, so `O_NOFOLLOW` is always right for the last open: a link
     // swapped in since the lookup makes it fail instead of leaving the root.
     let name = walked.last.as_deref().unwrap_or(OsStr::new("."));
+    // Opening a device node can have side effects, so a file read opens nothing but a regular file
+    // (a link is left to `O_NOFOLLOW`, which reports it). The type is checked again on the opened
+    // descriptor in `read_file`.
+    if !flags.contains(OFlags::DIRECTORY) && walked.last.is_some() {
+        let stat = fs::statat(&walked.dir, name, AtFlags::SYMLINK_NOFOLLOW)
+            .map_err(|errno| final_error(errno, follow))?;
+        if !matches!(
+            FileType::from_raw_mode(stat.st_mode),
+            FileType::RegularFile | FileType::Symlink
+        ) && flags.contains(OFlags::NONBLOCK)
+        {
+            return Err(FsError::WrongType);
+        }
+    }
     fs::openat(
         &walked.dir,
         name,

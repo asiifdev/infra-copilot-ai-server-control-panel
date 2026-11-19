@@ -1,0 +1,15 @@
+[package]
+name = "notifier"
+description = "Notification channel contract, alert rendering, send policy helpers and a send-only Telegram channel."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+i18n = { path = "../i18n" }
+# Same version and minimal features as crates/inventory (decisions 0005, 0007).
+serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

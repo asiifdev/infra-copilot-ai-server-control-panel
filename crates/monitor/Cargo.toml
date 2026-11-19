@@ -1,0 +1,17 @@
+[package]
+name = "monitor"
+description = "Pure, deterministic uptime monitoring logic: check configs, outcomes, incident state machine, uptime accounting."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# Same version and minimal features as the inventory crate (decisions 0005, 0007, 0013).
+serde = { version = "1.0.229", default-features = false, features = ["std", "derive"] }
+
+[dev-dependencies]
+serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

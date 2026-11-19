@@ -88,3 +88,27 @@ cli.reason.notfile = bukan berkas biasa
 cli.reason.toolarge = berkas terlalu besar
 cli.report.partial = Catatan: inventaris sumber atau target tidak lengkap, jadi "tidak ada" belum tentu benar. Sumber yang tidak terbaca: {warnings}
 cli.report.limits = Ini perbandingan hanya-baca dari dua inventaris. Ini tidak membuktikan kedua server setara: hanya aturan berikut yang diperiksa: {ids}.
+
+# Alerts (crates/notifier)
+# Notifikasi (crates/notify)
+notify.down.title = MATI: {name}
+notify.still_down.title = MASIH MATI: {name}
+notify.recovered.title = Pulih: {name}
+notify.cert_expiring.title = Sertifikat segera kedaluwarsa: {name}
+notify.cert_ok.title = Sertifikat OK: {name}
+notify.test.title = Notifikasi uji
+notify.test.body = Ini pesan uji. Notifikasi sampai ke obrolan ini.
+notify.line.target = Target: {target}
+notify.line.reason = Penyebab: {reason}
+notify.line.status = Status HTTP: {status}
+notify.line.since = Sejak: {time}
+notify.line.resolved = Pulih pada: {time}
+notify.line.expires = Kedaluwarsa: {time}
+notify.line.repeats = Pemeriksaan gagal berturut-turut: {count}
+notify.line.days_left = Sisa hari: {days}
+notify.error.dns = resolusi nama gagal
+notify.error.connect = koneksi gagal
+notify.error.tls = masalah TLS atau sertifikat
+notify.error.timeout = tidak ada jawaban tepat waktu
+notify.error.http = status HTTP tidak terduga
+notify.error.other = kegagalan lain

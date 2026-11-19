@@ -88,3 +88,27 @@ cli.reason.notfile = not a regular file
 cli.reason.toolarge = file too large
 cli.report.partial = Note: the source or target inventory is partial, so absence is not proof. Unreadable sources: {warnings}
 cli.report.limits = This is a read-only comparison of two inventories. It does not prove the servers are equivalent: only these rules were checked: {ids}.
+
+# Alerts (crates/notifier)
+# Notifications (crates/notify)
+notify.down.title = DOWN: {name}
+notify.still_down.title = STILL DOWN: {name}
+notify.recovered.title = Recovered: {name}
+notify.cert_expiring.title = Certificate expiring: {name}
+notify.cert_ok.title = Certificate OK: {name}
+notify.test.title = Test notification
+notify.test.body = This is a test message. Notifications reach this chat.
+notify.line.target = Target: {target}
+notify.line.reason = Reason: {reason}
+notify.line.status = HTTP status: {status}
+notify.line.since = Since: {time}
+notify.line.resolved = Resolved: {time}
+notify.line.expires = Expires: {time}
+notify.line.repeats = Failed checks in a row: {count}
+notify.line.days_left = Days left: {days}
+notify.error.dns = name resolution failed
+notify.error.connect = connection failed
+notify.error.tls = TLS or certificate problem
+notify.error.timeout = no answer in time
+notify.error.http = unexpected HTTP status
+notify.error.other = other failure
