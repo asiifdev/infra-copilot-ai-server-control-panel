@@ -16,10 +16,12 @@
 //! `"prod"` only when `NODE_ENV` is `production`; otherwise `"unknown"`), `supervised` (always
 //! true: PM2 restarts it), `env_refs` (sorted names of the app's `env` variables, **never
 //! values**), plus the additive fields `instances` (PM2 `instances` when it is a positive number,
-//! else 1) and `saved_only` (true).
+//! else 1), `saved_only` (true) and `owner` (the account whose home holds the dump).
 //!
 //! Apps with the same name across several users' dumps are merged into one item; `instances` are
-//! summed and the first dump (in path order) supplies the other fields.
+//! summed and the first dump supplies the other fields; `/root` is read first. Links at `.pm2` or
+//! at the dump are skipped with a warning (never followed). File ownership is not checked: it needs
+//! metadata that `RootFs` does not expose.
 //!
 //! Failure handling: no dump anywhere gives an empty collection without a warning (PM2 is simply
 //! not used). Unreadable, oversized or invalid dumps, and malformed app entries, each produce one
@@ -71,6 +73,7 @@ struct Problems {
     too_large: usize,
     invalid: usize,
     bad_apps: usize,
+    symlinks: usize,
     dirs_denied: bool,
     truncated_homes: bool,
 }
@@ -90,6 +93,10 @@ impl Problems {
             "were larger than the read limit and were skipped",
         );
         add(self.invalid, "are not a valid PM2 dump (JSON array)");
+        add(
+            self.symlinks,
+            "were skipped because `.pm2` or the dump is a symbolic link",
+        );
         if self.bad_apps > 0 {
             out.push(format!(
                 "pm2: {} app entr(ies) without a usable name were skipped",
@@ -116,25 +123,34 @@ impl Collector for Pm2 {
             .validate()
             .map_err(|err| CollectError(format!("root filesystem: {err}")))?;
         let mut problems = Problems::default();
-        let mut paths: Vec<String> = Vec::new();
+        // (owner, home directory). `/root` first, so on a name clash the administrator's entry
+        // supplies the fields; a user can only ever add to the instance count of another's app.
+        let mut homes: Vec<(String, String)> = vec![("root".to_owned(), "/root".to_owned())];
         match self.root.read_dir("/home", MAX_HOMES) {
-            Ok(homes) => {
-                problems.truncated_homes = homes.truncated;
-                paths.extend(
-                    homes
+            Ok(listing) => {
+                problems.truncated_homes = listing.truncated;
+                homes.extend(
+                    listing
                         .names
                         .iter()
-                        .map(|name| format!("/home/{name}/.pm2/dump.pm2")),
+                        .map(|name| (clean(name, MAX_NAME_CHARS), format!("/home/{name}"))),
                 );
             }
             Err(FsError::PermissionDenied) => problems.dirs_denied = true,
             Err(_) => {} // no /home (or not a directory): nothing to list
         }
-        paths.push("/root/.pm2/dump.pm2".to_owned());
 
         let mut apps: BTreeMap<String, Item> = BTreeMap::new();
-        for path in &paths {
-            let file = match self.root.read_to_string(path, MAX_DUMP_BYTES) {
+        for (owner, home) in &homes {
+            let dir = format!("{home}/.pm2");
+            let path = format!("{dir}/dump.pm2");
+            // A user-writable home must not be able to point the collector at another file (for
+            // example a root-only JSON file): links at `.pm2` and at the dump are refused.
+            if self.root.read_link(&dir).is_ok() || self.root.read_link(&path).is_ok() {
+                problems.symlinks += 1;
+                continue;
+            }
+            let file = match self.root.read_to_string(&path, MAX_DUMP_BYTES) {
                 Ok(file) => file,
                 Err(FsError::NotFound) => continue,
                 Err(FsError::PermissionDenied) => {
@@ -156,7 +172,7 @@ impl Collector for Pm2 {
                 continue;
             };
             for entry in entries.iter().take(MAX_APPS_PER_DUMP) {
-                match app_item(entry) {
+                match app_item(entry, owner) {
                     Some(item) => merge(&mut apps, item),
                     None => problems.bad_apps += 1,
                 }
@@ -186,7 +202,7 @@ fn merge(apps: &mut BTreeMap<String, Item>, item: Item) {
 }
 
 /// One app object of the dump as an item, or `None` when it has no usable name.
-fn app_item(app: &Value) -> Option<Item> {
+fn app_item(app: &Value, owner: &str) -> Option<Item> {
     let name = clean(app.get("name")?.as_str()?, MAX_NAME_CHARS);
     if name.trim().is_empty() {
         return None;
@@ -257,6 +273,7 @@ fn app_item(app: &Value) -> Option<Item> {
     );
     data.insert("instances".into(), Value::from(instances));
     data.insert("saved_only".into(), Value::Bool(true));
+    data.insert("owner".into(), Value::from(owner));
     Some(Item {
         kind: Kind::Process,
         key: format!("pm2:{name}"),
@@ -298,6 +315,10 @@ mod tests {
                 fs::create_dir_all(parent)?;
             }
             fs::write(path, bytes)
+        }
+
+        fn path(&self, rel: &str) -> std::path::PathBuf {
+            self.0.join(rel)
         }
 
         fn run(&self) -> Result<Collection, CollectError> {
@@ -391,7 +412,31 @@ mod tests {
         assert_eq!(c.items.len(), 2);
         let web = find(&c, "pm2:web")?;
         assert_eq!(web.u64_field("instances"), Some(3));
-        assert_eq!(web.str_field("cmd"), Some("/a.js"));
+        // `/root` is read first, so the administrator's entry supplies the fields.
+        assert_eq!(web.str_field("cmd"), Some("/b.js"));
+        assert_eq!(web.str_field("owner"), Some("root"));
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_dump_or_pm2_dir_is_skipped_and_never_read() -> TestResult {
+        let t = Tree::new()?;
+        t.write("secret.json", br#"[{"name":"LEAKED"}]"#)?;
+        t.write("home/b/real/dump.pm2", br#"[{"name":"LEAKED2"}]"#)?;
+        t.write("home/a/.pm2/.keep", b"")?;
+        std::os::unix::fs::symlink("/secret.json", t.path("home/a/.pm2/dump.pm2"))?;
+        std::os::unix::fs::symlink("/home/b/real", t.path("home/b/.pm2"))?;
+        t.write("root/.pm2/dump.pm2", br#"[{"name":"ok"}]"#)?;
+        let c = t.run()?;
+        let names: Vec<_> = c.items.iter().map(|i| i.key.as_str()).collect();
+        assert_eq!(names, ["pm2:ok"]);
+        assert!(
+            c.warnings.iter().any(|w| w.contains("2 dump file(s)")),
+            "{:?}",
+            c.warnings
+        );
+        assert!(!c.warnings.iter().any(|w| w.contains("LEAKED")));
         Ok(())
     }
 
