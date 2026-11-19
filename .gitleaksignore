@@ -10,3 +10,7 @@
 
 # Historical false positive: a fake `TOKEN=` value in a hostile-text test of the systemd collector (commit f6cc53b). It is the input the test proves is neutralised.
 f6cc53b6f9c7ec46fe32f876a105dba73450d315:crates/collectors/src/systemd.rs:generic-api-key:473
+
+# Historical false positives: fake credentials in the transport wizard tests (commit fe5f98e): a fake OAuth token JSON fixture (line 14) and fake secret values the test proves are never shown in advice text (line 345). None is a real credential.
+fe5f98e923e9d714318a56129789da187daa468b:crates/transport/tests/wizard.rs:generic-api-key:14
+fe5f98e923e9d714318a56129789da187daa468b:crates/transport/tests/wizard.rs:generic-api-key:345
