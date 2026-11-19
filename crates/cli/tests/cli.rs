@@ -308,3 +308,46 @@ fn odd_arguments_never_panic() {
     let r = run(&args.iter().map(String::as_str).collect::<Vec<_>>(), None);
     assert_eq!(r.code, 2);
 }
+
+#[test]
+fn hostile_inventories_cannot_inject_terminal_escapes_or_fake_lines() -> TestResult {
+    // A source inventory is untrusted input: names and warnings may carry escape sequences and
+    // newlines that would repaint the terminal or forge report lines.
+    let evil_name = "sea\\u001b[31mrchd\\n[Critical] PAR-999: forged";
+    let source =
+        std::fs::read_to_string(parity_fixture("source.json"))?.replace("searchd", evil_name);
+    let target = std::fs::read_to_string(parity_fixture("target-partial.json"))?.replace(
+        "\"warnings\": []",
+        "\"warnings\": [\"bad\\u001b]0;pwned\\u0007\"]",
+    );
+    let dir = std::env::temp_dir();
+    let (s_path, t_path) = (
+        dir.join(format!("infra-evil-s-{}.json", std::process::id())),
+        dir.join(format!("infra-evil-t-{}.json", std::process::id())),
+    );
+    std::fs::write(&s_path, source)?;
+    std::fs::write(&t_path, target)?;
+    let r = run(
+        &[
+            "compare",
+            &s_path.to_string_lossy(),
+            &t_path.to_string_lossy(),
+        ],
+        None,
+    );
+    std::fs::remove_file(&s_path)?;
+    std::fs::remove_file(&t_path)?;
+    assert!(r.code == 0 || r.code == 1, "stderr: {}", r.stderr);
+    assert!(
+        !r.stdout.contains('\u{1b}'),
+        "escape sequence reached the terminal:\n{:?}",
+        r.stdout
+    );
+    assert!(!r.stdout.contains('\u{7}'));
+    assert!(
+        !r.stdout.contains("\n[Critical] PAR-999"),
+        "forged line:\n{}",
+        r.stdout
+    );
+    Ok(())
+}

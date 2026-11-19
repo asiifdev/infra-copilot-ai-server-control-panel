@@ -37,6 +37,14 @@ const KIND_CRON: MessageKey = MessageKey::new("cli.kind.cron");
 const REPORT_PARTIAL: MessageKey = MessageKey::new("cli.report.partial");
 const REPORT_LIMITS: MessageKey = MessageKey::new("cli.report.limits");
 
+/// Replaces control characters (terminal escapes, newlines, NUL) in text that comes from an
+/// inventory, which is untrusted input: it could repaint the terminal or forge report lines.
+fn sanitize(text: &str) -> String {
+    text.chars()
+        .map(|c| if c.is_control() { '\u{FFFD}' } else { c })
+        .collect()
+}
+
 /// Largest inventory file accepted, so a wrong path cannot exhaust memory.
 const MAX_INVENTORY_BYTES: u64 = 64 * 1024 * 1024;
 
@@ -133,8 +141,12 @@ impl Parsed {
 }
 
 impl Ui<'_> {
+    /// Looks up `key`; every argument value is sanitized because it may come from an inventory
+    /// or from a file system error message.
     fn tr(&self, key: MessageKey, args: &[(&str, &str)]) -> String {
-        self.catalog.get(self.locale, key, args).text
+        let clean: Vec<(&str, String)> = args.iter().map(|(n, v)| (*n, sanitize(v))).collect();
+        let pairs: Vec<(&str, &str)> = clean.iter().map(|(n, v)| (*n, v.as_str())).collect();
+        self.catalog.get(self.locale, key, &pairs).text
     }
 
     fn fail(&mut self, key: MessageKey, args: &[(&str, &str)]) -> u8 {
@@ -248,7 +260,14 @@ impl Ui<'_> {
         } else {
             let count = report.findings.len().to_string();
             text.push_str(&self.tr(REPORT_COUNT, &[("count", &count), ("rules", &rules)]));
-            for finding in &report.findings {
+            for original in &report.findings {
+                // Values in a finding come from the (untrusted) inventories.
+                let mut finding = original.clone();
+                for value in finding.args.values_mut() {
+                    *value = sanitize(value);
+                }
+                finding.subject.key = sanitize(&finding.subject.key);
+                let finding = &finding;
                 let rendered = render(finding, &self.catalog, self.locale);
                 let kind = self.tr(kind_key(finding.subject.kind), &[]);
                 let head = self.tr(
