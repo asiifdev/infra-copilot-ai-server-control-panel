@@ -17,6 +17,7 @@ for f in $FILES; do
   [ "$f" = "$P" ] && continue
   for skipped in $SKIP; do [ "$f" = "$skipped" ] && continue 2; done
   [ -f "$f" ] || continue
+  grep -Iq . "$f" 2>/dev/null || continue # binary files (images) have no text to scan; sed fails on them
   if [ -n "$ALLOW" ]; then body=$(sed -E "s#($ALLOW)##g" "$f"); else body=$(cat "$f"); fi
   if m=$(printf '%s\n' "$body" | grep -n -i -E -- "$PATS" 2>/dev/null | head -5) && [ -n "$m" ]; then
     echo "== $f"; echo "$m" | cut -c1-140; hits=$((hits+1))
