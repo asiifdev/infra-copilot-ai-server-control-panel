@@ -73,6 +73,7 @@ cli.report.advice = Saran: {advice}
 cli.kind.listener = pendengar
 cli.kind.process = proses
 cli.kind.cron = tugas terjadwal
+cli.kind.env_ref = rujukan konfigurasi
 cli.reason.notfile = bukan berkas biasa
 cli.reason.toolarge = berkas terlalu besar
 cli.report.partial = Catatan: inventaris sumber atau target tidak lengkap, jadi "tidak ada" belum tentu benar. Sumber yang tidak terbaca: {warnings}

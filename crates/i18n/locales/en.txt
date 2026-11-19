@@ -73,6 +73,7 @@ cli.report.advice = Advice: {advice}
 cli.kind.listener = listener
 cli.kind.process = process
 cli.kind.cron = cron
+cli.kind.env_ref = configuration reference
 cli.reason.notfile = not a regular file
 cli.reason.toolarge = file too large
 cli.report.partial = Note: the source or target inventory is partial, so absence is not proof. Unreadable sources: {warnings}

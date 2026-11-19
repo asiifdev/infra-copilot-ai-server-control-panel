@@ -24,16 +24,25 @@ pub enum Kind {
     /// Key `<scope>:<owner>:<schedule>:<command hint>`, e.g. `user:root:0 3 * * *:backup`. Data:
     /// `schedule`, `command_hint` (redacted), `owner`, `source` (`crontab` | `timer` | `panel`).
     Cron,
+    /// A configuration reference from an application to a host and port (docs/design.md 4.1).
+    ///
+    /// Key `<process key>:<NAME>`, e.g. `pm2:web:DATABASE_URL`. Data: `app` (the process key),
+    /// `name` (variable name), `target_host` (host string), `target_port` (number or null),
+    /// `in_container` (bool: the reference lives inside a container, so `localhost` means the
+    /// container itself), `resolves_to` (`listener:tcp:<port>` of the same inventory, or null).
+    /// Never contains the variable's value, a user name, a password or a path (decision 0015).
+    EnvRef,
 }
 
 impl Kind {
-    /// The wire name (`listener`, `process`, `cron`).
+    /// The wire name (`listener`, `process`, `cron`, `env_ref`).
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Listener => "listener",
             Self::Process => "process",
             Self::Cron => "cron",
+            Self::EnvRef => "env_ref",
         }
     }
 }

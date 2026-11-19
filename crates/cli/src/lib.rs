@@ -35,6 +35,7 @@ const REASON_TOO_LARGE: MessageKey = MessageKey::new("cli.reason.toolarge");
 const KIND_LISTENER: MessageKey = MessageKey::new("cli.kind.listener");
 const KIND_PROCESS: MessageKey = MessageKey::new("cli.kind.process");
 const KIND_CRON: MessageKey = MessageKey::new("cli.kind.cron");
+const KIND_ENV_REF: MessageKey = MessageKey::new("cli.kind.env_ref");
 const REPORT_PARTIAL: MessageKey = MessageKey::new("cli.report.partial");
 const REPORT_LIMITS: MessageKey = MessageKey::new("cli.report.limits");
 
@@ -358,6 +359,7 @@ fn kind_key(kind: Kind) -> MessageKey {
         Kind::Listener => KIND_LISTENER,
         Kind::Process => KIND_PROCESS,
         Kind::Cron => KIND_CRON,
+        Kind::EnvRef => KIND_ENV_REF,
     }
 }
 
