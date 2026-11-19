@@ -66,3 +66,13 @@ Alasan margin: waktu mulai dan RSS berfluktuasi antar run dan antar mesin CI, ja
 - Ukur ulang di Rust 1.100.0 (stable terbaru), macOS arm64: biner 895.024 B (sebelumnya 876.128 B di Rust 1.95.0, +2,2%), RSS 2.544 KiB, waktu sampai 200 sekitar 12 ms, bundel UI tidak berubah.
 - Angka awal di `perf-budget.json` sama untuk kedua OS (anggaran bagian "Usulan anggaran"). **Belum dikalibrasi**: angka Linux dari CI belum ada. Langkah 7 rancangan tetap berlaku: setelah beberapa run di `main`, isi blok `Linux` dan `Darwin` dari median + margin dan perketat margin.
 - Belum ada: penyimpanan riwayat tren di luar artefak per run.
+
+### Angka CI pertama (run 44425507323, runner GitHub, Rust stable terbaru, 1 run)
+| Metrik | Linux x86_64 (ubuntu-latest) | macOS arm64 (macos-latest) |
+|---|---|---|
+| Bundel UI gzip | 15.601 B | 15.612 B |
+| Biner rilis | 968.592 B | 894.944 B |
+| RSS diam | 2.924 KiB | 2.192 KiB |
+| Exec sampai 200 (median) | 6,81 ms | 44,59 ms |
+
+Semua dalam anggaran. Catatan: waktu mulai macOS di CI (44,6 ms) jauh di atas mesin pemilik (±12 ms), jadi batas 100 ms hanya punya margin sekitar 2x di sana; jangan diperketat sebelum ada beberapa run. Ini baru satu sampel per OS, belum kalibrasi.
