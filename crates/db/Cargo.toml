@@ -9,6 +9,8 @@ publish.workspace = true
 [dependencies]
 core-domain = { path = "../core" }
 # Versions and feature choices: docs/decisions/0007, 0009 and 0011. Minimal features only (0005).
+# SHA-256 for the audit chain (decision 0012): default features off, the digest API only.
+sha2 = { version = "0.11", default-features = false }
 rusqlite = { version = "0.43", default-features = false, features = ["bundled"] }
 
 [lints]
