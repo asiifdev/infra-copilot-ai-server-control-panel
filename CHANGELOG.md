@@ -34,6 +34,8 @@ cannot drift apart. Release notes may get an Indonesian summary.
 - `parity` crate: rules PAR-001 (listener without counterpart), PAR-008 (cron job without counterpart) and PAR-010 (port open to the internet), a deterministic comparer, and a renderer that takes all text from the en/id catalog. A partial inventory never proves absence: findings are capped at Info.
 - PAR-006 (application serving a port runs a development server or outside any supervisor, target side only). The process collector now sets `mode` to `dev` for well-known development servers and `supervised` from the cgroup (systemd service, container scope, login session) and from supervisor ancestors such as PM2; `prod` is never claimed and unknown stays null.
 - `collectors`: systemd (running services and timers), Docker (running containers) and PM2 (apps saved in `dump.pm2`, read from files only) collectors, plus a closed, read-only command runner for `docker` and `systemctl` (decision 0014). `infra collect` runs programs only on this machine; with `--root` they are skipped.
+- `env_ref` items: PM2 and Docker environment values are parsed in memory into a target host and port and then dropped (never stored, logged or shown); references to local listeners get `resolves_to`. Docker process items get `version` from the image tag (decision 0015).
+- Parity rules PAR-002 (a container reference to `localhost` while the service listens on the host), PAR-007 (a reference to a local port nothing listens on) and PAR-009 (different major version of the same container image).
 - `cli` crate: `infra collect` and `infra compare` (exit code 1 on a critical finding), with English and Indonesian output.
 
 ### Security

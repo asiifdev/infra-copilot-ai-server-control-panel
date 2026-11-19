@@ -1,7 +1,7 @@
 # 0015. Item `env_ref` dan versi layanan (Modul C)
 
 - Tanggal: 2026-11-19
-- Status: diusulkan, dikerjakan menurut rencana yang disetujui pemilik (Modul C)
+- Status: diterima (rencana Modul C disetujui pemilik, 2026-11-19)
 - Pengambil keputusan: pemilik proyek
 
 ## Konteks

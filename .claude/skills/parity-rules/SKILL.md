@@ -44,7 +44,7 @@ Setiap aturan punya: `id` stabil (contoh `PAR-007`), judul, kategori, bobot (`cr
 
 ## Status implementasi (2026-11-19)
 
-Penomoran: aturan ke-n pada daftar di atas = `PAR-00n` (n 1-9) atau `PAR-0nn`. Sudah ada: **PAR-001, PAR-006, PAR-008, PAR-010** (crate `parity`, kolektor `listeners`/`processes`/`cron` di crate `collectors`, kontrak di crate `inventory`, keputusan 0013). Belum ada: 2-7, 9, 11, dan aturan selisih OS/arsitektur (14.2).
+Penomoran: aturan ke-n pada daftar di atas = `PAR-00n` (n 1-9) atau `PAR-0nn`. Sudah ada: **PAR-001, PAR-002, PAR-006, PAR-007, PAR-008, PAR-009, PAR-010** (crate `parity`, kolektor `listeners`/`processes`/`cron` di crate `collectors`, kontrak di crate `inventory`, keputusan 0013). Belum ada: 2-7, 9, 11, dan aturan selisih OS/arsitektur (14.2).
 
 Konvensi yang berlaku untuk aturan baru:
 - Aturan mengimplementasikan `inventory::ParityRule` (id, versi, bobot, kategori, tingkat perbaikan AI, `evaluate(source, target, ctx)`), murni dan deterministik, dan hanya bergantung pada `inventory`.
