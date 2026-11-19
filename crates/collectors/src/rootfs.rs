@@ -303,7 +303,16 @@ fn open_with_openat2(
     } else {
         names.join("/")
     };
-    let mut oflags = flags | OFlags::CLOEXEC;
+    // A file read never opens its target directly: the entry is first opened with `O_PATH`
+    // (which has no side effects, even on a device node), its type is read from that descriptor,
+    // and only a regular file is reopened for reading, through the very same descriptor
+    // (`/proc/self/fd/N`), so it cannot be swapped for something else in between.
+    let file_read = !flags.contains(OFlags::DIRECTORY) && flags.contains(OFlags::NONBLOCK);
+    let mut oflags = if file_read {
+        OFlags::PATH | OFlags::CLOEXEC
+    } else {
+        flags | OFlags::CLOEXEC
+    };
     if !follow {
         oflags |= OFlags::NOFOLLOW;
     }
@@ -312,6 +321,7 @@ fn open_with_openat2(
     // the walk decides.
     for _ in 0..4 {
         match fs::openat2(root, rel.as_str(), oflags, Mode::empty(), resolve) {
+            Ok(fd) if file_read => return reopen_regular(&fd, flags | OFlags::CLOEXEC),
             Ok(fd) => return Some(Ok(fd)),
             Err(errno) if errno == Errno::NOSYS || errno == Errno::PERM => {
                 UNAVAILABLE.store(true, Ordering::Relaxed);
@@ -325,6 +335,25 @@ fn open_with_openat2(
         }
     }
     None
+}
+
+/// Turns an `O_PATH` descriptor into a readable one when it is a regular file. `None` means
+/// "use the walk" (no usable `/proc`, so the descriptor cannot be reopened).
+#[cfg(target_os = "linux")]
+fn reopen_regular(path_fd: &OwnedFd, flags: OFlags) -> Option<Result<OwnedFd, FsError>> {
+    use std::os::fd::AsRawFd;
+
+    let stat = match fs::fstat(path_fd) {
+        Ok(stat) => stat,
+        Err(errno) => return Some(Err(FsError::from(errno))),
+    };
+    if FileType::from_raw_mode(stat.st_mode) != FileType::RegularFile {
+        return Some(Err(FsError::WrongType)); // a device, FIFO, socket, directory or link
+    }
+    let proc_path = format!("/proc/self/fd/{}", path_fd.as_raw_fd());
+    fs::openat(CWD, proc_path.as_str(), flags, Mode::empty())
+        .ok()
+        .map(Ok)
 }
 
 /// The per-component fallback (and the only path off Linux).

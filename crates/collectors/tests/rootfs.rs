@@ -323,3 +323,24 @@ fn swapping_a_parent_directory_for_a_symlink_never_leaks() -> TestResult {
     );
     Ok(())
 }
+
+/// A device node is refused as the wrong type without ever being read (`/dev/zero` would
+/// otherwise fill the size cap, `/dev/null` would look like an empty file).
+#[cfg(unix)]
+#[test]
+fn device_nodes_are_refused_not_read() {
+    let root = RootFs::new("/");
+    for device in ["/dev/zero", "/dev/null"] {
+        assert!(
+            matches!(root.read_to_string(device, 1024), Err(FsError::WrongType)),
+            "{device}"
+        );
+        assert!(
+            matches!(
+                root.read_to_string_nolink(device, 1024),
+                Err(FsError::WrongType)
+            ),
+            "{device}"
+        );
+    }
+}
