@@ -227,14 +227,14 @@ fn limits_note_lists_the_rules_that_ran() {
     ];
     let en = run(&args, None);
     assert!(
-        en.stdout.contains("PAR-001, PAR-008, PAR-010"),
+        en.stdout.contains("PAR-001, PAR-006, PAR-008, PAR-010"),
         "{}",
         en.stdout
     );
     assert!(!en.stdout.contains("listed above"), "{}", en.stdout);
     let id = run(&args, Some("id"));
     assert!(
-        id.stdout.contains("PAR-001, PAR-008, PAR-010"),
+        id.stdout.contains("PAR-001, PAR-006, PAR-008, PAR-010"),
         "{}",
         id.stdout
     );

@@ -3,8 +3,11 @@
 //! Item key `proc:<comm>` (no supervisor is recognised yet). Processes with the same `comm` are
 //! merged into one item; `cmd` and `cwd` come from the lowest pid. Data (docs/design.md 4.1):
 //! `cmd` (command line, secrets redacted, at most 512 characters), `cwd` (path or null), `mode`
-//! (`"unknown"`), `supervised` (null), `env_refs` (empty), plus `instances` (how many processes
-//! were merged).
+//! (`"dev"` when a command line is a known development server, else `"unknown"`; never `"prod"`,
+//! which cannot be proven), `supervised` (false when any instance runs in a login session with no
+//! supervisor above it, true when all are under systemd, a container runtime or a supervisor such
+//! as PM2, else null; see `supervision.rs`), `env_refs` (empty), plus `instances` (how many
+//! processes were merged).
 //!
 //! Kernel threads and zombies (empty `cmdline`) are skipped. `/proc/<pid>/environ` is never read.
 //! A pid that disappears mid-read is skipped silently (normal); unreadable `cwd` links are counted
@@ -21,6 +24,7 @@ use serde_json::{Map, Value};
 
 use crate::procfs::{list_pids, read_comm};
 use crate::rootfs::{FsError, RootFs};
+use crate::supervision::{Parents, is_dev_command, read_cgroup, read_ppid, supervised};
 use crate::util::{MAX_CMD_CHARS, redact_command_args, truncate_chars};
 
 const MAX_CMDLINE_BYTES: usize = 64 * 1024;
@@ -36,6 +40,16 @@ struct Group {
     cmd: String,
     cwd: Option<String>,
     instances: u64,
+    dev: bool,
+    unsupervised: bool,
+    supervision_unknown: bool,
+}
+
+/// A pid whose name and command line were read.
+struct Seen {
+    pid: u32,
+    comm: String,
+    cmdline: String,
 }
 
 /// Collector of running processes.
@@ -66,6 +80,7 @@ impl Collector for Processes {
         let mut denied = 0usize;
         let mut failed = 0usize;
         let mut cwd_denied = 0usize;
+        let mut seen: Vec<Seen> = Vec::new();
 
         for pid in list_pids(&self.root, &mut warnings) {
             let comm = match read_comm(&self.root, pid) {
@@ -98,6 +113,35 @@ impl Collector for Processes {
             if comm.is_empty() || cmdline.trim_matches('\0').is_empty() {
                 continue; // kernel thread, zombie, or a process that vanished
             }
+            seen.push(Seen { pid, comm, cmdline });
+        }
+
+        let mut parents: Parents = BTreeMap::new();
+        for entry in &seen {
+            if let Some(ppid) = read_ppid(&self.root, entry.pid) {
+                parents.insert(entry.pid, (ppid, entry.comm.clone()));
+            }
+        }
+        // A parent that is not itself listed (kernel thread, other user) still needs its name.
+        let known: Vec<u32> = parents.values().map(|(ppid, _)| *ppid).collect();
+        for ppid in known {
+            if !parents.contains_key(&ppid)
+                && let (Some(grand), Ok(name)) =
+                    (read_ppid(&self.root, ppid), read_comm(&self.root, ppid))
+            {
+                parents.insert(ppid, (grand, name));
+            }
+        }
+
+        for Seen { pid, comm, cmdline } in seen {
+            let cgroup = read_cgroup(&self.root, pid);
+            let state = supervised(pid, cgroup, &parents);
+            let dev = is_dev_command(
+                &cmdline
+                    .split('\0')
+                    .filter(|a| !a.is_empty())
+                    .collect::<Vec<_>>(),
+            );
             let group = groups.entry(comm).or_insert_with(|| {
                 let cwd = match self.root.read_link(&format!("/proc/{pid}/cwd")) {
                     Ok(target) => Some(truncate_chars(&target, MAX_CMD_CHARS)),
@@ -111,9 +155,18 @@ impl Collector for Processes {
                     cmd: redacted_cmd(&cmdline),
                     cwd,
                     instances: 0,
+                    dev: false,
+                    unsupervised: false,
+                    supervision_unknown: false,
                 }
             });
             group.instances += 1;
+            group.dev |= dev;
+            match state {
+                Some(false) => group.unsupervised = true,
+                Some(true) => {}
+                None => group.supervision_unknown = true,
+            }
         }
 
         if denied > 0 {
@@ -138,8 +191,18 @@ impl Collector for Processes {
                 let mut data = Map::new();
                 data.insert("cmd".into(), Value::from(group.cmd));
                 data.insert("cwd".into(), group.cwd.map_or(Value::Null, Value::from));
-                data.insert("mode".into(), Value::from("unknown"));
-                data.insert("supervised".into(), Value::Null);
+                data.insert(
+                    "mode".into(),
+                    Value::from(if group.dev { "dev" } else { "unknown" }),
+                );
+                let supervised = if group.unsupervised {
+                    Value::from(false)
+                } else if group.supervision_unknown {
+                    Value::Null
+                } else {
+                    Value::from(true)
+                };
+                data.insert("supervised".into(), supervised);
                 data.insert("env_refs".into(), Value::Array(Vec::new()));
                 data.insert("instances".into(), Value::from(group.instances));
                 Item {

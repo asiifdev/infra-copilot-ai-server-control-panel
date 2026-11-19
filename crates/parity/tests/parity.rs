@@ -13,7 +13,7 @@
 
 use i18n::{Catalog, Locale};
 use inventory::{Finding, Inventory, ParityRule, RuleContext, Severity};
-use parity::{Par001, Par008, Par010, UNKNOWN_ARG, all_rules, compare, render};
+use parity::{Par001, Par006, Par008, Par010, UNKNOWN_ARG, all_rules, compare, render};
 use std::error::Error;
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -257,7 +257,12 @@ fn report_order_and_rules_are_deterministic() -> TestResult {
     );
     assert_eq!(
         report.rules,
-        [("PAR-001", 1), ("PAR-008", 1), ("PAR-010", 1)]
+        [
+            ("PAR-001", 1),
+            ("PAR-006", 1),
+            ("PAR-008", 1),
+            ("PAR-010", 1)
+        ]
     );
     Ok(())
 }
@@ -307,6 +312,7 @@ fn rule_metadata_matches_the_documents() {
         meta,
         [
             ("PAR-001", 1, Severity::Critical, "coverage", None),
+            ("PAR-006", 1, Severity::Important, "runtime", None),
             ("PAR-008", 1, Severity::Important, "scheduling", None),
             ("PAR-010", 1, Severity::Important, "security", None),
         ]
@@ -399,5 +405,70 @@ fn catalog_keys_follow_rule_ids() -> TestResult {
             }
         }
     }
+    Ok(())
+}
+
+fn app(name: &str, port: u16, mode: &str, supervised: &str) -> String {
+    format!(
+        r#"{},{{"kind":"process","key":"proc:{name}","data":{{"cmd":"{name}","cwd":null,"mode":"{mode}","supervised":{supervised},"env_refs":[]}},"seen_via":"proc"}}"#,
+        node_listener(port, name)
+    )
+}
+
+#[test]
+fn par006_flags_dev_and_unsupervised_apps_on_the_target_only() -> TestResult {
+    let target = listener_inventory(&format!(
+        "{},{},{},{}",
+        app("web", 3000, "dev", "true"),
+        app("api", 4000, "unknown", "false"),
+        app("ok", 5000, "unknown", "true"),
+        app("who", 6000, "unknown", "null"),
+    ))?;
+    let found = run(&Par006, &listener_inventory("")?, &target);
+    assert_eq!(
+        keys(&found),
+        [
+            ("PAR-006", Severity::Important, "proc:api"),
+            ("PAR-006", Severity::Important, "proc:web"),
+        ]
+    );
+    assert_eq!(arg(&found[0], "reason"), Some("unsupervised"));
+    assert_eq!(arg(&found[1], "reason"), Some("dev"));
+    assert_eq!(arg(&found[1], "ports"), Some("3000"));
+    // The same inventory as the source never triggers: only the target is judged.
+    assert!(run(&Par006, &target, &listener_inventory("")?).is_empty());
+    Ok(())
+}
+
+#[test]
+fn par006_dev_wins_and_processes_without_listeners_are_ignored() -> TestResult {
+    let target = listener_inventory(&format!(
+        r#"{},{{"kind":"process","key":"proc:bash","data":{{"mode":"unknown","supervised":false}},"seen_via":"proc"}}"#,
+        app("web", 3000, "dev", "false")
+    ))?;
+    let found = run(&Par006, &listener_inventory("")?, &target);
+    assert_eq!(keys(&found), [("PAR-006", Severity::Important, "proc:web")]);
+    assert_eq!(arg(&found[0], "reason"), Some("dev"));
+    Ok(())
+}
+
+#[test]
+fn par006_renders_in_both_locales() -> TestResult {
+    let target = listener_inventory(&app("web", 3000, "dev", "true"))?;
+    let found = run(&Par006, &listener_inventory("")?, &target);
+    let catalog = Catalog::builtin()?;
+    let en = render(&found[0], &catalog, Locale::En);
+    assert!(
+        en.explanation.contains("a development server"),
+        "{}",
+        en.explanation
+    );
+    let id = render(&found[0], &catalog, Locale::Id);
+    assert!(
+        id.explanation.contains("server pengembangan"),
+        "{}",
+        id.explanation
+    );
+    assert!(!id.title.contains("parity."), "{}", id.title);
     Ok(())
 }

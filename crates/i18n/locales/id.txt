@@ -46,6 +46,13 @@ parity.par010.title = Port {port} dapat dijangkau dari internet di {side}
 parity.par010.explanation = {process} mendengarkan di port {port} pada alamat publik {side}. Siapa pun yang bisa menjangkau mesin itu dari internet dapat mencoba terhubung, kecuali firewall memblokirnya. Alat ini belum memeriksa aturan firewall, jadi tidak bisa memastikan apakah ada yang memblokir.
 parity.par010.advice = Jika port {port} tidak perlu publik, ikat {process} ke alamat loopback atau blokir port itu dengan firewall. Jika harus tetap publik, pastikan memakai autentikasi dan selalu diperbarui. Alat ini tidak mengubahnya secara otomatis.
 
+parity.reason.dev = server pengembangan
+parity.reason.unsupervised = tidak diawasi pengelola layanan mana pun
+
+parity.par006.title = {process} di target berupa {reason}
+parity.par006.explanation = {process} melayani port {ports} di target tetapi berupa {reason}. Aplikasi seperti ini biasanya dijalankan manual atau dalam mode pengembangan: lebih lambat, dapat membuka fitur debug, dan tidak hidup kembali setelah crash atau reboot.
+parity.par006.advice = Jalankan {process} di bawah pengelola layanan (systemd, PM2, atau container) dengan konfigurasi produksi, lalu pastikan ia hidup kembali setelah reboot. Alat ini tidak mengubahnya secara otomatis.
+
 parity.unknown.title = Temuan dari aturan {rule_id}
 parity.unknown.explanation = Versi ini belum punya uraian untuk aturan {rule_id}.
 parity.unknown.advice = Perbarui aplikasi, atau tinjau bukti temuan ini secara manual.

@@ -1,4 +1,4 @@
-//! The three M1-a rules. Each is a pure, deterministic function of the two inventories.
+//! The M1 rules. Each is a pure, deterministic function of the two inventories.
 
 use core_domain::tier::Tier;
 use inventory::{Finding, Inventory, Item, Kind, ParityRule, RuleContext, Severity, SubjectRef};
@@ -231,6 +231,85 @@ impl ParityRule for Par010 {
         };
         let mut findings = side(source, "source", Severity::Info);
         findings.extend(side(target, "target", self.severity()));
+        findings
+    }
+}
+
+/// PAR-006: an application that serves a port runs a development server, or runs outside any
+/// supervisor.
+///
+/// Origin of the case: after a move, applications were found started by hand from a shell or in
+/// development mode; they served traffic but would not come back after a reboot or a crash.
+///
+/// Evaluated on the target only. For each process that owns a listener (matched by name), the
+/// finding is `Important` with `args["reason"]` = `dev` (a known development server) or
+/// `unsupervised` (collector saw it in a login session with no supervisor above it). `dev` wins
+/// when both apply. An unknown `supervised` (null) never triggers: the rule claims only what was
+/// seen. One finding per process; `args["ports"]` lists its ports. A partial inventory does not
+/// lower the severity, because the process was seen.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Par006;
+
+impl ParityRule for Par006 {
+    fn id(&self) -> &'static str {
+        "PAR-006"
+    }
+
+    fn version(&self) -> u32 {
+        1
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Important
+    }
+
+    fn category(&self) -> &'static str {
+        "runtime"
+    }
+
+    fn fix_tier(&self) -> Option<Tier> {
+        None
+    }
+
+    fn evaluate(
+        &self,
+        _source: &Inventory,
+        target: &Inventory,
+        _ctx: &RuleContext,
+    ) -> Vec<Finding> {
+        let mut owned: BTreeMap<&str, Vec<&Item>> = BTreeMap::new();
+        for listener in target.items_of(Kind::Listener) {
+            if let Some(name) = listener.str_field("process") {
+                owned.entry(name).or_default().push(listener);
+            }
+        }
+        let mut findings = Vec::new();
+        for (name, listeners) in owned {
+            let Some(process) = target.get(Kind::Process, &format!("proc:{name}")) else {
+                continue;
+            };
+            let reason = if process.str_field("mode") == Some("dev") {
+                "dev"
+            } else if process.data.get("supervised").and_then(|v| v.as_bool()) == Some(false) {
+                "unsupervised"
+            } else {
+                continue;
+            };
+            let ports: Vec<String> = listeners.iter().map(|l| port_of(l)).collect();
+            let mut evidence = vec![subject(process)];
+            evidence.extend(listeners.iter().map(|l| subject(l)));
+            findings.push(Finding {
+                rule_id: self.id().to_owned(),
+                severity: self.severity(),
+                subject: subject(process),
+                evidence,
+                args: BTreeMap::from([
+                    ("process".to_owned(), name.to_owned()),
+                    ("ports".to_owned(), ports.join(", ")),
+                    ("reason".to_owned(), reason.to_owned()),
+                ]),
+            });
+        }
         findings
     }
 }

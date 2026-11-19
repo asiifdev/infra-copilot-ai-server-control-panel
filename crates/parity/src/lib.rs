@@ -13,4 +13,4 @@ mod rules;
 
 pub use render::{RenderedFinding, render};
 pub use report::{Report, all_rules, compare};
-pub use rules::{Par001, Par008, Par010, UNKNOWN_ARG};
+pub use rules::{Par001, Par006, Par008, Par010, UNKNOWN_ARG};

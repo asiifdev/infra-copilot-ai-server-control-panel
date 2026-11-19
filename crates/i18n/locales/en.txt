@@ -46,6 +46,13 @@ parity.par010.title = Port {port} is reachable from the internet on the {side}
 parity.par010.explanation = {process} listens on port {port} on a public address of the {side}. Anything that can reach the machine from the internet can try to connect to it, unless a firewall blocks it. This tool does not check firewall rules yet, so it cannot tell whether one does.
 parity.par010.advice = If port {port} does not need to be public, bind {process} to a loopback address or block the port with a firewall. If it must stay public, make sure it requires authentication and is kept up to date. This tool does not change this automatically.
 
+parity.reason.dev = a development server
+parity.reason.unsupervised = not supervised by any service manager
+
+parity.par006.title = {process} on the target is {reason}
+parity.par006.explanation = {process} serves port {ports} on the target but is {reason}. Such an application is typically started by hand or in development mode: it is slower, may expose debug features, and will not come back after a crash or a reboot.
+parity.par006.advice = Run {process} under a service manager (systemd, PM2 or a container) with a production configuration, and confirm that it restarts after a reboot. This tool does not change this automatically.
+
 parity.unknown.title = Finding from rule {rule_id}
 parity.unknown.explanation = This version has no description for rule {rule_id}.
 parity.unknown.advice = Update the application, or review the evidence of this finding by hand.

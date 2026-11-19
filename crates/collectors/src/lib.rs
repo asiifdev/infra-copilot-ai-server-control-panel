@@ -21,6 +21,7 @@ mod listeners;
 mod processes;
 mod procfs;
 mod rootfs;
+mod supervision;
 mod util;
 
 use std::collections::BTreeMap;

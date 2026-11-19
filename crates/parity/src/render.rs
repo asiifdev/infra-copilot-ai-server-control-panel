@@ -12,6 +12,8 @@ const SEVERITY_INFO: MessageKey = MessageKey::new("parity.severity.info");
 const NOTE_PARTIAL: MessageKey = MessageKey::new("parity.note.partial");
 const SIDE_SOURCE: MessageKey = MessageKey::new("parity.side.source");
 const SIDE_TARGET: MessageKey = MessageKey::new("parity.side.target");
+const REASON_DEV: MessageKey = MessageKey::new("parity.reason.dev");
+const REASON_UNSUPERVISED: MessageKey = MessageKey::new("parity.reason.unsupervised");
 const ARG_UNKNOWN: MessageKey = MessageKey::new("parity.arg.unknown");
 
 /// Localized text for one finding.
@@ -44,6 +46,11 @@ fn keys_for(rule_id: &str) -> RuleKeys {
             explanation: MessageKey::new("parity.par001.explanation"),
             advice: MessageKey::new("parity.par001.advice"),
         },
+        "PAR-006" => RuleKeys {
+            title: MessageKey::new("parity.par006.title"),
+            explanation: MessageKey::new("parity.par006.explanation"),
+            advice: MessageKey::new("parity.par006.advice"),
+        },
         "PAR-008" => RuleKeys {
             title: MessageKey::new("parity.par008.title"),
             explanation: MessageKey::new("parity.par008.explanation"),
@@ -75,6 +82,8 @@ pub fn render(finding: &Finding, catalog: &Catalog, locale: Locale) -> RenderedF
             let key = match (name.as_str(), value.as_str()) {
                 ("side", "source") => Some(SIDE_SOURCE),
                 ("side", "target") => Some(SIDE_TARGET),
+                ("reason", "dev") => Some(REASON_DEV),
+                ("reason", "unsupervised") => Some(REASON_UNSUPERVISED),
                 (_, UNKNOWN_ARG) => Some(ARG_UNKNOWN),
                 _ => None,
             };

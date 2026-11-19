@@ -818,3 +818,146 @@ fn real_host_collection_succeeds() -> TestResult {
     assert!(inv.to_json().is_ok());
     Ok(())
 }
+
+mod supervision {
+    use super::*;
+
+    fn proc_entry(
+        tree: &Tree,
+        pid: u32,
+        comm: &str,
+        args: &[&str],
+        stat_cgroup: Option<(u32, &str)>,
+    ) -> TestResult {
+        tree.write(&format!("proc/{pid}/comm"), format!("{comm}\n").as_bytes())?;
+        let mut bytes = Vec::new();
+        for arg in args {
+            bytes.extend_from_slice(arg.as_bytes());
+            bytes.push(0);
+        }
+        tree.write(&format!("proc/{pid}/cmdline"), &bytes)?;
+        if let Some((ppid, cgroup)) = stat_cgroup {
+            tree.write(
+                &format!("proc/{pid}/stat"),
+                format!("{pid} ({comm}) S {ppid} {pid} {pid} 0\n").as_bytes(),
+            )?;
+            tree.write(
+                &format!("proc/{pid}/cgroup"),
+                format!("0::{cgroup}\n").as_bytes(),
+            )?;
+        }
+        Ok(())
+    }
+
+    const SERVICE: &str = "/system.slice/web.service";
+    const SESSION: &str = "/user.slice/user-1000.slice/session-3.scope";
+
+    fn state(tree: &Tree, comm: &str) -> Result<(Option<bool>, String), String> {
+        let items = Processes::new(tree.fs())
+            .run()
+            .map_err(|e| e.to_string())?
+            .items;
+        let found = items
+            .iter()
+            .find(|i| i.key == format!("proc:{comm}"))
+            .ok_or_else(|| format!("missing {comm}"))?;
+        let supervised = match found.data.get("supervised") {
+            Some(Value::Bool(b)) => Some(*b),
+            Some(Value::Null) => None,
+            other => return Err(format!("bad supervised {other:?}")),
+        };
+        Ok((supervised, found.str_field("mode").unwrap_or("").to_owned()))
+    }
+
+    #[test]
+    fn systemd_service_is_supervised() -> TestResult {
+        let tree = Tree::new("sup-svc")?;
+        proc_entry(
+            &tree,
+            10,
+            "node",
+            &["node", "server.js"],
+            Some((1, SERVICE)),
+        )?;
+        assert_eq!(state(&tree, "node")?, (Some(true), "unknown".to_owned()));
+        Ok(())
+    }
+
+    #[test]
+    fn session_scope_without_supervisor_is_unsupervised() -> TestResult {
+        let tree = Tree::new("sup-sess")?;
+        proc_entry(
+            &tree,
+            10,
+            "node",
+            &["node", "server.js"],
+            Some((5, SESSION)),
+        )?;
+        proc_entry(&tree, 5, "bash", &["bash"], Some((1, SESSION)))?;
+        assert_eq!(state(&tree, "node")?.0, Some(false));
+        Ok(())
+    }
+
+    #[test]
+    fn pm2_ancestor_counts_as_supervisor() -> TestResult {
+        let tree = Tree::new("sup-pm2")?;
+        proc_entry(&tree, 10, "node", &["node", "app.js"], Some((5, SESSION)))?;
+        proc_entry(
+            &tree,
+            5,
+            "PM2 v5.4.2: God",
+            &["PM2 v5.4.2: God Daemon"],
+            Some((1, SESSION)),
+        )?;
+        assert_eq!(state(&tree, "node")?.0, Some(true));
+        Ok(())
+    }
+
+    #[test]
+    fn dev_servers_are_flagged_and_builds_are_not() -> TestResult {
+        let tree = Tree::new("sup-dev")?;
+        proc_entry(
+            &tree,
+            1,
+            "vite",
+            &["node", "/app/node_modules/.bin/vite"],
+            None,
+        )?;
+        proc_entry(
+            &tree,
+            2,
+            "next",
+            &["node", "/app/node_modules/.bin/next", "dev"],
+            None,
+        )?;
+        proc_entry(
+            &tree,
+            3,
+            "vitebuild",
+            &["node", "/app/node_modules/.bin/vite", "build"],
+            None,
+        )?;
+        assert_eq!(state(&tree, "vite")?.1, "dev");
+        assert_eq!(state(&tree, "next")?.1, "dev");
+        assert_eq!(state(&tree, "vitebuild")?.1, "unknown");
+        Ok(())
+    }
+
+    #[test]
+    fn missing_cgroup_and_stat_gives_null() -> TestResult {
+        let tree = Tree::new("sup-none")?;
+        proc_entry(&tree, 10, "node", &["node", "server.js"], None)?;
+        assert_eq!(state(&tree, "node")?, (None, "unknown".to_owned()));
+        Ok(())
+    }
+
+    #[test]
+    fn one_unsupervised_instance_makes_the_group_unsupervised() -> TestResult {
+        let tree = Tree::new("sup-mixed")?;
+        proc_entry(&tree, 10, "node", &["node", "a.js"], Some((1, SERVICE)))?;
+        proc_entry(&tree, 11, "node", &["node", "b.js"], Some((5, SESSION)))?;
+        let (supervised, _) = state(&tree, "node")?;
+        assert_eq!(supervised, Some(false));
+        Ok(())
+    }
+}
