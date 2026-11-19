@@ -11,6 +11,8 @@ cannot drift apart. Release notes may get an Indonesian summary.
 
 ### Added
 
+- A visual README in English and Indonesian: logo hero, honest status table, an operating-loop diagram (`docs/assets/operating-loop.svg`, every step labelled NOW, BUILDING or PLANNED), a real CLI output sample, a table of the safety rules enforced today with links to the code, and the roadmap.
+
 - Product name **Nodivara** (decision 0019) and the brand palette: colour tokens sampled from the logo with light and dark themes (`ui/src/tokens.css`), a contrast checker run in CI (WCAG AAA 7:1 for every text token on every surface, 3:1 for UI boundaries) (`scripts/check-palette.py`), optimized logo files in `brand/` and a usage guide (`docs/brand.md`). The repository, crate and binary names are unchanged. A trademark and domain check is still pending.
 
 - `core-domain` crate: the five risk tiers and the approval rules attached to them, and secret
