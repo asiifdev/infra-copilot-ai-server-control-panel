@@ -4,8 +4,9 @@ use crate::target::Target;
 use crate::tls::{self, CertInfo, RecordingVerifier};
 use bytes::{Buf, Bytes};
 use http::header::{ACCEPT, ACCEPT_ENCODING, CONNECTION, CONTENT_TYPE, HOST, LOCATION, USER_AGENT};
-use http::{Method, Request};
+use http::{HeaderName, HeaderValue, Method, Request};
 use http_body_util::{BodyExt, Full};
+use hyper::body::Incoming;
 use hyper::client::conn::http1;
 use hyper_util::rt::TokioIo;
 use rustls::ClientConfig;
@@ -87,9 +88,103 @@ impl Drop for AbortOnDrop {
     }
 }
 
-enum Hop {
-    Done(Response),
-    Redirect(String),
+/// A request that has been sent and whose response head has been read; the body is not read yet.
+struct Opened {
+    status: u16,
+    location: Option<String>,
+    body: Incoming,
+    tls: Option<CertInfo>,
+    url: String,
+    driver: AbortOnDrop,
+}
+
+/// Extra request headers as `(name, value)` pairs. Names that would break framing (`host`,
+/// `content-length`, `transfer-encoding`, `connection`, `upgrade`) are refused; values are
+/// validated (no control characters), and credentials headers are marked sensitive so they are
+/// never printed by `Debug`.
+pub type Headers<'a> = &'a [(&'a str, &'a str)];
+
+/// Limits of a streamed response body (after the head has arrived).
+#[derive(Debug, Clone, Copy)]
+pub struct StreamLimits {
+    /// Longest wait for the next chunk.
+    pub idle: Duration,
+    /// Longest the whole stream may last, counted from when it was opened.
+    pub total: Duration,
+    /// Most body bytes accepted in total.
+    pub max_bytes: usize,
+}
+
+impl Default for StreamLimits {
+    fn default() -> Self {
+        StreamLimits {
+            idle: Duration::from_secs(30),
+            total: Duration::from_secs(300),
+            max_bytes: 8 * 1024 * 1024,
+        }
+    }
+}
+
+/// A response whose body is read chunk by chunk (Server-Sent Events). Dropping it closes the
+/// connection. Everything in it is data from the server, never instructions.
+pub struct BodyStream {
+    status: u16,
+    body: Incoming,
+    started: Instant,
+    limits: StreamLimits,
+    received: usize,
+    _driver: AbortOnDrop,
+}
+
+impl BodyStream {
+    /// HTTP status of the response head.
+    #[must_use]
+    pub fn status(&self) -> u16 {
+        self.status
+    }
+
+    /// The next piece of the body, `None` at the end. Fails with [`NetError::Timeout`] when no
+    /// data arrives within the idle limit or the total limit passes, and with
+    /// [`NetError::ResponseTooLarge`] when more than `max_bytes` have been received.
+    pub async fn next_chunk(&mut self) -> Result<Option<Bytes>, NetError> {
+        loop {
+            let remaining = self
+                .limits
+                .total
+                .checked_sub(self.started.elapsed())
+                .ok_or(NetError::Timeout)?;
+            let wait = remaining.min(self.limits.idle);
+            let frame = tokio::time::timeout(wait, self.body.frame())
+                .await
+                .map_err(|_| NetError::Timeout)?;
+            let Some(frame) = frame else { return Ok(None) };
+            let frame = frame.map_err(|_| NetError::Protocol)?;
+            if let Ok(data) = frame.into_data() {
+                if data.is_empty() {
+                    continue;
+                }
+                self.received = self.received.saturating_add(data.len());
+                if self.received > self.limits.max_bytes {
+                    return Err(NetError::ResponseTooLarge);
+                }
+                return Ok(Some(data));
+            }
+        }
+    }
+
+    /// Reads the rest of the body, at most `max` bytes, ignoring the idle and total limits'
+    /// remainder semantics only in that it stops at the cap (used for error bodies).
+    pub async fn read_capped(mut self, max: usize) -> Vec<u8> {
+        let mut out = Vec::new();
+        while let Ok(Some(chunk)) = self.next_chunk().await {
+            let take = chunk.len().min(max.saturating_sub(out.len()));
+            out.extend_from_slice(chunk.get(..take).unwrap_or_default());
+            if out.len() >= max {
+                break;
+            }
+        }
+        out
+    }
 }
 
 impl Client {
@@ -119,7 +214,7 @@ impl Client {
 
     /// `GET` with redirect following per `policy`.
     pub async fn get(&self, url: &str, policy: &Policy) -> Result<Response, NetError> {
-        self.run(Method::GET, url, &[], policy).await
+        self.run(Method::GET, url, &[], &[], policy).await
     }
 
     /// `POST` with `Content-Type: application/json` (for the Telegram Bot API). Redirects are not
@@ -130,7 +225,50 @@ impl Client {
         body: &[u8],
         policy: &Policy,
     ) -> Result<Response, NetError> {
-        self.run(Method::POST, url, body, policy).await
+        self.run(Method::POST, url, body, &[], policy).await
+    }
+
+    /// Like [`Client::post_json`] with extra headers (for example `Authorization`). Because a
+    /// POST never follows redirects, credentials are only ever sent to the URL given.
+    pub async fn post_json_with(
+        &self,
+        url: &str,
+        body: &[u8],
+        headers: Headers<'_>,
+        policy: &Policy,
+    ) -> Result<Response, NetError> {
+        self.run(Method::POST, url, body, headers, policy).await
+    }
+
+    /// `POST` that returns as soon as the response head arrives, leaving the body to be read with
+    /// [`BodyStream::next_chunk`]. `policy.timeout` covers DNS, connect, TLS and the head;
+    /// `limits` governs the body. Redirects are not followed.
+    pub async fn post_json_stream(
+        &self,
+        url: &str,
+        body: &[u8],
+        headers: Headers<'_>,
+        policy: &Policy,
+        limits: StreamLimits,
+    ) -> Result<BodyStream, NetError> {
+        let target = Target::parse(url)?;
+        if !target.https && !policy.allow_http {
+            return Err(NetError::SchemeNotAllowed);
+        }
+        let started = Instant::now();
+        let opened = within(
+            policy,
+            self.open(&Method::POST, &target, body, headers, policy),
+        )
+        .await?;
+        Ok(BodyStream {
+            status: opened.status,
+            body: opened.body,
+            started,
+            limits,
+            received: 0,
+            _driver: opened.driver,
+        })
     }
 
     /// Time to establish a TCP connection (DNS included) to `host:port`; nothing is sent.
@@ -180,6 +318,7 @@ impl Client {
         method: Method,
         url: &str,
         body: &[u8],
+        headers: Headers<'_>,
         policy: &Policy,
     ) -> Result<Response, NetError> {
         let started = Instant::now();
@@ -191,37 +330,46 @@ impl Client {
                 if !target.https && !policy.allow_http {
                     return Err(NetError::SchemeNotAllowed);
                 }
-                match self.hop(&method, &target, body, policy, follow).await? {
-                    Hop::Done(mut response) => {
-                        response.elapsed = started.elapsed();
-                        return Ok(response);
-                    }
-                    Hop::Redirect(location) => {
-                        if redirects >= policy.max_redirects {
-                            return Err(NetError::TooManyRedirects);
-                        }
-                        redirects += 1;
-                        let next = target.join(&location)?;
-                        if target.https && !next.https {
-                            return Err(NetError::SchemeNotAllowed);
-                        }
-                        target = next;
-                    }
+                let opened = self.open(&method, &target, body, headers, policy).await?;
+                let redirect = follow
+                    && matches!(opened.status, 301 | 302 | 303 | 307 | 308)
+                    && opened.location.is_some();
+                if !redirect {
+                    let (kept, truncated) = read_capped(opened.body, policy.max_body_bytes).await?;
+                    return Ok(Response {
+                        status: opened.status,
+                        body: kept,
+                        body_truncated: truncated,
+                        elapsed: started.elapsed(),
+                        tls: opened.tls,
+                        final_url: opened.url,
+                    });
                 }
+                if redirects >= policy.max_redirects {
+                    return Err(NetError::TooManyRedirects);
+                }
+                redirects += 1;
+                let location = opened.location.unwrap_or_default();
+                let next = target.join(&location)?;
+                if target.https && !next.https {
+                    return Err(NetError::SchemeNotAllowed);
+                }
+                target = next;
             }
         };
         within(policy, work).await
     }
 
-    /// One connection, one request. Address checks happen inside `connect_checked`, on every hop.
-    async fn hop(
+    /// One connection, one request, response head read. Address checks happen inside
+    /// `connect_checked`, on every hop.
+    async fn open(
         &self,
         method: &Method,
         target: &Target,
         body: &[u8],
+        headers: Headers<'_>,
         policy: &Policy,
-        follow: bool,
-    ) -> Result<Hop, NetError> {
+    ) -> Result<Opened, NetError> {
         let tcp = connect_checked(&target.host, target.port, policy).await?;
         if target.https {
             let name = server_name(&target.host)?;
@@ -230,27 +378,17 @@ impl Client {
                 .await
                 .map_err(|e| tls::map_handshake_error(&e))?;
             let info = tls::cert_info(leaf_der(stream.get_ref().1.peer_certificates())?, true)?;
-            exchange(
+            send(
                 TokioIo::new(stream),
                 method,
                 target,
                 body,
-                policy,
-                follow,
+                headers,
                 Some(info),
             )
             .await
         } else {
-            exchange(
-                TokioIo::new(tcp),
-                method,
-                target,
-                body,
-                policy,
-                follow,
-                None,
-            )
-            .await
+            send(TokioIo::new(tcp), method, target, body, headers, None).await
         }
     }
 }
@@ -306,15 +444,14 @@ async fn connect_checked(host: &str, port: u16, policy: &Policy) -> Result<TcpSt
     })
 }
 
-async fn exchange<I>(
+async fn send<I>(
     io: I,
     method: &Method,
     target: &Target,
     body: &[u8],
-    policy: &Policy,
-    follow: bool,
+    headers: Headers<'_>,
     tls: Option<CertInfo>,
-) -> Result<Hop, NetError>
+) -> Result<Opened, NetError>
 where
     I: hyper::rt::Read + hyper::rt::Write + Unpin + Send + 'static,
 {
@@ -324,8 +461,9 @@ where
         .handshake::<_, Full<Bytes>>(io)
         .await
         .map_err(|_| NetError::Protocol)?;
-    // The driver is stopped when this function ends or the total timeout drops the future.
-    let _driver = AbortOnDrop(tokio::spawn(async move {
+    // The driver is stopped when `Opened` (or the stream built from it) is dropped, or when the
+    // total timeout drops the future.
+    let driver = AbortOnDrop(tokio::spawn(async move {
         let _ = connection.await;
     }));
 
@@ -334,9 +472,17 @@ where
         .uri(target.path.as_str())
         .header(HOST, target.authority())
         .header(USER_AGENT, FIXED_USER_AGENT)
-        .header(ACCEPT, "*/*")
         .header(ACCEPT_ENCODING, "identity")
         .header(CONNECTION, "close");
+    let mut custom_accept = false;
+    for (name, value) in headers {
+        let (name, value) = checked_header(name, value)?;
+        custom_accept |= name == ACCEPT;
+        request = request.header(name, value);
+    }
+    if !custom_accept {
+        request = request.header(ACCEPT, "*/*");
+    }
     if method == Method::POST {
         request = request.header(CONTENT_TYPE, "application/json");
     }
@@ -348,26 +494,41 @@ where
         .send_request(request)
         .await
         .map_err(|_| NetError::Protocol)?;
-    let status = response.status();
-    if follow && matches!(status.as_u16(), 301 | 302 | 303 | 307 | 308) {
-        let location = response
-            .headers()
-            .get(LOCATION)
-            .and_then(|v| v.to_str().ok());
-        if let Some(location) = location {
-            return Ok(Hop::Redirect(location.to_owned()));
-        }
-    }
-
-    let (kept, truncated) = read_capped(response.into_body(), policy.max_body_bytes).await?;
-    Ok(Hop::Done(Response {
-        status: status.as_u16(),
-        body: kept,
-        body_truncated: truncated,
-        elapsed: Duration::ZERO,
+    let status = response.status().as_u16();
+    let location = response
+        .headers()
+        .get(LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    Ok(Opened {
+        status,
+        location,
+        body: response.into_body(),
         tls,
-        final_url: target.url(),
-    }))
+        url: target.url(),
+        driver,
+    })
+}
+
+/// Validates one caller-supplied header. Framing headers are refused; credentials are marked
+/// sensitive so `Debug` never prints them.
+fn checked_header(name: &str, value: &str) -> Result<(HeaderName, HeaderValue), NetError> {
+    let name = HeaderName::from_bytes(name.as_bytes()).map_err(|_| NetError::InvalidHeader)?;
+    let lower = name.as_str();
+    if matches!(
+        lower,
+        "host" | "content-length" | "transfer-encoding" | "connection" | "upgrade" | "te"
+    ) {
+        return Err(NetError::InvalidHeader);
+    }
+    let mut value = HeaderValue::from_str(value).map_err(|_| NetError::InvalidHeader)?;
+    if matches!(
+        lower,
+        "authorization" | "proxy-authorization" | "x-api-key" | "api-key"
+    ) {
+        value.set_sensitive(true);
+    }
+    Ok((name, value))
 }
 
 /// Read at most `max + 1` bytes, keep `max`, and stop pulling from the connection.

@@ -49,6 +49,10 @@ pub enum NetError {
     Protocol,
     /// The system trust store has no usable root certificate.
     NoRootCertificates,
+    /// A caller-supplied header has an invalid name or value, or would break request framing.
+    InvalidHeader,
+    /// A streamed response exceeded its byte limit.
+    ResponseTooLarge,
 }
 
 impl fmt::Display for NetError {
@@ -74,6 +78,8 @@ impl fmt::Display for NetError {
             }
             Self::Protocol => "invalid HTTP response",
             Self::NoRootCertificates => "no root certificates available in the system trust store",
+            Self::InvalidHeader => "invalid request header",
+            Self::ResponseTooLarge => "response is too large",
         };
         f.write_str(text)
     }
