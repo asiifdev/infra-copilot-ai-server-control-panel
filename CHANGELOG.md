@@ -40,6 +40,7 @@ cannot drift apart. Release notes may get an Indonesian summary.
 
 ### Security
 
+- `env_ref` extraction ignores variables named like credentials (`PASS`, `SECRET`, `TOKEN`, `KEY`, `AUTH`, `CRED`, `PRIVATE`), trusts a bare `host:port` only for reference-named variables, and discards URLs whose userinfo was cut by an unencoded `/`, `?` or `#`, so a username or password digits can never become a host or port.
 - PM2 collector refuses symbolic links at `.pm2` and at the dump, reads `/root` first and records the owning account, so a user-writable home cannot redirect the read or shadow the administrator's apps. The dump is opened with a check after open (`RootFs::read_to_string_nolink`), so a link swapped in between the check and the read is refused too; parent directories remain a documented limit (decision 0013).
 - Redaction now treats `PASS` and `AUTH` named values as secrets, and collectors hide separate-argument secrets in process command lines and cron commands (`-p secret`, `--password x`, `curl -u user:pw`). Found by independent review, covered by tests.
 - Redaction of nested quoted commands (`sh -c '...'`), `--user`/`--proxy-user` values and cron hints; `infra compare` sanitizes control characters from untrusted inventories so they cannot repaint the terminal or forge report lines.

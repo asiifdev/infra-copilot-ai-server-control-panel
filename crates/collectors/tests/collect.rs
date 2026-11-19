@@ -1019,7 +1019,7 @@ mod all_collectors {
             br#"[{"name":"web","pm_exec_path":"/srv/web/app.js","env":{
               "REDIS_URL":"redis://:topsecret@127.0.0.1:6379/0",
               "DB_HOST":"127.0.0.1","DB_PORT":"5432",
-              "WEB":"localhost:8080","OTHER":"10.0.0.5:5432","GARBAGE_URL":"%%%% pw=hunter2"}}]"#,
+              "WEB_ADDR":"localhost:8080","OTHER_ADDR":"10.0.0.5:5432","GARBAGE_URL":"%%%% pw=hunter2"}}]"#,
         )?;
         let runner = FakeRunner::new()
             .with(
@@ -1047,10 +1047,10 @@ mod all_collectors {
             Some("listener:tcp:5432")
         );
         assert_eq!(
-            resolves("pm2:web:WEB")?.as_deref(),
+            resolves("pm2:web:WEB_ADDR")?.as_deref(),
             Some("listener:tcp:8080")
         );
-        assert_eq!(resolves("pm2:web:OTHER")?, None);
+        assert_eq!(resolves("pm2:web:OTHER_ADDR")?, None);
         let db = item(&inv, Kind::EnvRef, "docker:cache:DATABASE_URL")?;
         assert_eq!(db.data.get("in_container"), Some(&Value::Bool(true)));
         assert_eq!(db.str_field("resolves_to"), Some("listener:tcp:5432"));

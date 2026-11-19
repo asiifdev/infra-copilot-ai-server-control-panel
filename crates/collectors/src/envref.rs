@@ -144,6 +144,12 @@ fn parse_url(value: &str) -> Option<Target> {
     let (scheme, rest) = split_scheme(value)?;
     let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
     let authority = rest.get(..end)?;
+    // An `@` after the first `/`, `?` or `#` with none before it means the userinfo (a password
+    // with an unencoded `/`, `?` or `#`) was cut in half: what is left of it would be read as
+    // host and port. Ambiguous, so discarded.
+    if !authority.contains('@') && rest.get(end..)?.contains('@') {
+        return None;
+    }
     let hostport = authority.rsplit_once('@').map_or(authority, |(_, hp)| hp);
     // Replica lists (`mongodb://a:1,b:2`): the first member is the reference.
     let first = hostport.split(',').next().unwrap_or(hostport);
@@ -188,6 +194,14 @@ fn parse_host_value(value: &str) -> Option<Target> {
     Some(Target { host, port: None })
 }
 
+/// Names that hold credentials: skipped entirely, whatever their value looks like.
+const SECRET_NAME_PARTS: [&str; 7] = ["PASS", "SECRET", "TOKEN", "KEY", "AUTH", "CRED", "PRIVATE"];
+
+fn looks_secret(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    SECRET_NAME_PARTS.iter().any(|part| upper.contains(part))
+}
+
 fn looks_like_reference(name: &str) -> bool {
     let upper = name.to_ascii_uppercase();
     REFERENCE_SUFFIXES.iter().any(|s| upper.ends_with(s))
@@ -227,6 +241,9 @@ pub(crate) fn extract<'a>(
         .collect();
     let mut out = Extracted::default();
     for (name, value) in &vars {
+        if looks_secret(name) {
+            continue;
+        }
         let target = if let Some(prefix) = name.strip_suffix("_HOST") {
             let port = vars
                 .get(format!("{prefix}_PORT").as_str())
@@ -237,8 +254,12 @@ pub(crate) fn extract<'a>(
                 }
                 t
             })
-        } else {
+        } else if value.contains("://") || looks_like_reference(name) {
+            // A bare `host:port` is only trusted for variables named like a reference: in any
+            // other variable it can just as well be `user:1234` or a secret.
             parse_value(value)
+        } else {
+            None
         };
         match target {
             Some(target) => {
@@ -274,6 +295,31 @@ pub(crate) fn warnings(unparsed: usize, over_cap: usize) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn ambiguous_userinfo_and_secret_names_never_yield_a_target() {
+        for value in [
+            "redis://admin:1234/x@db.example.test:6379",
+            "postgres://u:p#ss@db.example.test",
+            "redis://u:9?z@h",
+        ] {
+            assert!(super::parse_value(value).is_none(), "{value}");
+        }
+        let vars = [
+            ("DB_PASSWORD", "hunter:8080"),
+            ("NOTE", "user:1234"),
+            ("CACHE_ADDR", "cache.example.test:6379"),
+            ("API_KEY", "redis://h:1"),
+        ];
+        let out = super::extract(
+            "pm2:a",
+            vars.iter().copied(),
+            false,
+            inventory::SeenVia::Config,
+        );
+        let keys: Vec<_> = out.items.iter().map(|i| i.key.as_str()).collect();
+        assert_eq!(keys, ["pm2:a:CACHE_ADDR"]);
+    }
+
     use super::*;
 
     fn t(value: &str) -> Option<(String, Option<u16>)> {
