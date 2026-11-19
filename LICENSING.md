@@ -41,9 +41,10 @@ in the open core is meant to be disabled on purpose to push anyone to a paid edi
   outside contributions arrive.
 - **Copyright holder.** Source files and notices use "Nodivara contributors" until the legal
   owner is named.
-- **The name.** "Nodivara" is the name chosen by the owner (decision 0019). It has not been
-  cleared: a trademark search (WIPO, USPTO and other relevant registers), a domain check and a
-  handle check (GitHub, npm, Docker Hub) are still open, and the result is unknown until done.
+- **The name.** "Nodivara" is the name chosen by the owner (decision 0019). The owner reports
+  it is still available and unique. That is not a clearance: a formal trademark search (WIPO, USPTO
+  and other relevant registers) has not been done, and domain and handle availability (GitHub, npm,
+  Docker Hub) is not the same as trademark rights.
 
 ## Third-party material
 

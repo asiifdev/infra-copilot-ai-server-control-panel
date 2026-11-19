@@ -44,10 +44,10 @@ pun ke edisi berbayar.
   jadi lebih baik diputuskan sebelum kontribusi dari luar masuk.
 - **Pemegang hak cipta.** Berkas sumber dan pemberitahuan memakai "Nodivara contributors"
   sampai pemilik hukumnya ditetapkan.
-- **Namanya.** "Nodivara" adalah nama pilihan pemilik (keputusan 0019). Nama ini belum
-  dinyatakan bebas: pencarian merek dagang (WIPO, USPTO, dan daftar lain yang relevan), pemeriksaan
-  domain, dan pemeriksaan nama akun (GitHub, npm, Docker Hub) masih terbuka, dan hasilnya belum
-  diketahui sebelum dikerjakan.
+- **Namanya.** "Nodivara" adalah nama pilihan pemilik (keputusan 0019). Pemilik melaporkan
+  nama ini masih tersedia dan unik. Itu belum berarti bebas merek: pencarian merek dagang formal
+  (WIPO, USPTO, dan daftar lain yang relevan) belum dilakukan, dan ketersediaan domain atau nama
+  akun (GitHub, npm, Docker Hub) tidak sama dengan hak merek.
 
 ## Bahan pihak ketiga
 

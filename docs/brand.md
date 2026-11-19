@@ -54,9 +54,12 @@ Temuan dari pengukuran ini: kotak pilihan bahasa semula memakai warna bawaan bro
 
 ## Aset logo (`brand/`)
 
-| Berkas | Isi | Catatan |
+| Berkas | Isi | Dipakai untuk |
 |---|---|---|
-| `nodivara-mark-512.png`, `-128.png` | tanda N di ubin gelap | ikon aplikasi, favicon; cocok di tema apa pun sebagai ubin |
-| `nodivara-lockup-dark.png` | tanda + tulisan, putih di atas gelap | hanya untuk latar gelap |
+| `nodivara-lockup-dark.png` | tanda + tulisan, putih di atas gelap, sudut membulat | latar gelap (README tema gelap) |
+| `nodivara-lockup-light.png` | tanda + tulisan, teks gelap di atas putih | latar terang (README tema terang) |
+| `nodivara-mark-512.png`, `-128.png` | tanda N di ubin gelap | ikon aplikasi, favicon di latar gelap |
+| `nodivara-mark-light-512.png`, `-128.png` | tanda N di atas putih | ikon di latar terang |
+| `nodivara-square-light-640.png` | tanda + tulisan + gelombang hijau, persegi | pratinjau sosial, kartu |
 
-Belum ada: wordmark untuk latar terang, SVG vektor. Minta ke pemilik; jangan menyunting PNG yang ada untuk membuatnya.
+Latar semua PNG opak (putih atau gelap), bukan transparan. Belum ada: SVG vektor dan versi transparan. Minta ke pemilik; jangan menyunting PNG yang ada untuk membuatnya.

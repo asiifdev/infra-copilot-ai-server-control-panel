@@ -2,7 +2,10 @@
 
 <div align="center">
 
-<img src="brand/nodivara-lockup-dark.png" alt="Logo Nodivara: pita hijau lime dan perak yang membentuk huruf N, di samping tulisan Nodivara" width="620">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="brand/nodivara-lockup-dark.png">
+  <img src="brand/nodivara-lockup-light.png" alt="Logo Nodivara: pita hijau lime dan perak yang membentuk huruf N, di samping tulisan Nodivara" width="620">
+</picture>
 
 ### Panel kontrol server dengan agen AI yang mengusulkan, dan **Anda** yang menyetujui.
 
@@ -189,4 +192,4 @@ Setiap dokumen punya versi Inggris di sampingnya, kecuali teks lisensi dan chang
 
 ## Lisensi
 
-Sementara [AGPL-3.0-only](LICENSE), menunggu keputusan akhir sebelum rilis publik pertama. Lihat [LICENSING.id.md](LICENSING.id.md) untuk artinya dan yang masih terbuka. Nama "Nodivara" ditetapkan pemilik; pemeriksaan merek dagang dan domain masih menunggu.
+Sementara [AGPL-3.0-only](LICENSE), menunggu keputusan akhir sebelum rilis publik pertama. Lihat [LICENSING.id.md](LICENSING.id.md) untuk artinya dan yang masih terbuka. Nama "Nodivara" ditetapkan pemilik; pemilik melaporkan nama ini masih tersedia dan unik, dan pencarian merek dagang formal belum dilakukan.

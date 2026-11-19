@@ -13,9 +13,9 @@ Nama sementara "Infra Copilot" (keputusan 0001 dan 0006) diganti. Pemilik memili
 3. **Kontras diperiksa otomatis**: `scripts/check-palette.py` memeriksa 36 pasangan di kedua tema: **AAA 7:1 untuk setiap teks di ketiga permukaan** (`bg`, `surface`, `surface-2`) dan 3:1 untuk elemen UI (WCAG 2.2). Pada pemeriksaan pertama nilai tema terang hanya 5,0 sampai 6,3:1 (AA) dan diperketat sampai lolos AAA dan bahwa dua blok gelap sama. Pemeriksa diuji dengan nilai buruk dan dengan blok yang berbeda; keduanya membuatnya gagal. Dijalankan di CI.
 4. **Aset logo** yang dioptimalkan ada di `brand/` (tanda 512 dan 128 px, lockup gelap 1000 px, palet terkuantisasi). Berkas induk asli tetap milik pemilik di luar repo.
 
-## Belum diselesaikan (jangan diklaim bebas)
-- **Pemeriksaan merek dan domain belum dilakukan oleh siapa pun.** Daftar kerja: WIPO Global Brand Database, USPTO, daftar nasional yang relevan, variasi ejaan dan kemiripan bunyi; domain (`nodivara.com`, `.io`, `.dev`, `.cloud`); akun GitHub, npm, Docker Hub, media sosial. Tanpa hasil, statusnya **belum diketahui**, bukan tersedia. Saran ahli hukum merek sebelum rilis publik.
-- Wordmark untuk latar terang belum ada (logo yang ada putih di atas gelap). UI memakai teks "Nodivara" yang mengikuti tema, atau tanda N di dalam ubin gelap, sampai ada versi terang dari pemilik.
+## Keadaan setelah keputusan (2026-11-19)
+- **Ketersediaan nama:** pemilik melaporkan nama masih tersedia dan unik. Itu laporan pemilik; belum saya verifikasi sendiri, dan ketersediaan domain atau akun bukan hak merek. **Pencarian merek dagang formal (WIPO, USPTO, daftar nasional, variasi ejaan dan kemiripan bunyi) belum dilakukan**; sebaiknya dikerjakan ahli hukum merek sebelum rilis publik.
+- **Logo versi terang sudah ada** (diberikan pemilik): lockup, tanda N, dan ikon persegi berlatar putih, dipakai di README lewat `<picture>` (terang/gelap otomatis). Tidak ada SVG vektor; latar PNG putih penuh, bukan transparan.
 - Hak cipta logo (dibuat dengan alat generatif): pemilik perlu memastikan hak pakai dan kepemilikannya sebelum rilis publik.
 
 ## Alasan

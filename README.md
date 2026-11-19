@@ -2,7 +2,10 @@ English | [Bahasa Indonesia](README.id.md)
 
 <div align="center">
 
-<img src="brand/nodivara-lockup-dark.png" alt="Nodivara logo: a lime and silver ribbon forming the letter N, next to the word Nodivara" width="620">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="brand/nodivara-lockup-dark.png">
+  <img src="brand/nodivara-lockup-light.png" alt="Nodivara logo: a lime and silver ribbon forming the letter N, next to the word Nodivara" width="620">
+</picture>
 
 ### The server control panel with an AI agent that proposes, and **you** approve.
 
@@ -188,4 +191,4 @@ Each document has an Indonesian version next to it (`*.id.md`), except the licen
 
 ## License
 
-Provisionally [AGPL-3.0-only](LICENSE), pending a final decision before the first public release. See [LICENSING.md](LICENSING.md) for what that means and what is still open. The name "Nodivara" is chosen by the owner; a trademark and domain check is still pending.
+Provisionally [AGPL-3.0-only](LICENSE), pending a final decision before the first public release. See [LICENSING.md](LICENSING.md) for what that means and what is still open. The name "Nodivara" is chosen by the owner, who reports it is still available and unique; no formal trademark search has been done yet.
