@@ -961,3 +961,47 @@ mod supervision {
         Ok(())
     }
 }
+
+mod all_collectors {
+    use super::*;
+    use collectors::{Cmd, FakeRunner, collect_inventory_with};
+    use std::sync::Arc;
+
+    #[test]
+    fn docker_systemd_and_pm2_items_join_the_inventory() -> TestResult {
+        let tree = Tree::new("allc")?;
+        tree.write("proc/1/comm", b"init\n")?;
+        tree.write("proc/1/cmdline", b"/sbin/init\0")?;
+        tree.write(
+            "root/.pm2/dump.pm2",
+            br#"[{"name":"site","pm_exec_path":"/srv/site/app.js","env":{"NODE_ENV":"production","DB_PASSWORD":"hunter2"}}]"#,
+        )?;
+        let runner = FakeRunner::new()
+            .with(
+                Cmd::SystemctlServices,
+                Ok("nginx.service loaded active running A web server\n".into()),
+            )
+            .with(
+                Cmd::DockerPs,
+                Ok(r#"{"ID":"0123456789abcdef","Names":"cache","Image":"redis:7","State":"running"}"#.into()),
+            );
+        let inv = collect_inventory_with(
+            &tree.fs(),
+            Arc::new(runner),
+            "2026-01-01T00:00:00Z".into(),
+            platform(),
+        )?;
+        for key in ["systemd:nginx", "docker:cache", "pm2:site"] {
+            assert_eq!(
+                item(&inv, Kind::Process, key)?.data["supervised"],
+                Value::from(true)
+            );
+        }
+        assert_eq!(
+            item(&inv, Kind::Process, "pm2:site")?.data["mode"],
+            Value::from("prod")
+        );
+        assert!(!inv.to_json()?.contains("hunter2"));
+        Ok(())
+    }
+}

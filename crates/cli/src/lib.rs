@@ -8,7 +8,7 @@
 
 mod time;
 
-use collectors::{RootFs, collect_inventory};
+use collectors::{CommandRunner, FakeRunner, HostRunner, RootFs, collect_inventory_with};
 use i18n::{Catalog, Locale, MessageKey};
 use inventory::{Inventory, Kind, Platform, Severity, Status};
 use parity::{compare, render};
@@ -16,6 +16,7 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
+use std::sync::Arc;
 
 const USAGE_COLLECT: MessageKey = MessageKey::new("cli.usage.collect");
 const USAGE_COMPARE: MessageKey = MessageKey::new("cli.usage.compare");
@@ -207,15 +208,21 @@ impl Ui<'_> {
     }
 
     fn collect(&mut self, parsed: &Parsed) -> u8 {
-        let root = parsed
-            .option("--root")
-            .map_or_else(RootFs::host, RootFs::new);
+        let root_option = parsed.option("--root");
+        let root = root_option.map_or_else(RootFs::host, RootFs::new);
+        // Programs (docker, systemctl) run only when inspecting this machine; a `--root` tree is
+        // a fixture or a mounted image, where they would describe the wrong machine.
+        let runner: Arc<dyn CommandRunner> = if root_option.is_none() {
+            Arc::new(HostRunner)
+        } else {
+            Arc::new(FakeRunner::new())
+        };
         let host = host_platform();
         let platform = Platform {
             os: parsed.option("--os").map_or(host.os, str::to_owned),
             arch: parsed.option("--arch").map_or(host.arch, str::to_owned),
         };
-        let inventory = match collect_inventory(&root, time::now_iso_utc(), platform) {
+        let inventory = match collect_inventory_with(&root, runner, time::now_iso_utc(), platform) {
             Ok(inventory) => inventory,
             Err(error) => return self.fail(ERR_COLLECT, &[("reason", &error.to_string())]),
         };

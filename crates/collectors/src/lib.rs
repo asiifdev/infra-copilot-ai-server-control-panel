@@ -17,32 +17,57 @@
 //! [`collect_inventory`] runs all three and builds the [`inventory::Inventory`]. The caller supplies
 //! the timestamp and platform, so this crate has no clock dependency.
 //!
-//! Not covered yet (M1-a): systemd, Docker, PM2, supervisors, `env_ref`, databases, macOS.
+//! Also: [`Systemd`] (running services and timers), [`Docker`] (running containers) and [`Pm2`]
+//! (apps saved in `dump.pm2`, read from files only).
+//!
+//! Not covered yet: `env_ref`, databases, service versions, macOS.
 
 mod cron;
+mod docker;
 mod exec;
 mod listeners;
+mod pm2;
 mod processes;
 mod procfs;
 mod rootfs;
 mod supervision;
+mod systemd;
 mod util;
 
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
+use std::sync::Arc;
 
 use inventory::{CollectError, Collector, Inventory, Item, Kind, Platform};
 
 pub use cron::Cron;
+pub use docker::Docker;
 pub use exec::{Cmd, CommandRunner, ExecError, FakeRunner, HostRunner};
 pub use listeners::Listeners;
+pub use pm2::Pm2;
 pub use processes::Processes;
 pub use rootfs::{DirNames, FileText, FsError, RootFs};
+pub use systemd::Systemd;
 
 /// Version of this collector set, recorded in the inventory.
 pub const COLLECTOR_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Runs the listener, process and cron collectors against `root` and assembles the inventory.
+/// Runs every collector against `root` and assembles the inventory, without running any external
+/// program (Docker and systemd are skipped as "not available"). Use [`collect_inventory_with`] on
+/// a real host.
+///
+/// # Errors
+/// See [`collect_inventory_with`].
+pub fn collect_inventory(
+    root: &RootFs,
+    taken_at: String,
+    platform: Platform,
+) -> Result<Inventory, CollectError> {
+    collect_inventory_with(root, Arc::new(FakeRunner::new()), taken_at, platform)
+}
+
+/// Runs the listener, process, cron, PM2, systemd and Docker collectors and assembles the
+/// inventory. Programs run only through `runner` (decision 0014).
 ///
 /// Warnings from the collectors are prefixed with the collector kind and make the inventory
 /// `partial`.
@@ -50,15 +75,19 @@ pub const COLLECTOR_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// # Errors
 /// [`CollectError`] when a collector cannot work at all (for example the root is not a directory)
 /// or the assembled items are not a valid inventory.
-pub fn collect_inventory(
+pub fn collect_inventory_with(
     root: &RootFs,
+    runner: Arc<dyn CommandRunner>,
     taken_at: String,
     platform: Platform,
 ) -> Result<Inventory, CollectError> {
-    let collectors: [Box<dyn Collector>; 3] = [
+    let collectors: [Box<dyn Collector>; 6] = [
         Box::new(Listeners::new(root.clone())),
         Box::new(Processes::new(root.clone())),
         Box::new(Cron::new(root.clone())),
+        Box::new(Pm2::new(root.clone())),
+        Box::new(Systemd::new(Arc::clone(&runner))),
+        Box::new(Docker::new(runner)),
     ];
     let mut items = Vec::new();
     let mut warnings = Vec::new();
