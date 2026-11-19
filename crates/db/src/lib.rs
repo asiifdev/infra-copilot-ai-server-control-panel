@@ -22,6 +22,7 @@ mod providers;
 mod secret;
 mod sha256;
 mod snapshots;
+mod transports;
 
 use std::path::Path;
 use std::time::Duration;
@@ -45,7 +46,7 @@ pub use identity::{
 };
 pub use ids::{
     AgentId, AiProviderId, ApiTokenId, AuditId, ComparisonId, ConversationId, InventoryId,
-    MembershipId, NodeId, OrgId, ProposalId, SecretId, UserId,
+    MembershipId, NodeId, OrgId, ProposalId, SecretId, TransportId, UserId,
 };
 pub use migrate::{LATEST_VERSION, migrate, schema_version};
 pub use nodes::{
@@ -64,6 +65,10 @@ pub use snapshots::{
     ItemKind, ItemRow, ItemSource, NewFinding, NewInventory, NewInventoryItem,
     count_inventory_items, get_inventory, latest_comparison, latest_inventory, list_findings,
     list_inventory_items, save_comparison, save_inventory,
+};
+pub use transports::{
+    NewTransport, TransportRow, create_transport, delete_transport, get_transport, list_transports,
+    record_transport_check,
 };
 
 /// The SQLite connection type returned by [`open`], re-exported so dependents need no direct

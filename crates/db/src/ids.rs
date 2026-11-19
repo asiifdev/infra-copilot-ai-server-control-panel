@@ -93,6 +93,10 @@ id_type!(
     ProposalId
 );
 id_type!(
+    /// Transport identifier.
+    TransportId
+);
+id_type!(
     /// Audit entry identifier.
     AuditId
 );

@@ -1211,6 +1211,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "transport"
+version = "0.0.0"
+dependencies = [
+ "core-domain",
+ "db",
+ "i18n",
+ "serde_json",
+ "vault",
+]
+
+[[package]]
 name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,0 +1,46 @@
+# 0025. Transport (M3-b): rencana perintah, konfigurasi rclone lewat lingkungan, dan wizard
+
+- Tanggal: 2026-11-19
+- Status: diterima
+- Pengambil keputusan: pemilik produk (instruksi: bangun M3-b), dieksekusi oleh trek C
+
+## Konteks
+
+M3-b menambah cara memindahkan data: rclone (S3, B2, Drive, SFTP, ...), rsync, scp, pipa SSH, dan penyimpanan terkelola (cloud, belum ada). Lihat `docs/plan.md` bagian 3.1, `docs/design.md` 3.4 (`transports`) dan 12.4 (kontrak `Transport`), serta skill `migration-planning` dan `security-review`. Produk bisa mengubah server orang lain, jadi tiga hal harus aman sejak awal: argumen perintah terlihat di daftar proses, rahasia tidak boleh masuk log/audit/prompt, dan teks dari alat luar adalah data.
+
+Crate baru `transport` **merencanakan dan memvalidasi**; ia tidak memindahkan data. Satu-satunya titik tempat proses dapat dimulai adalah trait `Runner`; semua uji memakai `FakeRunner`.
+
+## Keputusan
+
+1. **`TransportSpec` tertutup**: `Rclone{remote_kind, remote, path, options}`, `Rsync`, `Scp`, `SshPipe` (host, user, port, path), dan `Managed` (dideklarasikan, setiap rencana mengembalikan `Unsupported`). Tidak ada cara membangun spec dengan kolom yang belum divalidasi (kolom privat, konstruktor memvalidasi). Konfigurasi yang dibaca dari database divalidasi ulang.
+2. **Rencana perintah, bukan string shell**: `CommandPlan { program (konstanta), args, env, stdin }`. Rahasia bertipe `core_domain::secret::Secret` dan hanya boleh di `env` atau `stdin`, tidak pernah di `args`. Nilai turunan pengguna selalu setelah `--`; excludes dikirim sebagai satu argumen `--exclude=<pola>`; tidak ada `sh -c`. `Debug` dan `Display` rencana tidak mencetak rahasia (tampilan log juga melewati `redact`).
+3. **Konfigurasi rclone lewat variabel lingkungan, bukan berkas**: remote didefinisikan per perintah dengan `RCLONE_CONFIG_<REMOTE>_TYPE` dan `RCLONE_CONFIG_<REMOTE>_<OPSI>`; rahasia memakai jalur yang sama sebagai `EnvValue::Secret`. Setiap perintah juga memakai `--config=` (konfigurasi memori saja, supaya `rclone.conf` milik pengguna tidak ikut terbaca) dan `--ask-password=false`. Dengan ini **tidak ada yang ditulis ke disk** dan tidak ada berkas 0600 yang perlu dijaga atau dibersihkan. Kekurangan: lingkungan proses dapat dibaca pemilik yang sama dan root lewat `/proc/<pid>/environ`; ini setara dengan berkas 0600 milik pengguna yang sama, dan jauh lebih aman daripada argumen. Nama remote dibatasi huruf kecil, angka, `_` supaya nama variabel tidak ambigu.
+4. **Runner**: `ProcessRunner` memakai `std::process::Command` dengan argv saja, lingkungan dikosongkan kecuali daftar izin (`PATH`, `HOME`, `USER`, `LANG`, `LC_ALL`, `TMPDIR`, `SSH_AUTH_SOCK`, `TERM`) ditambah lingkungan rencana (jadi kunci master `NODIVARA_MASTER_KEY` tidak pernah sampai ke anak proses), stdin untuk data/rahasia, batas waktu (proses dibunuh), dan batas ukuran keluaran per aliran. Diuji hanya dengan program lokal tak berbahaya (`/bin/echo`, `/usr/bin/true`, `/bin/cat`, `/usr/bin/env`, `/bin/sleep`).
+5. **Kunci SSH**: rsync, scp, dan pipa SSH memakai agen/kunci milik host (`BatchMode=yes`, `StrictHostKeyChecking=yes`, `ForwardAgent=no`, `ConnectTimeout=15`). Produk tidak menyimpan kredensial SSH di `transports`; `Credentials` untuk jenis ini ditolak (`CredentialsNotAccepted`). Jalur SSH remote memakai daftar izin ketat (`[A-Za-z0-9._/+=,@%-]`) karena rsync/ssh menyerahkannya ke shell remote; spasi dan metakarakter ditolak. Jalur rclone boleh berisi spasi (satu argumen, tanpa shell), tetapi tidak boleh diawali `-`, berisi NUL/baris baru/karakter kontrol/karakter tak terlihat Unicode, atau segmen `..`.
+6. **Wizard sebagai mesin status murni** (`Wizard`): buat remote (validasi + deteksi rclone) -> otorisasi -> uji (`rclone lsd`) -> cek kuota (`rclone about --json`) -> ukur kecepatan (`rclone rcat` 4 MiB lalu `deletefile`) -> simpan. Otorisasi tidak berjalan di dalam wizard (orang harus membuka tautan di peramban): wizard mengembalikan `NeedsToken{command}` (`rclone authorize "<tipe>"`), orang menempelkan token, dan `provide_token(&Secret)` mem-parse JSON, menyimpannya hanya sebagai `Secret` dan tidak pernah mencetaknya. Kegagalan dipetakan ke `Advice` (kuota penuh, token kedaluwarsa, remote salah, jaringan, timeout, rclone tidak terpasang) dengan kunci i18n `transport.*` di EN dan ID. **rclone tidak dipasang oleh produk**: `NotInstalled` hanya menandai `offer_install`. Keluaran alat (stderr) hanya dicocokkan dengan frasa tetap; cuplikan untuk dukungan di-redaksi, nilai rahasia yang dikenal dihapus, karakter kontrol dibuang, maksimum 300 karakter. Backend tanpa `about` dianggap kuota tidak diketahui, bukan gagal.
+7. **Persistensi**: migrasi `0007_transports.sql` (tabel `transports`: id, org_id, name, kind, config json, secret_id nullable lewat kunci asing komposit `(org_id, secret_id)`, verified_at, last_check json, created_at; `UNIQUE (org_id, name)`). Kredensial disegel `vault::Vault::store` dengan purpose `transport_credentials` dan dimuat lewat `Vault::load`; baris database tidak pernah memuat teks asli (diuji dengan memindai byte berkas database dan WAL). `load_credentials` menolak rahasia yang purpose-nya bukan `transport_credentials` (mencegah transport diarahkan ke kunci AI). Bila penyimpanan baris gagal, rahasia yang baru disegel dihapus lagi. `Managed` tidak dapat disimpan.
+8. **Uji kontrak bersama** (`transport::testing::contract_suite`) dijalankan pada setiap jenis dan backend: tidak ada rahasia di args, `--` hadir, input injeksi opsi (diawali dash, baris baru, `;`, `$()`, backtick, spasi, trik Unicode) ditolak atau menjadi satu argumen inert setelah `--`, `Debug`/`Display` tidak mencetak rahasia, rencana identik untuk input identik, `Managed` selalu `Unsupported`.
+
+## Verifikasi terhadap dokumentasi (dibaca 2026-11-19 lewat Context7, `/rclone/rclone`)
+
+Terverifikasi: remote lewat lingkungan `RCLONE_CONFIG_<NAME>_TYPE` dan `RCLONE_CONFIG_<NAME>_<OPTION>` (nilai lingkungan mengalahkan berkas konfigurasi; remote hanya-lingkungan tidak pernah ditulis ke berkas); `rclone about` dan `--json` (`total`, `used`, `free`, `trashed`, `other`; sebagian backend tidak mendukung `about`); `rclone authorize` mencetak token di antara `Paste the following into your remote machine --->` dan `<---End paste`; `--config=""` sebagai konfigurasi memori saja; `--ask-password=false`; kode keluar rclone (3 direktori tidak ditemukan, 8 transfer melebihi kuota).
+`[BELUM TERVERIFIKASI]` di dokumentasi yang dibaca: perilaku `--` (akhir opsi) pada rclone (diandalkan dari perilaku pflag/cobra standar), nama persis pesan galat tiap backend (pencocokan frasa bersifat heuristik dan jatuh ke `Unknown`), dan bentuk output `rclone lsd` pada backend tertentu. Perlu diuji pada rclone sungguhan di lingkungan terpisah sebelum fitur ini dianggap jadi.
+
+## Alasan
+
+Rencana perintah sebagai data (bukan string) membuat injeksi shell tidak mungkin dan membuat setiap perintah bisa diperiksa, dicatat (tanpa rahasia), dan diuji tanpa menjalankan apa pun. Lingkungan alih-alih berkas mengikuti prinsip "tidak ada rahasia di disk" dan menghindari kunci berkas, pembersihan, dan jendela waktu antara tulis dan hapus. Daftar izin pada `Runner` memastikan satu kebocoran lingkungan di induk tidak menular ke anak proses.
+
+## Alternatif yang dipertimbangkan
+
+- **Berkas rclone.conf 0600 sementara**: ditolak; menulis rahasia ke disk, perlu pembersihan, dan dapat tertinggal bila proses mati. Tetap pilihan cadangan bila ada backend yang tidak bisa dikonfigurasi lewat lingkungan.
+- **`rclone config create ... pass` lewat argumen**: ditolak; argumen terlihat di `ps`.
+- **Connection string `:s3,access_key_id=...:path`**: ditolak; nilai rahasia berada di argumen.
+- **Menjalankan `rclone authorize` di dalam wizard**: ditolak untuk tahap ini; butuh aliran keluaran langsung dan peramban di mesin yang sama. Wizard hanya meminta token; eksekusi lokal dapat ditambah kemudian di balik `Runner`.
+- **Kredensial SSH tersimpan (kata sandi/kunci privat)**: ditolak; pakai agen dan kunci milik host. Kunci privat tidak pernah disimpan produk.
+- **Crate baru (`zeroize`, `shell-words`, `url`)**: tidak ditambahkan. Hanya `serde_json` (versi dan fitur sama dengan `notifier`/`inventory`). Konsekuensi: salinan teks rahasia di `Secret` (String) tidak dihapus dari memori saat dilepas; sama seperti `core_domain::secret::Secret` yang ada.
+
+## Dampak
+
+- Workspace: crate `transport`; `db`: tabel `transports`, `TransportId`, fungsi org-scoped `create_transport`, `get_transport`, `list_transports`, `record_transport_check`, `delete_transport`; skema versi bertambah satu migrasi (berkas bernomor 0007; di cabang ini terdaftar sebagai entri keenam, orkestrator mengurutkan saat menggabungkan).
+- Belum ada: eksekusi nyata `Push`/`Pull` (hanya rencana), data pipa SSH (rencana mewakili setengah sisi remote; penyambung aliran milik pelaksana migrasi), pemasangan rclone, dan integrasi ke Usulan/persetujuan (tier 2 ke atas akan memakai rencana ini saat M3 lanjutan).
+- Menjalankan rclone/rsync/scp/ssh sungguhan masih perlu persetujuan dan lingkungan uji terpisah; jangan diarahkan ke layanan produksi.

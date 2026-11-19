@@ -1,0 +1,18 @@
+[package]
+name = "transport"
+description = "Transport specs, argv-only command plans, runners and the rclone setup wizard (plans and validates; moves no data in tests)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+core-domain = { path = "../core" }
+db = { path = "../db" }
+i18n = { path = "../i18n" }
+vault = { path = "../vault" }
+# Same version and minimal features as crates/notifier and crates/inventory (decisions 0005, 0007).
+serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

@@ -6,13 +6,14 @@ use crate::error::{Error, Result};
 use rusqlite::{Connection, TransactionBehavior};
 
 /// SQL migrations in order. Never edit an applied one; append a new file instead.
-const MIGRATION_SQL: [&str; 6] = [
+const MIGRATION_SQL: [&str; 7] = [
     include_str!("../migrations/0001_identity.sql"),
     include_str!("../migrations/0002_nodes.sql"),
     include_str!("../migrations/0003_audit_log.sql"),
     include_str!("../migrations/0004_inventories.sql"),
     include_str!("../migrations/0005_secrets_ai_providers.sql"),
     include_str!("../migrations/0006_conversations.sql"),
+    include_str!("../migrations/0007_transports.sql"),
 ];
 
 /// The schema version this build produces (the number of migrations).

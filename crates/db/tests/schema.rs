@@ -28,15 +28,15 @@ fn user_version(conn: &Connection) -> rusqlite::Result<i64> {
 #[test]
 fn migrations_are_valid_and_reach_the_latest_version_from_empty() -> TestResult {
     let conn = open_in_memory()?;
-    assert_eq!(user_version(&conn)?, 6);
+    assert_eq!(user_version(&conn)?, 7);
     assert_eq!(schema_version(&conn)?, LATEST_VERSION);
     let tables: i64 = conn.query_row(
         "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name IN \
-         ('organizations','users','memberships','api_tokens','nodes','agents','node_secrets','audit_log','inventories','inventory_items','comparisons','findings','secrets','ai_providers')",
+         ('organizations','users','memberships','api_tokens','nodes','agents','node_secrets','audit_log','inventories','inventory_items','comparisons','findings','secrets','ai_providers','conversations','messages','tool_calls','proposals','transports')",
         [],
         |r| r.get(0),
     )?;
-    assert_eq!(tables, 14);
+    assert_eq!(tables, 19);
     Ok(())
 }
 
@@ -50,7 +50,7 @@ fn migrations_are_idempotent_and_keep_data() -> TestResult {
     };
     let mut conn = open(&path)?; // second open migrates again: must be a no-op
     migrate(&mut conn)?;
-    assert_eq!(user_version(&conn)?, 6);
+    assert_eq!(user_version(&conn)?, 7);
     assert_eq!(list_nodes(&conn, &org)?.len(), 1);
     assert_eq!(
         verify_audit_chain(&conn, &org)?,
