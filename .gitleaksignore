@@ -7,3 +7,6 @@
 # Historical false positives: fake `curl -u` / `--user` credentials in the nested-command redaction test (commit 79f7725). They are the inputs the test proves are hidden.
 79f7725b277a337f1466be24e6126a8faa0613be:crates/collectors/tests/collect.rs:curl-auth-user:537
 79f7725b277a337f1466be24e6126a8faa0613be:crates/collectors/tests/collect.rs:curl-auth-user:540
+
+# Historical false positive: a fake `TOKEN=` value in a hostile-text test of the systemd collector (commit f6cc53b). It is the input the test proves is neutralised.
+f6cc53b6f9c7ec46fe32f876a105dba73450d315:crates/collectors/src/systemd.rs:generic-api-key:473
