@@ -3,3 +3,7 @@
 
 # Historical false positive: a fake `curl -u user:pw` in a redaction test (commit 2f456e5). Not a credential; it is the input the test proves is hidden.
 2f456e54c793cb072a4d0224cce7cd6eae13427c:crates/collectors/tests/collect.rs:curl-auth-user:539
+
+# Historical false positives: fake `curl -u` / `--user` credentials in the nested-command redaction test (commit 79f7725). They are the inputs the test proves are hidden.
+79f7725b277a337f1466be24e6126a8faa0613be:crates/collectors/tests/collect.rs:curl-auth-user:537
+79f7725b277a337f1466be24e6126a8faa0613be:crates/collectors/tests/collect.rs:curl-auth-user:540
