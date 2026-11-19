@@ -691,6 +691,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
+name = "plan"
+version = "0.0.0"
+dependencies = [
+ "core-domain",
+ "db",
+ "i18n",
+ "inventory",
+ "parity",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "powerfmt"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

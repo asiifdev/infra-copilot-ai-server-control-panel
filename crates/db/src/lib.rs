@@ -18,6 +18,7 @@ mod identity;
 mod ids;
 mod migrate;
 mod nodes;
+mod plans;
 mod providers;
 mod secret;
 mod sha256;
@@ -46,13 +47,18 @@ pub use identity::{
 };
 pub use ids::{
     AgentId, AiProviderId, ApiTokenId, AuditId, ComparisonId, ConversationId, InventoryId,
-    MembershipId, NodeId, OrgId, ProposalId, SecretId, TransportId, UserId,
+    MembershipId, NodeId, OrgId, PlanId, ProposalId, SecretId, TransportId, UserId,
 };
 pub use migrate::{LATEST_VERSION, migrate, schema_version};
 pub use nodes::{
     Agent, NewAgent, NewNode, Node, NodeAccess, NodeKind, NodeSecretMeta, NodeStatus, create_node,
     delete_node, delete_node_secret, get_node, get_node_secret, list_agents, list_node_secrets,
     list_nodes, put_node_secret, register_agent, revoke_agent, set_node_status, touch_agent,
+};
+pub use plans::{
+    NewPlan, NewPlanStep, PlanRow, PlanStatus, PlanStepKind, PlanStepRow, PlanStepStatus,
+    create_plan, get_plan, list_plan_steps, list_plans, replace_plan_content, set_plan_status,
+    set_plan_step_status,
 };
 pub use providers::{
     AiProvider, NewAiProvider, create_ai_provider, default_ai_provider, delete_ai_provider,

@@ -100,6 +100,10 @@ id_type!(
     /// Audit entry identifier.
     AuditId
 );
+id_type!(
+    /// Migration plan identifier.
+    PlanId
+);
 
 #[cfg(test)]
 mod tests {

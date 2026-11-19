@@ -1,0 +1,23 @@
+[package]
+name = "plan"
+description = "Migration plan model: spec, steps, validation, gates, capacity advice, drafting and the written plan (pure, no I/O)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+core-domain = { path = "../core" }
+inventory = { path = "../inventory" }
+i18n = { path = "../i18n" }
+# Same versions and minimal features as `inventory` (decisions 0005, 0007, 0013).
+serde = { version = "1.0.229", default-features = false, features = ["std", "derive"] }
+serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+parity = { path = "../parity" }
+# Contract test between the plan model and its storage (in-memory SQLite only).
+db = { path = "../db" }
+
+[lints]
+workspace = true

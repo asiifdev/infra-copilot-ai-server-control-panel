@@ -1,0 +1,37 @@
+# 0024. Model rencana migrasi di crate `plan` (M3-a)
+
+- Tanggal: 2026-11-19
+- Status: diterima
+- Pengambil keputusan: pemilik proyek (arahan tahap M3-a); rincian dipilih pelaksana, dicatat di sini
+
+## Konteks
+M3 membutuhkan rencana migrasi tertulis yang bisa ditinjau sebelum apa pun dijalankan (`docs/plan.md` 3.1 dan 6, `docs/design.md` 3.4 dan 6, skill `migration-planning`). Rencana adalah data yang nanti diubah pelaksana menjadi Usulan; tahap ini tidak boleh mengubah server mana pun. Aturan yang harus dijaga oleh kode, bukan oleh disiplin pemakai: urutan langkah, server lama tidak dimatikan selama ada temuan kritis terbuka, cutover DNS wajib punya snapshot dan rollback, dan daftar yang dikecualikan dari cadangan selalu terlihat.
+
+## Keputusan
+1. **Crate baru `plan`, murni.** Tanpa I/O, proses, atau jaringan. Bergantung pada `core-domain` (tingkat risiko), `inventory` (temuan), `i18n` (teks), `serde` dan `serde_json` (versi dan fitur sama dengan `inventory`). `parity` dan `db` hanya dev-dependency untuk uji.
+2. **Spesifikasi ketat.** `PlanSpec` mengikuti `docs/design.md` bagian 6. Enum tertutup, `deny_unknown_fields` di setiap tingkat, batas ukuran (dokumen 256 KiB, 256 database, 128 pengecualian, 128 langkah, panjang teks). `conflict_policy` hanya punya satu nilai (`never_overwrite`). Kedua gerbang di `gates` selalu harus `true`: menyalakannya `false` ditolak, bukan dihormati.
+3. **`Plan` hanya bisa dibuat tervalidasi** (`Plan::new`, `Plan::from_json`, `serde` lewat `try_from`, `Plan::from_stored`). Aturan: nomor langkah unik, dependensi ada dan tidak ganda, tanpa siklus, jenis wajib ada (semua kecuali `delta` dan `decommission_source`), `cutover` dan `decommission_source` paling banyak satu, sumber dan target berbeda, DNS wajib `dns_snapshot` dan `rollback`, perantara wajib enkripsi sisi klien, `restore` tidak boleh menyasar database `skip`.
+4. **Urutan dengan satu aturan pasangan.** Setiap jenis punya peringkat (inventory < backup < transfer < restore < verify < delta < cutover < post_verify < decommission_source). Langkah berperingkat lebih tinggi harus bergantung (secara transitif) pada setiap langkah berperingkat lebih rendah, dan tidak boleh sebaliknya. Satu aturan ini mencakup "delta hanya di antara verify dan cutover" dan "decommission setelah post_verify". Kompromi: rencana berbentuk rantai tahap, bukan DAG bebas; cukup untuk migrasi dan mudah dijelaskan kepada pengguna.
+5. **Gerbang.** `gate_report(findings, accepted)` murni. Temuan `critical` terbuka kecuali ada penerimaan dengan alasan tidak kosong untuk aturan dan subjek yang sama; penerimaan tanpa alasan (termasuk yang dibuat dengan literal struct) tidak dihitung. Bukti yang tidak lengkap juga memblokir: temuan yang bertanda `partial`, inventaris `partial` (`with_inventories`), dan draf tanpa inventaris target (daftar temuan kosong tidak membuktikan apa pun). `Plan::check_schedulable` menolak `cutover` dan `decommission_source` tanpa laporan gerbang atau dengan gerbang tidak terpenuhi, dan menolak `decommission_source` sebelum **semua** langkah lain selesai. `decommission_source` adalah tingkat 4 (`StepKind::tier`), diputuskan di kode.
+6. **Kapasitas sebagai saran.** `check_capacity` mengembalikan vonis (`Fits`, `Unknown`, `Blocked`) dengan angka, bukan galat mentah. Cadangan ditambah 10% ruang. Nilai yang tidak diukur tidak pernah dibaca sebagai "cukup" (vonis `Unknown`). Staging di disk yang tidak muat ditolak dengan saran streaming.
+7. **Pengecualian bawaan** (`logs`, `cache`, `node_modules`, `tmp`, `pycache`) selalu dicetak di rencana tertulis, juga bila daftar kosong. Pola yang mencocokkan semuanya (`*`, `/`, `**/*`) dan `..` ditolak.
+8. **`draft_plan` murni dan deterministik**, tanpa AI: inventaris sumber dan target, cadangan, transfer, satu pemulihan untuk berkas ditambah satu per database yang tidak `skip`, verifikasi, delta (opsional), cutover, verifikasi ulang, dan (opsional, bawaan ada) pemadaman server lama. Hasilnya `Draft` berisi rencana, laporan gerbang, dan peringatan (inventaris tidak lengkap, target belum ada, OS atau arsitektur berbeda, tanpa database).
+9. **`render_plan` memakai katalog i18n** (kunci `plan.*`, 99 kunci, identik di en dan id). Nilai dari rencana, server, atau orang dibersihkan sebelum dicetak: karakter kontrol dan karakter pembalik arah diganti, nilai dipotong 120 karakter, placeholder di dalam nilai tidak diperluas (sifat katalog).
+10. **Penyimpanan di `db` sebagai teks JSON buram** (migrasi `0008_migration_plans.sql`; di cabang ini entri array ke-6 karena 0006 dan 0007 datang dari jalur lain). `migration_plans` dan `migration_steps` memakai kunci komposit `(org_id, id)` ke `nodes` dan `migration_plans`; tidak ada kunci asing ke tabel transport (id transport tinggal di dalam spec). Fungsi `db` selalu menyaring `org_id`; node atau rencana milik org lain adalah `NotFound`. Rencana tidak punya `ON DELETE CASCADE` ke node: node yang masih dipakai rencana tidak bisa dihapus tanpa sengaja. Isi rencana hanya bisa diganti saat `draft`; status mengikuti tabel transisi (`PlanStatus::can_become`). Pemicu SQL menjaga `decommission_source` agar tidak bisa diusulkan atau berjalan sebelum semua langkah lain `succeeded` (delta opsional boleh `skipped`): pertahanan berlapis bagi pemanggil yang melewati crate `plan`. Adaptor tipis di `plan` (`Plan::stored_steps`, `Plan::from_stored`) mengubah rencana dari dan ke catatan polos; data tersimpan tidak dipercaya dan divalidasi ulang.
+
+## Alasan
+- Aturan keselamatan produk (rencana yang bisa ditinjau, gerbang kesetaraan, rollback) diterapkan oleh tipe dan pemeriksaan, sehingga model AI atau UI yang salah menulis rencana gagal di validasi, bukan di produksi.
+- Murni dan tanpa dependensi baru: kecil, cepat diuji, dan sesuai 0005. `db` tidak bergantung pada `plan` (pola yang sama dengan inventaris, 0013).
+- Kegagalan nyata yang menjadi dasar: server lama dimatikan padahal masih ada temuan kritis, dan pencadangan lokal yang memenuhi disk.
+
+## Alternatif yang dipertimbangkan
+- **DAG bebas dengan aturan per pasangan jenis yang berbeda-beda.** Lebih fleksibel, tetapi aturan "setelah" menjadi banyak kasus khusus yang sulit diuji lengkap. Ditolak; rantai tahap cukup.
+- **`db` mem-parsing spec untuk kolom turunan** (mis. id transport sebagai kolom). Ditolak: membuat `db` bergantung pada `plan`, dan transport dibuat jalur lain.
+- **`ON DELETE CASCADE` ke node**, seperti tabel lain. Ditolak untuk rencana: kehilangan rencana secara diam-diam saat node dihapus lebih berbahaya daripada penghapusan yang gagal.
+- **Menolak rencana berdasar kapasitas di `Plan::new`.** Ditolak: kapasitas diukur saat rencana berjalan, bukan saat ditulis; ia saran terpisah.
+
+## Dampak
+- Workspace: crate `plan`; `db` mendapat `PlanId`, `NewPlan`, `NewPlanStep`, `PlanRow`, `PlanStepRow`, `PlanStatus`, `PlanStepKind`, `PlanStepStatus`, dan fungsi `create_plan`, `get_plan`, `list_plans`, `list_plan_steps`, `replace_plan_content`, `set_plan_status`, `set_plan_step_status`.
+- Katalog i18n: 99 kunci `plan.*` di en dan id.
+- Belum ada: pelaksana yang mengubah langkah menjadi Usulan, UI peninjauan, pengukuran kapasitas nyata (input `check_capacity` berasal dari pengukur yang belum ditulis), dan penautan `comparisons.plan_id`.
+- Belum diuji: pemakaian dengan inventaris nyata di luar fixture anonim `parity`; estimasi waktu hanya menyebut masukan yang menentukan waktu, bukan angka.
