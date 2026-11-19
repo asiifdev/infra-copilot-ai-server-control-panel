@@ -42,10 +42,12 @@ pun ke edisi berbayar.
   kode yang sama (dual licensing), kontributor harus menandatangani Contributor License Agreement
   (CLA) atau menyerahkan hak cipta. Keputusan itu masih terbuka dan berdampak ke setiap kontributor,
   jadi lebih baik diputuskan sebelum kontribusi dari luar masuk.
-- **Pemegang hak cipta.** Berkas sumber dan pemberitahuan memakai "Infra Copilot contributors"
+- **Pemegang hak cipta.** Berkas sumber dan pemberitahuan memakai "Nodivara contributors"
   sampai pemilik hukumnya ditetapkan.
-- **Namanya.** "Infra Copilot" bersifat sementara. Pemeriksaan merek dagang masih diperlukan,
-  terutama karena kata "Copilot" banyak dipakai perusahaan lain dalam nama produk mereka.
+- **Namanya.** "Nodivara" adalah nama pilihan pemilik (keputusan 0019). Nama ini belum
+  dinyatakan bebas: pencarian merek dagang (WIPO, USPTO, dan daftar lain yang relevan), pemeriksaan
+  domain, dan pemeriksaan nama akun (GitHub, npm, Docker Hub) masih terbuka, dan hasilnya belum
+  diketahui sebelum dikerjakan.
 
 ## Bahan pihak ketiga
 

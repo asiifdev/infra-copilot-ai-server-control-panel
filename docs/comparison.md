@@ -5,7 +5,7 @@ English | [Bahasa Indonesia](comparison.id.md)
 Last updated: 2026-11-19. Facts below were read from the vendors' own pages on that date; prices
 and features change, so check the linked sources before relying on them.
 
-**Infra Copilot is pre-alpha and nothing in its row is available yet.** This page is not a claim
+**Nodivara is pre-alpha and nothing in its row is available yet.** This page is not a claim
 that it is better than any product listed. The other products ship today.
 
 ## Overview
@@ -17,9 +17,9 @@ that it is better than any product listed. The other products ship today.
 | 1Panel | Open core, GPL-3.0 | Pro: $80/year or $200 perpetual | Manages AI apps and agents on the server (for example OpenClaw), per its feature list | [Pro edition](https://1panel.pro/pro-edition) |
 | Coolify | Open source, Apache-2.0 | Self-hosted free with all features; Cloud $5/month for 2 servers, plus $3 per extra server | None found in the pages read | [pricing](https://coolify.io/pricing) |
 | Dokploy | Open core: Apache-2.0 plus a proprietary directory | Cloud Hobby $4.50/server/month; Startup from $15/month | Bring-your-own-key AI assistant; log analysis is read-only per its docs | [pricing](https://dokploy.com/pricing) |
-| **Infra Copilot** | **Open core, provisional AGPL-3.0-only** | **Not set** | **Planned:** approval-gated AI agent, error analysis that cites evidence, migration parity check | [README](../README.md) |
+| **Nodivara** | **Open core, provisional AGPL-3.0-only** | **Not set** | **Planned:** approval-gated AI agent, error analysis that cites evidence, migration parity check | [README](../README.md) |
 
-## What Infra Copilot intends to do differently
+## What Nodivara intends to do differently
 
 These are goals, not shipped features.
 
@@ -34,7 +34,7 @@ These are goals, not shipped features.
 - cPanel, aaPanel, and 1Panel are mature panels with large user bases, and cPanel now ships AI
   features with confirmation before actions and an audit trail on its MCP connectivity.
 - Coolify and Dokploy are popular self-hosted deployment platforms with free self-hosting.
-- Infra Copilot has no users, no release, and no track record yet.
+- Nodivara has no users, no release, and no track record yet.
 
 ## How the facts were gathered
 

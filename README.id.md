@@ -1,22 +1,21 @@
 [English](README.md) | Bahasa Indonesia
 
-# Infra Copilot
+# Nodivara
 
 [![CI](https://github.com/asiifdev/infra-copilot-ai-server-control-panel/actions/workflows/ci.yml/badge.svg)](https://github.com/asiifdev/infra-copilot-ai-server-control-panel/actions/workflows/ci.yml)
 
-**Infra Copilot adalah panel pengelolaan server open source, untuk pekerjaan yang sama dengan aaPanel dan cPanel, dengan agen AI bawaan yang mengusulkan perubahan dan menunggu persetujuan manusia.** Ditulis dengan Rust dan antarmuka Svelte, menyasar server Linux dan aplikasi desktop, dan masih pra-alfa: belum ada yang bisa dipasang.
+**Nodivara adalah panel pengelolaan server open source, untuk pekerjaan yang sama dengan aaPanel dan cPanel, dengan agen AI bawaan yang mengusulkan perubahan dan menunggu persetujuan manusia.** Ditulis dengan Rust dan antarmuka Svelte, menyasar server Linux dan aplikasi desktop, dan masih pra-alfa: belum ada yang bisa dipasang.
 
 Terakhir diperbarui: 2026-11-19.
 
 > **Status: pra-alfa.** Belum ada rilis yang bisa dipasang. Repositori ini saat ini berisi desain,
 > keputusan arsitektur, crate fondasi pertama (tipe domain, katalog pesan, skema database), prototipe
 > pengukur ukuran dan kecepatan, dan baris perintah offline yang mengumpulkan inventaris Linux secara hanya-baca
-> serta membandingkan dua inventaris dengan tiga aturan kesetaraan. Belum ada agen, panel, atau monitor. "Infra Copilot" adalah nama sementara dan bisa
-> berubah.
+> serta membandingkan dua inventaris dengan tujuh aturan kesetaraan (port, proses, cron, PM2, systemd, Docker). Bahan penyusun monitor uptime (pengecekan, mesin insiden, alert Telegram) sudah ada sebagai pustaka, tetapi belum ada yang menjalankannya. Belum ada agen atau panel. Nama "Nodivara" ditetapkan pemilik; pemeriksaan merek dagang dan domain masih menunggu.
 
 ## Apa ini
 
-Infra Copilot bertujuan menjadi panel ringan untuk menjalankan dan memigrasikan server, sejalan
+Nodivara bertujuan menjadi panel ringan untuk menjalankan dan memigrasikan server, sejalan
 dengan aaPanel dan cPanel, dengan agen AI yang memahami keadaan mesin dan hanya bertindak setelah
 disetujui manusia. Ia berjalan di server Linux (VPS atau dedicated) dan, kelak, sebagai aplikasi
 desktop.
@@ -76,6 +75,7 @@ crates/db           skema SQLite, kueri per organisasi, log audit berantai-hash
 crates/proto-server prototipe sementara untuk mengukur ukuran biner, memori, dan waktu mulai
 ui/                 halaman prototipe Svelte 5 + Vite (ditanam ke biner prototipe)
 docs/design.md      desain teknis: skema, format inventaris, protokol agen, alur persetujuan
+brand/              berkas logo Nodivara (sudah dioptimalkan); warna dan pemakaian di docs/brand.md
 docs/decisions/     catatan keputusan arsitektur
 docs/market-research.md   riset pasar, fakta dipisahkan dari inferensi
 scripts/            skrip bantu (termasuk measure.sh untuk anggaran kinerja)

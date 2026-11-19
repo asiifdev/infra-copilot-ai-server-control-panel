@@ -1,9 +1,9 @@
-# Infra Copilot (nama sementara)
+# Nodivara
 
 Panel pengelolaan server open-core (setara aaPanel + cPanel versi berbayar) dengan **agen AI bawaan yang mendalam** (OpenAI-compatible, persetujuan manusia). Migrasi dan pemeriksaan kesetaraan adalah fitur unggulan di dalamnya.
 Dijual sebagai self-host gratis (terbatas), self-host berlisensi, atau cloud berlangganan.
 
-**Status: tahap rencana, kode baru fondasi M0 dan M1-a (crate `core`, `i18n`, `db`, `inventory`, `collectors`, `parity`, `cli`, `net`, `monitor`, `notifier`, `watch`, prototipe `proto-server` + `ui/`).** Baca [docs/plan.md](docs/plan.md) dan [docs/design.md](docs/design.md) sebelum mengerjakan apa pun. Sudah diputuskan: tetap dibangun, dogfooding dulu, pasar internasional, ID/EN (`docs/decisions/0002`). Belum final: nama, lisensi, kerangka UI, cakupan MVP (bagian 11 rencana). Jangan memilih sendiri; tanyakan atau catat sebagai usulan.
+**Status: tahap rencana, kode baru fondasi M0 dan M1-a (crate `core`, `i18n`, `db`, `inventory`, `collectors`, `parity`, `cli`, `net`, `monitor`, `notifier`, `watch`, prototipe `proto-server` + `ui/`).** Baca [docs/plan.md](docs/plan.md) dan [docs/design.md](docs/design.md) sebelum mengerjakan apa pun. Sudah diputuskan: tetap dibangun, dogfooding dulu, pasar internasional, ID/EN (`docs/decisions/0002`). Nama produk: **Nodivara** (keputusan 0019; hanya nama produk/platform, nama repo, crate, dan biner tidak diganti; pemeriksaan merek dan domain belum). Belum final: lisensi, kerangka UI, cakupan MVP (bagian 11 rencana). Palet UI dan logo: `docs/brand.md`. Jangan memilih sendiri; tanyakan atau catat sebagai usulan.
 
 ## Klaim produk (jangan melenceng)
 

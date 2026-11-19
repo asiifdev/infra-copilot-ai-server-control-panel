@@ -2,7 +2,7 @@ English | [Bahasa Indonesia](SECURITY.id.md)
 
 # Security policy
 
-Infra Copilot is designed to hold privileged access to servers, so a vulnerability here can be
+Nodivara is designed to hold privileged access to servers, so a vulnerability here can be
 serious. We take reports seriously and ask you to report them privately.
 
 ## Status

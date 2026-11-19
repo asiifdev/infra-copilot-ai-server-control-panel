@@ -1,6 +1,6 @@
 [English](CONTRIBUTING.md) | Bahasa Indonesia
 
-# Berkontribusi ke Infra Copilot
+# Berkontribusi ke Nodivara
 
 Terima kasih atas minat Anda. Proyek ini masih **pra-alfa**: desainnya masih bergerak, jadi mohon
 buka issue untuk membahas hal yang tidak sepele sebelum menulis kode.

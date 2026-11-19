@@ -2,12 +2,12 @@ English | [Bahasa Indonesia](faq.id.md)
 
 # Frequently asked questions
 
-Last updated: 2026-11-19. Infra Copilot is **pre-alpha**: features described here as planned are not
+Last updated: 2026-11-19. Nodivara is **pre-alpha**: features described here as planned are not
 available yet.
 
-## What is Infra Copilot?
+## What is Nodivara?
 
-Infra Copilot is an open-source server control panel, aimed at the same job as aaPanel and cPanel,
+Nodivara is an open-source server control panel, aimed at the same job as aaPanel and cPanel,
 with a built-in AI agent that proposes changes and waits for human approval. It is written in Rust
 with a Svelte interface, targets Linux servers and a desktop app, and is pre-alpha: nothing is
 installable yet.
@@ -38,7 +38,7 @@ this repository and has tests. The rest of the pipeline is not built yet.
 
 ## How is it different from aaPanel, cPanel, 1Panel, Coolify or Dokploy?
 
-Those products exist and ship today; Infra Copilot does not yet. The intended differences are the
+Those products exist and ship today; Nodivara does not yet. The intended differences are the
 audited approval workflow for AI actions, a pre-cutover parity check for server migrations, and an
 error analysis that cites its evidence. See the dated, sourced [comparison](comparison.md).
 

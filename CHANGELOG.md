@@ -11,6 +11,8 @@ cannot drift apart. Release notes may get an Indonesian summary.
 
 ### Added
 
+- Product name **Nodivara** (decision 0019) and the brand palette: colour tokens sampled from the logo with light and dark themes (`ui/src/tokens.css`), a contrast checker run in CI (`scripts/check-palette.py`), optimized logo files in `brand/` and a usage guide (`docs/brand.md`). The repository, crate and binary names are unchanged. A trademark and domain check is still pending.
+
 - `core-domain` crate: the five risk tiers and the approval rules attached to them, and secret
   redaction (URL passwords, `name=value` and JSON secrets, bearer tokens, well-known token shapes,
   private key blocks), with tests.

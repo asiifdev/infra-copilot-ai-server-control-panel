@@ -1,6 +1,6 @@
-# Infra Copilot
+# Nodivara
 
-> Infra Copilot is an open-source server control panel, aimed at the same job as aaPanel and cPanel, with a built-in AI agent that proposes changes and waits for human approval. Written in Rust with a Svelte interface; targets Linux servers and a desktop app (Tauri). Provisional license: AGPL-3.0-only.
+> Nodivara is an open-source server control panel, aimed at the same job as aaPanel and cPanel, with a built-in AI agent that proposes changes and waits for human approval. Written in Rust with a Svelte interface; targets Linux servers and a desktop app (Tauri). Provisional license: AGPL-3.0-only.
 
 Status: pre-alpha. There is no release and nothing is installable yet. Features described as planned are not available. Facts about other products are dated and sourced in the comparison page. Documents exist in English and Indonesian (`*.id.md`).
 

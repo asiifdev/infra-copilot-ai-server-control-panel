@@ -172,7 +172,7 @@ Panel untuk Anda sendiri (M5) bisa jalan paralel dengan rilis awal, karena kebut
 
 ## 11. Keputusan yang saya butuhkan dari Anda
 
-1. Nama produk dan lokasi repo (repo baru publik + repo privat untuk bagian komersial). Nama sementara: Infra Copilot.
+1. Nama produk dan lokasi repo (repo baru publik + repo privat untuk bagian komersial). Nama: Nodivara (ditetapkan pemilik 2026-11-19, lihat keputusan 0019; pemeriksaan merek belum).
 2. Lisensi kode publik (AGPL, atau lain).
 3. Stack: sudah diputuskan, Rust + Tauri + Svelte (0004, 0005).
 4. MVP: setuju M0 + M1 + M2 dulu, M4 (eksekusi) belakangan?

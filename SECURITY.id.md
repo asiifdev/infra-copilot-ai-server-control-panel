@@ -2,7 +2,7 @@
 
 # Kebijakan keamanan
 
-Infra Copilot dirancang untuk memegang akses istimewa ke server, jadi celah di sini bisa serius.
+Nodivara dirancang untuk memegang akses istimewa ke server, jadi celah di sini bisa serius.
 Kami menanggapi laporan dengan sungguh-sungguh dan meminta Anda melaporkannya secara privat.
 
 ## Status

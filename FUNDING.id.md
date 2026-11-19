@@ -4,7 +4,7 @@
 
 Terakhir diperbarui: 2026-11-19.
 
-Infra Copilot masih **pra-alfa**. Belum ada paket berbayar.
+Nodivara masih **pra-alfa**. Belum ada paket berbayar.
 
 ## Dukung pengelola
 

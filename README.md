@@ -1,20 +1,19 @@
 English | [Bahasa Indonesia](README.id.md)
 
-# Infra Copilot
+# Nodivara
 
 [![CI](https://github.com/asiifdev/infra-copilot-ai-server-control-panel/actions/workflows/ci.yml/badge.svg)](https://github.com/asiifdev/infra-copilot-ai-server-control-panel/actions/workflows/ci.yml)
 
-**Infra Copilot is an open-source server control panel, aimed at the same job as aaPanel and cPanel, with a built-in AI agent that proposes changes and waits for human approval.** It is written in Rust with a Svelte interface, targets Linux servers and a desktop app, and is pre-alpha: nothing is installable yet.
+**Nodivara is an open-source server control panel, aimed at the same job as aaPanel and cPanel, with a built-in AI agent that proposes changes and waits for human approval.** It is written in Rust with a Svelte interface, targets Linux servers and a desktop app, and is pre-alpha: nothing is installable yet.
 
 Last updated: 2026-11-19.
 
 > **Status: pre-alpha.** There is no installable release yet. This repository currently holds the
-> design, the architecture decisions and the first foundation crates (domain types, message catalog, database schema), a size and speed prototype, and an offline command line that collects a Linux inventory read-only and compares two inventories with three parity rules. There is no agent, panel or monitor yet. "Infra Copilot" is a provisional
-> name and may change.
+> design, the architecture decisions and the first foundation crates (domain types, message catalog, database schema), a size and speed prototype, and an offline command line that collects a Linux inventory read-only (ports, processes, cron, PM2, systemd, Docker) and compares two inventories with seven parity rules. The building blocks of the uptime monitor (checks, incident engine, Telegram alerts) exist as libraries, but nothing runs them yet. There is no agent or panel yet. The name "Nodivara" is chosen by the owner; a trademark and domain check is still pending.
 
 ## What it is
 
-Infra Copilot aims to be a lightweight panel for running and migrating servers, in the spirit of
+Nodivara aims to be a lightweight panel for running and migrating servers, in the spirit of
 aaPanel and cPanel, with an AI agent that understands the state of the machine and acts only with
 human approval. It runs on Linux servers (VPS or dedicated) and, later, as a desktop app.
 
@@ -71,6 +70,7 @@ crates/proto-server throwaway prototype used to measure binary size, memory and 
 ui/                 Svelte 5 + Vite prototype page (embedded into the prototype binary)
 docs/design.md      technical design: schema, inventory format, agent protocol, approval flow
 docs/decisions/     architecture decision records
+brand/              Nodivara logo files (optimized); colours and usage in docs/brand.md
 docs/market-research.md   market research with facts separated from inference
 scripts/            helper scripts (including measure.sh for the performance budget)
 .claude/ .agents/   configuration and skills for AI-assisted development

@@ -4,7 +4,7 @@ English | [Bahasa Indonesia](FUNDING.id.md)
 
 Last updated: 2026-11-19.
 
-Infra Copilot is **pre-alpha**. There is no paid plan yet.
+Nodivara is **pre-alpha**. There is no paid plan yet.
 
 ## Support the maintainer
 

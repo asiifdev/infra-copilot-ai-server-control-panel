@@ -39,10 +39,11 @@ in the open core is meant to be disabled on purpose to push anyone to a paid edi
   (dual licensing), contributors would have to sign a Contributor License Agreement (CLA) or assign
   copyright. That decision is open and affects every contributor, so it is better made before
   outside contributions arrive.
-- **Copyright holder.** Source files and notices use "Infra Copilot contributors" until the legal
+- **Copyright holder.** Source files and notices use "Nodivara contributors" until the legal
   owner is named.
-- **The name.** "Infra Copilot" is provisional. A trademark check is still needed, in particular
-  because "Copilot" is a word other companies use heavily in their product names.
+- **The name.** "Nodivara" is the name chosen by the owner (decision 0019). It has not been
+  cleared: a trademark search (WIPO, USPTO and other relevant registers), a domain check and a
+  handle check (GitHub, npm, Docker Hub) are still open, and the result is unknown until done.
 
 ## Third-party material
 

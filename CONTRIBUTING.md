@@ -1,6 +1,6 @@
 English | [Bahasa Indonesia](CONTRIBUTING.id.md)
 
-# Contributing to Infra Copilot
+# Contributing to Nodivara
 
 Thank you for your interest. The project is **pre-alpha**: the design is still moving, so please
 open an issue to discuss anything non-trivial before writing code.

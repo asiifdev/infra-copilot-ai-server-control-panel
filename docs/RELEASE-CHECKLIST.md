@@ -5,7 +5,7 @@ Repositori ini privat sampai semua butir di bawah selesai. Tandai `[x]` bila sud
 ## Hukum dan kepemilikan
 - [ ] Nasihat hukum atas lisensi (`AGPL-3.0-only` atau alternatif) dan model open core
 - [ ] Putuskan DCO atau CLA/penyerahan hak cipta (lihat `docs/decisions/0006`)
-- [ ] Tetapkan pemegang hak cipta hukum; ganti "Infra Copilot contributors" bila perlu
+- [ ] Tetapkan pemegang hak cipta hukum; ganti "Nodivara contributors" bila perlu
 - [ ] Pemeriksaan merek dagang untuk nama (kata "Copilot"); tetapkan nama final
 - [ ] Tinjau lisensi semua dependensi (`cargo deny`) dan bahan pihak ketiga
 
