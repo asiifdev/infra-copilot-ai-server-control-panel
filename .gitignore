@@ -16,3 +16,17 @@ target/
 reports/
 research_notes/
 CLAUDE.local.md
+
+# local databases and WAL files (may hold real data; tests use temp directories)
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+
+# local output of scripts/measure.sh and tool scratch directories
+/measure.json
+.playwright-mcp/
+.claude/worktrees/
+__pycache__/
+*.pyc
