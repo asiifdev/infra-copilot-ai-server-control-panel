@@ -89,13 +89,7 @@ fn ask(
     let executor = Executor::new(assistant_registry()?);
     let catalog = Catalog::builtin()?;
     let store = DbStore::new(&world.conn);
-    let ctx = ToolContext {
-        org,
-        store: &store,
-        proposals: &agent::NoProposals,
-        catalog: &catalog,
-        locale: Locale::En,
-    };
+    let ctx = ToolContext::new(org, &store, &catalog, Locale::En);
     Ok(executor.call(&ctx, tool, args))
 }
 
@@ -265,20 +259,8 @@ fn indonesian_locale_changes_the_explanation_text() -> TestResult {
     let executor = Executor::new(assistant_registry()?);
     let catalog = Catalog::builtin()?;
     let store = DbStore::new(&w.conn);
-    let en = ToolContext {
-        org: &w.org,
-        store: &store,
-        proposals: &agent::NoProposals,
-        catalog: &catalog,
-        locale: Locale::En,
-    };
-    let id = ToolContext {
-        org: &w.org,
-        store: &store,
-        proposals: &agent::NoProposals,
-        catalog: &catalog,
-        locale: Locale::Id,
-    };
+    let en = ToolContext::new(&w.org, &store, &catalog, Locale::En);
+    let id = ToolContext::new(&w.org, &store, &catalog, Locale::Id);
     let args = r#"{"rule_id":"PAR-001","subject_key":"tcp:7700"}"#;
     let a = executor.call(&en, "explain_finding", args);
     let b = executor.call(&id, "explain_finding", args);

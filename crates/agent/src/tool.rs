@@ -27,6 +27,7 @@ pub struct ToolSpec {
 
 /// Who and what a call acts for. Built by the server from the logged-in session; a model never
 /// supplies any of it.
+#[non_exhaustive]
 pub struct ToolContext<'a> {
     /// The organization every read is scoped to.
     pub org: &'a OrgId,
@@ -38,6 +39,36 @@ pub struct ToolContext<'a> {
     pub catalog: &'a Catalog,
     /// The language of the person asking; text a tool writes follows it.
     pub locale: Locale,
+}
+
+/// Used when a caller supplies no proposal sink: tools that try to propose get a clean refusal.
+static NO_PROPOSALS: crate::NoProposals = crate::NoProposals;
+
+impl<'a> ToolContext<'a> {
+    /// A read-only context. Writes a tool may perform (proposals, and later memory or plans) are
+    /// added with the `with_*` methods, so a caller never has to name every seam.
+    #[must_use]
+    pub fn new(
+        org: &'a OrgId,
+        store: &'a dyn ReadStore,
+        catalog: &'a Catalog,
+        locale: Locale,
+    ) -> Self {
+        Self {
+            org,
+            store,
+            proposals: &NO_PROPOSALS,
+            catalog,
+            locale,
+        }
+    }
+
+    /// Lets tools record pending proposals through `proposals`.
+    #[must_use]
+    pub fn with_proposals(mut self, proposals: &'a dyn ProposalSink) -> Self {
+        self.proposals = proposals;
+        self
+    }
 }
 
 /// Text a tool returns. It is redacted, capped and fenced by the executor, so a tool does not

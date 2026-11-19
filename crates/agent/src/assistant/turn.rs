@@ -229,13 +229,8 @@ impl<P: AiProvider> Assistant<'_, P> {
             .collect();
         let store = DbStore::new(self.conn);
         let proposals = DbProposalSink::new(self.conn, Some(turn.conversation.clone()));
-        let tool_ctx = ToolContext {
-            org: turn.org,
-            store: &store,
-            proposals: &proposals,
-            catalog: self.catalog,
-            locale: turn.locale,
-        };
+        let tool_ctx = ToolContext::new(turn.org, &store, self.catalog, turn.locale)
+            .with_proposals(&proposals);
 
         let mut tally = Tally::default();
         let (mut model_calls, mut tool_calls) = (0u32, 0u32);
