@@ -67,7 +67,10 @@ crates/i18n         katalog pesan en/id dengan kunci stabil dan fallback
 crates/inventory    model inventaris dan kontrak Collector / ParityRule
 crates/collectors   kolektor Linux hanya-baca (port mendengar, proses, cron, PM2, systemd, Docker)
 crates/parity       aturan kesetaraan PAR-001, PAR-002, PAR-006, PAR-007, PAR-008, PAR-009, PAR-010, pembanding, dan laporan terlokalisasi
-crates/cli          `infra collect` dan `infra compare` (offline, hanya-baca)
+crates/net          klien HTTP/TLS async aman SSRF (pemeriksaan sertifikat) untuk monitor
+crates/monitor      mesin insiden uptime (ambang, pemeliharaan, persen uptime), logika murni
+crates/notifier     kontrak NotificationChannel, channel kirim Telegram, alert terlokalisasi
+crates/cli  dan `infra compare` (offline, hanya-baca)
 crates/db           skema SQLite, kueri per organisasi, log audit berantai-hash
 crates/proto-server prototipe sementara untuk mengukur ukuran biner, memori, dan waktu mulai
 ui/                 halaman prototipe Svelte 5 + Vite (ditanam ke biner prototipe)

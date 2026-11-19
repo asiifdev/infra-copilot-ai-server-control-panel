@@ -61,6 +61,9 @@ crates/i18n         en/id message catalog with stable keys and fallback
 crates/inventory    inventory model and the Collector / ParityRule contracts
 crates/collectors   read-only Linux collectors (listeners, processes, cron, PM2, systemd, Docker)
 crates/parity       parity rules PAR-001, PAR-002, PAR-006, PAR-007, PAR-008, PAR-009, PAR-010, comparer and localized report
+crates/net          SSRF-safe async HTTP/TLS client (certificate inspection) for the monitor
+crates/monitor      uptime incident engine (thresholds, maintenance, uptime %), pure logic
+crates/notifier     NotificationChannel contract, Telegram send channel, localized alerts
 crates/cli          `infra collect` and `infra compare` (offline, read-only)
 crates/db           SQLite schema, tenant-scoped queries, hash-chained audit log
 crates/proto-server throwaway prototype used to measure binary size, memory and startup
