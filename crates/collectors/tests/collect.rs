@@ -1065,3 +1065,20 @@ mod all_collectors {
         Ok(())
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn nolink_read_refuses_a_final_symlink_but_reads_plain_files() -> TestResult {
+    let tree = Tree::new("nolink")?;
+    tree.write("real.txt", b"hello")?;
+    std::os::unix::fs::symlink("/real.txt", tree.root.join("link.txt"))?;
+    let fs = tree.fs();
+    assert_eq!(fs.read_to_string_nolink("/real.txt", 100)?.text, "hello");
+    assert!(matches!(
+        fs.read_to_string_nolink("/link.txt", 100),
+        Err(FsError::WrongType)
+    ));
+    // The ordinary read still follows the link (inside the root).
+    assert_eq!(fs.read_to_string("/link.txt", 100)?.text, "hello");
+    Ok(())
+}

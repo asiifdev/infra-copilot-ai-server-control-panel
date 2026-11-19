@@ -102,7 +102,7 @@ impl Problems {
         add(self.invalid, "are not a valid PM2 dump (JSON array)");
         add(
             self.symlinks,
-            "were skipped because `.pm2` or the dump is a symbolic link",
+            "were skipped because `.pm2` or the dump is a symbolic link or not a regular file",
         );
         if self.bad_apps > 0 {
             out.push(format!(
@@ -155,12 +155,16 @@ impl Collector for Pm2 {
             let path = format!("{dir}/dump.pm2");
             // A user-writable home must not be able to point the collector at another file (for
             // example a root-only JSON file): links at `.pm2` and at the dump are refused.
-            if self.root.read_link(&dir).is_ok() || self.root.read_link(&path).is_ok() {
+            if self.root.read_link(&dir).is_ok() {
                 problems.symlinks += 1;
                 continue;
             }
-            let file = match self.root.read_to_string(&path, MAX_DUMP_BYTES) {
+            let file = match self.root.read_to_string_nolink(&path, MAX_DUMP_BYTES) {
                 Ok(file) => file,
+                Err(FsError::WrongType) => {
+                    problems.symlinks += 1;
+                    continue;
+                }
                 Err(FsError::NotFound) => continue,
                 Err(FsError::PermissionDenied) => {
                     problems.denied += 1;

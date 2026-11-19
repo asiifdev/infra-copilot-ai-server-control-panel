@@ -14,6 +14,9 @@
 //! found), never the host's. More than 40 links in one path is [`FsError::SymlinkLoop`].
 //! [`RootFs::read_link`] resolves only the parent components and returns the last link's text.
 //!
+//! [`RootFs::read_to_string_nolink`] closes the race for the final component (check after open);
+//! the limit below remains for the parent components.
+//!
 //! Limit (accepted, see decision 0013): a path is resolved and then opened, so another process that
 //! can **write inside the root while it is being read** could swap a component for a symlink in
 //! between (time-of-check to time-of-use) and make the open follow it out of the root. Closing that
@@ -194,31 +197,20 @@ impl RootFs {
     /// cannot block the collector.
     pub fn read_to_string(&self, rel: &str, max_bytes: usize) -> Result<FileText, FsError> {
         let path = self.resolve(rel, true)?;
-        // Cheap early refusal; the authoritative check is on the opened file below, so a file
-        // swapped for a FIFO in between cannot block the open (it is opened non-blocking where the
-        // flag is known).
-        let meta = fs::metadata(&path).map_err(|err| FsError::from(&err))?;
-        if !meta.is_file() {
-            return Err(FsError::WrongType);
-        }
-        let file = open_nonblocking(&path).map_err(|err| FsError::from(&err))?;
-        let opened = file.metadata().map_err(|err| FsError::from(&err))?;
-        if !opened.is_file() {
-            return Err(FsError::WrongType);
-        }
-        let limit = u64::try_from(max_bytes)
-            .unwrap_or(u64::MAX)
-            .saturating_add(1);
-        let mut bytes = Vec::new();
-        file.take(limit)
-            .read_to_end(&mut bytes)
-            .map_err(|err| FsError::from(&err))?;
-        let truncated = bytes.len() > max_bytes;
-        bytes.truncate(max_bytes);
-        Ok(FileText {
-            text: String::from_utf8_lossy(&bytes).into_owned(),
-            truncated,
-        })
+        read_file(&path, max_bytes, false)
+    }
+
+    /// Like [`RootFs::read_to_string`], but the **last** path component must not be a symbolic
+    /// link: it is refused with [`FsError::WrongType`], and the check is repeated after the file
+    /// is open (the opened file must be the very file `lstat` shows, same device and inode), so
+    /// the link cannot be swapped in between. Parent components are still resolved inside the root
+    /// (the limit in the module documentation applies to them).
+    ///
+    /// # Errors
+    /// [`FsError`]; see [`RootFs::read_to_string`].
+    pub fn read_to_string_nolink(&self, rel: &str, max_bytes: usize) -> Result<FileText, FsError> {
+        let path = self.resolve(rel, false)?;
+        read_file(&path, max_bytes, true)
     }
 
     /// Lists a directory: entry names sorted, at most `max_entries`.
@@ -260,6 +252,58 @@ impl RootFs {
         let target = fs::read_link(&path).map_err(|err| FsError::from(&err))?;
         Ok(target.to_string_lossy().into_owned())
     }
+}
+
+/// Opens and reads a regular file; with `nolink` the final component must not be a symlink.
+fn read_file(path: &std::path::Path, max_bytes: usize, nolink: bool) -> Result<FileText, FsError> {
+    if nolink {
+        let link = fs::symlink_metadata(path).map_err(|err| FsError::from(&err))?;
+        if link.file_type().is_symlink() {
+            return Err(FsError::WrongType);
+        }
+    }
+    // Cheap early refusal; the authoritative check is on the opened file below, so a file
+    // swapped for a FIFO in between cannot block the open (it is opened non-blocking where the
+    // flag is known).
+    let meta = fs::metadata(path).map_err(|err| FsError::from(&err))?;
+    if !meta.is_file() {
+        return Err(FsError::WrongType);
+    }
+    let file = open_nonblocking(path).map_err(|err| FsError::from(&err))?;
+    let opened = file.metadata().map_err(|err| FsError::from(&err))?;
+    if !opened.is_file() {
+        return Err(FsError::WrongType);
+    }
+    if nolink {
+        let after = fs::symlink_metadata(path).map_err(|err| FsError::from(&err))?;
+        if after.file_type().is_symlink() || !same_file(&opened, &after) {
+            return Err(FsError::WrongType);
+        }
+    }
+    let limit = u64::try_from(max_bytes)
+        .unwrap_or(u64::MAX)
+        .saturating_add(1);
+    let mut bytes = Vec::new();
+    file.take(limit)
+        .read_to_end(&mut bytes)
+        .map_err(|err| FsError::from(&err))?;
+    let truncated = bytes.len() > max_bytes;
+    bytes.truncate(max_bytes);
+    Ok(FileText {
+        text: String::from_utf8_lossy(&bytes).into_owned(),
+        truncated,
+    })
+}
+
+#[cfg(unix)]
+fn same_file(a: &fs::Metadata, b: &fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    a.dev() == b.dev() && a.ino() == b.ino()
+}
+
+#[cfg(not(unix))]
+fn same_file(_: &fs::Metadata, _: &fs::Metadata) -> bool {
+    true
 }
 
 /// One pending path component during resolution.

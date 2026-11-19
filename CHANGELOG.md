@@ -40,7 +40,7 @@ cannot drift apart. Release notes may get an Indonesian summary.
 
 ### Security
 
-- PM2 collector refuses symbolic links at `.pm2` and at the dump, reads `/root` first and records the owning account, so a user-writable home cannot redirect the read or shadow the administrator's apps.
+- PM2 collector refuses symbolic links at `.pm2` and at the dump, reads `/root` first and records the owning account, so a user-writable home cannot redirect the read or shadow the administrator's apps. The dump is opened with a check after open (`RootFs::read_to_string_nolink`), so a link swapped in between the check and the read is refused too; parent directories remain a documented limit (decision 0013).
 - Redaction now treats `PASS` and `AUTH` named values as secrets, and collectors hide separate-argument secrets in process command lines and cron commands (`-p secret`, `--password x`, `curl -u user:pw`). Found by independent review, covered by tests.
 - Redaction of nested quoted commands (`sh -c '...'`), `--user`/`--proxy-user` values and cron hints; `infra compare` sanitizes control characters from untrusted inventories so they cannot repaint the terminal or forge report lines.
 - Collectors resolve symlinks inside the chosen root only, so a symlink in a mounted or untrusted tree cannot read host files; a crontab or process name with multi-byte characters can no longer make the whole collection fail.
