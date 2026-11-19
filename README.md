@@ -7,7 +7,9 @@ English | [Bahasa Indonesia](README.id.md)
   <img src="brand/nodivara-lockup-light.png" alt="Nodivara logo: a lime and silver ribbon forming the letter N, next to the word Nodivara" width="620">
 </picture>
 
-### The server control panel with an AI agent that proposes, and **you** approve.
+### Control Your Infrastructure. Trust Every Operation.
+
+**AI proposes. You approve.** Compare two servers before you migrate: it runs today, read-only.
 
 [![CI](https://github.com/asiifdev/infra-copilot-ai-server-control-panel/actions/workflows/ci.yml/badge.svg)](https://github.com/asiifdev/infra-copilot-ai-server-control-panel/actions/workflows/ci.yml)
 ![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-b6f205?style=flat-square&labelColor=0d1020)
@@ -15,7 +17,7 @@ English | [Bahasa Indonesia](README.id.md)
 ![Built with Rust and Svelte 5](https://img.shields.io/badge/built%20with-Rust%20%2B%20Svelte%205-b6f205?style=flat-square&labelColor=0d1020)
 ![Languages: English and Indonesian](https://img.shields.io/badge/UI-EN%20%7C%20ID-b6f205?style=flat-square&labelColor=0d1020)
 
-[What works today](#what-works-today) · [How it works](#how-it-works) · [Built to be trusted](#built-to-be-trusted) · [Roadmap](#roadmap) · [FAQ](docs/faq.md) · [Compare](docs/comparison.md)
+[What works today](#what-works-today) · [Who it is for](#who-is-nodivara-for) · [How it works](#how-it-works) · [Built to be trusted](#built-to-be-trusted) · [Roadmap](#roadmap) · [FAQ](docs/faq.md) · [Compare](docs/comparison.md)
 
 </div>
 
@@ -46,6 +48,8 @@ cargo run -q -p cli -- collect > target.json        # on the new server
 cargo run -q -p cli -- compare source.json target.json --lang en
 ```
 
+Use it as a server migration checklist: run `collect` on the old and the new machine, then `compare`.
+
 Real output, from the anonymous test fixtures in this repository (shortened):
 
 ```text
@@ -66,6 +70,14 @@ only these rules were checked: PAR-001, PAR-002, PAR-006, PAR-007, PAR-008, PAR-
 ```
 
 The report says what it did **not** check. That honesty is deliberate: a parity tool that claims more than it proves is worse than none.
+
+## Who is Nodivara for?
+
+| If you are | The problem | What you get |
+|---|---|---|
+| **A developer or sysadmin** | One wrong command on a production server costs more than the time an assistant saves. | **Today:** a read-only inventory and a parity check you run from the command line, with the source open to read. **Planned:** an agent that can only pick from a closed list of actions and needs your approval. |
+| **An IT architect or infrastructure lead** | You need evidence before a cutover and a record afterwards. | **Today:** a repeatable report that also names what it did not check. **Planned:** approval gates by risk tier and an audit log (the database schema for both already exists). |
+| **An agency, software house or business owner** | A client's site breaks after a move because one job or service was forgotten. | **Today:** a server migration checklist you can run: it finds what the VPS migration left behind before you switch the old server off. **Planned:** one panel for many servers, with Telegram alerts. |
 
 ## How it works
 

@@ -60,6 +60,7 @@ Temuan dari pengukuran ini: kotak pilihan bahasa semula memakai warna bawaan bro
 | `nodivara-lockup-light.png` | tanda + tulisan, teks gelap di atas putih | latar terang (README tema terang) |
 | `nodivara-mark-512.png`, `-128.png` | tanda N di ubin gelap | ikon aplikasi, favicon di latar gelap |
 | `nodivara-mark-light-512.png`, `-128.png` | tanda N di atas putih | ikon di latar terang |
-| `nodivara-square-light-640.png` | tanda + tulisan + gelombang hijau, persegi | pratinjau sosial, kartu |
+| `nodivara-square-light-640.png` | tanda + tulisan + gelombang hijau, persegi | kartu, avatar |
+| `nodivara-social-1280x640.png` | logo, slogan, dan "AI proposes. You approve." di atas gelap | pratinjau sosial GitHub (diunggah manual di Settings, tidak lewat API) |
 
 Latar semua PNG opak (putih atau gelap), bukan transparan. Belum ada: SVG vektor dan versi transparan. Minta ke pemilik; jangan menyunting PNG yang ada untuk membuatnya.

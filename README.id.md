@@ -7,7 +7,9 @@
   <img src="brand/nodivara-lockup-light.png" alt="Logo Nodivara: pita hijau lime dan perak yang membentuk huruf N, di samping tulisan Nodivara" width="620">
 </picture>
 
-### Panel kontrol server dengan agen AI yang mengusulkan, dan **Anda** yang menyetujui.
+### Kendalikan infrastruktur Anda. Percayai setiap operasi.
+
+**AI mengusulkan. Anda menyetujui.** Bandingkan dua server sebelum migrasi: sudah berjalan hari ini, hanya-baca.
 
 [![CI](https://github.com/asiifdev/infra-copilot-ai-server-control-panel/actions/workflows/ci.yml/badge.svg)](https://github.com/asiifdev/infra-copilot-ai-server-control-panel/actions/workflows/ci.yml)
 ![Status: pra-alfa](https://img.shields.io/badge/status-pra--alfa-b6f205?style=flat-square&labelColor=0d1020)
@@ -15,7 +17,7 @@
 ![Dibangun dengan Rust dan Svelte 5](https://img.shields.io/badge/dibangun%20dengan-Rust%20%2B%20Svelte%205-b6f205?style=flat-square&labelColor=0d1020)
 ![Bahasa: Inggris dan Indonesia](https://img.shields.io/badge/UI-EN%20%7C%20ID-b6f205?style=flat-square&labelColor=0d1020)
 
-[Yang sudah berjalan](#yang-sudah-berjalan-hari-ini) · [Cara kerjanya](#cara-kerjanya) · [Dibangun untuk dipercaya](#dibangun-untuk-dipercaya) · [Peta jalan](#peta-jalan) · [FAQ](docs/faq.id.md) · [Perbandingan](docs/comparison.id.md)
+[Yang sudah berjalan](#yang-sudah-berjalan-hari-ini) · [Untuk siapa](#nodivara-untuk-siapa) · [Cara kerjanya](#cara-kerjanya) · [Dibangun untuk dipercaya](#dibangun-untuk-dipercaya) · [Peta jalan](#peta-jalan) · [FAQ](docs/faq.id.md) · [Perbandingan](docs/comparison.id.md)
 
 </div>
 
@@ -46,6 +48,8 @@ cargo run -q -p cli -- collect > target.json        # di server baru
 cargo run -q -p cli -- compare source.json target.json --lang id
 ```
 
+Pakai sebagai daftar periksa migrasi server: jalankan `collect` di mesin lama dan baru, lalu `compare`.
+
 Keluaran asli, dari data uji anonim di repositori ini (dipersingkat):
 
 ```text
@@ -65,6 +69,14 @@ aturan berikut yang diperiksa: PAR-001, PAR-002, PAR-006, PAR-007, PAR-008, PAR-
 ```
 
 Laporannya menyebut apa yang **tidak** diperiksa. Itu disengaja: alat kesetaraan yang mengklaim lebih dari yang ia buktikan lebih buruk daripada tidak ada.
+
+## Nodivara untuk siapa?
+
+| Jika Anda | Masalahnya | Yang Anda dapat |
+|---|---|---|
+| **Developer atau sysadmin** | Satu perintah salah di server produksi lebih mahal daripada waktu yang dihemat asisten. | **Hari ini:** inventaris hanya-baca dan pemeriksaan kesetaraan dari command line, kode sumber terbuka untuk dibaca. **Direncanakan:** agen yang hanya bisa memilih dari daftar aksi tertutup dan butuh persetujuan Anda. |
+| **Arsitek IT atau kepala infrastruktur** | Anda butuh bukti sebelum peralihan dan catatan sesudahnya. | **Hari ini:** laporan yang bisa diulang dan menyebut apa yang tidak diperiksa. **Direncanakan:** gerbang persetujuan menurut tingkat risiko dan log audit (skema database untuk keduanya sudah ada). |
+| **Agensi, software house, atau pemilik bisnis** | Situs klien rusak setelah dipindah karena satu job atau layanan terlupa. | **Hari ini:** daftar periksa migrasi server yang bisa dijalankan: menemukan yang tertinggal saat migrasi VPS sebelum server lama dimatikan. **Direncanakan:** satu panel untuk banyak server, dengan alert Telegram. |
 
 ## Cara kerjanya
 

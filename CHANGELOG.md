@@ -13,6 +13,7 @@ cannot drift apart. Release notes may get an Indonesian summary.
 
 - A visual README in English and Indonesian: logo hero, honest status table, an operating-loop diagram (`docs/assets/operating-loop.svg`, every step labelled NOW, BUILDING or PLANNED), a real CLI output sample, a table of the safety rules enforced today with links to the code, and the roadmap.
 
+- Discoverability: a lead line and a one-line mechanism in both READMEs, a "Who is Nodivara for?" section by role, the same canonical definition in the README, FAQ and `llms.txt`, and a 1280x640 social preview image (`brand/nodivara-social-1280x640.png`; GitHub only accepts it through the repository settings).
 - Light-theme logo files (lockup, mark, square) in `brand/`; the README picks the light or dark lockup with `<picture>`.
 - Product name **Nodivara** (decision 0019) and the brand palette: colour tokens sampled from the logo with light and dark themes (`ui/src/tokens.css`), a contrast checker run in CI (WCAG AAA 7:1 for every text token on every surface, 3:1 for UI boundaries) (`scripts/check-palette.py`), optimized logo files in `brand/` and a usage guide (`docs/brand.md`). The repository, crate and binary names are unchanged. A trademark and domain check is still pending.
 
