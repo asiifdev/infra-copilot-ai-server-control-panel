@@ -1,0 +1,20 @@
+[package]
+name = "cli"
+description = "The infra command line: read-only inventory collection and parity comparison."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "infra"
+path = "src/main.rs"
+
+[dependencies]
+collectors = { path = "../collectors" }
+i18n = { path = "../i18n" }
+inventory = { path = "../inventory" }
+parity = { path = "../parity" }
+
+[lints]
+workspace = true
