@@ -13,11 +13,13 @@ fn catalog() -> Result<Catalog, String> {
 #[test]
 fn every_kind_renders_completely_in_both_locales() -> Result<(), String> {
     let catalog = catalog()?;
+    let mut reasons = Vec::new();
     let detail = AlertDetail {
         error: Some(ErrorClass::HttpStatus),
         http_status: Some(503),
         days_left: Some(5),
         repeat_count: Some(3),
+        delayed_since: Some(30),
     };
     for locale in Locale::ALL {
         for kind in AlertKind::ALL {
@@ -46,6 +48,9 @@ fn every_kind_renders_completely_in_both_locales() -> Result<(), String> {
             ErrorClass::Tls,
             ErrorClass::Timeout,
             ErrorClass::HttpStatus,
+            ErrorClass::KeywordMissing,
+            ErrorClass::BlockedAddress,
+            ErrorClass::Protocol,
             ErrorClass::Other,
         ] {
             let d = AlertDetail {
@@ -53,7 +58,10 @@ fn every_kind_renders_completely_in_both_locales() -> Result<(), String> {
                 ..AlertDetail::default()
             };
             let e = AlertEvent::new(AlertKind::Down, "n", "h", None, None, d);
-            assert!(!render(&e, locale, &catalog).body.contains("notify."));
+            let body = render(&e, locale, &catalog).body;
+            assert!(!body.contains("notify."), "{class:?}/{locale:?}: {body}");
+            assert!(!body.contains(['{', '}']), "{class:?}/{locale:?}: {body}");
+            reasons.push((locale, class, body));
         }
     }
     let down = AlertEvent::new(
@@ -74,6 +82,50 @@ fn every_kind_renders_completely_in_both_locales() -> Result<(), String> {
             .title
             .starts_with("DOWN")
     );
+    // Every class has its own line in each locale.
+    for locale in Locale::ALL {
+        let mut bodies: Vec<&String> = reasons
+            .iter()
+            .filter(|(l, _, _)| *l == locale)
+            .map(|(_, _, b)| b)
+            .collect();
+        assert_eq!(bodies.len(), 9);
+        bodies.sort();
+        bodies.dedup();
+        assert_eq!(bodies.len(), 9, "reasons must be distinct in {locale:?}");
+    }
+    Ok(())
+}
+
+#[test]
+fn cert_expiring_without_exact_time_shows_days_only() -> Result<(), String> {
+    let catalog = catalog()?;
+    let detail = AlertDetail {
+        days_left: Some(9),
+        ..AlertDetail::default()
+    };
+    let e = AlertEvent::new(AlertKind::CertExpiring, "n", "h:443", None, None, detail);
+    for locale in Locale::ALL {
+        let body = render(&e, locale, &catalog).body;
+        assert!(body.contains('9'), "{body}");
+        assert!(!body.contains("UTC"), "no guessed timestamp: {body}");
+    }
+    Ok(())
+}
+
+#[test]
+fn delayed_alerts_say_so() -> Result<(), String> {
+    let catalog = catalog()?;
+    let detail = AlertDetail {
+        delayed_since: Some(1_700_000_000),
+        ..AlertDetail::default()
+    };
+    let e = AlertEvent::new(AlertKind::Down, "n", "h", None, None, detail);
+    for locale in Locale::ALL {
+        let body = render(&e, locale, &catalog).body;
+        assert!(body.contains("2023-11-14 22:13 UTC"), "{body}");
+        assert!(!body.contains(['{', '}']) && !body.contains("notify."));
+    }
     Ok(())
 }
 

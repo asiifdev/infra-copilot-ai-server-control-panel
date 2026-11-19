@@ -50,6 +50,12 @@ pub enum ErrorClass {
     Timeout,
     /// Unexpected HTTP status (see `AlertDetail::http_status`).
     HttpStatus,
+    /// The page was reachable but the expected keyword was missing.
+    KeywordMissing,
+    /// The target resolved to an address the checker refuses to contact.
+    BlockedAddress,
+    /// The peer broke the protocol (malformed reply, redirect loop).
+    Protocol,
     /// Anything else.
     Other,
 }
@@ -65,6 +71,8 @@ pub struct AlertDetail {
     pub days_left: Option<i64>,
     /// Consecutive failed checks.
     pub repeat_count: Option<u32>,
+    /// Set when the alert was held back and is sent late: when it was first raised (unix seconds).
+    pub delayed_since: Option<i64>,
 }
 
 /// One alert, ready to render.

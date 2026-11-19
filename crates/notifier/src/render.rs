@@ -18,6 +18,7 @@ const LINE_SINCE: MessageKey = MessageKey::new("notify.line.since");
 const LINE_RESOLVED: MessageKey = MessageKey::new("notify.line.resolved");
 const LINE_EXPIRES: MessageKey = MessageKey::new("notify.line.expires");
 const LINE_REPEATS: MessageKey = MessageKey::new("notify.line.repeats");
+const LINE_DELAYED: MessageKey = MessageKey::new("notify.line.delayed");
 const LINE_DAYS_LEFT: MessageKey = MessageKey::new("notify.line.days_left");
 
 const fn reason_key(class: ErrorClass) -> MessageKey {
@@ -27,6 +28,9 @@ const fn reason_key(class: ErrorClass) -> MessageKey {
         ErrorClass::Tls => MessageKey::new("notify.error.tls"),
         ErrorClass::Timeout => MessageKey::new("notify.error.timeout"),
         ErrorClass::HttpStatus => MessageKey::new("notify.error.http"),
+        ErrorClass::KeywordMissing => MessageKey::new("notify.error.keyword_missing"),
+        ErrorClass::BlockedAddress => MessageKey::new("notify.error.blocked_address"),
+        ErrorClass::Protocol => MessageKey::new("notify.error.protocol"),
         ErrorClass::Other => MessageKey::new("notify.error.other"),
     }
 }
@@ -96,6 +100,9 @@ pub fn render(event: &AlertEvent, locale: Locale, catalog: &Catalog) -> Message 
     }
     if let Some(count) = event.detail.repeat_count {
         lines.push(tr(LINE_REPEATS, &[("count", &count.to_string())]));
+    }
+    if let Some(raised) = event.detail.delayed_since {
+        lines.push(tr(LINE_DELAYED, &[("time", &format_utc(raised))]));
     }
     Message {
         severity: event.kind.severity(),

@@ -24,8 +24,8 @@ mod transport;
 pub use clock::{Clock, FakeClock, SystemClock};
 pub use config::{ChannelSpec, MAX_MONITORS, MinSeverity, MonitorSpec, QuietSpec, WatchConfig};
 pub use engine::{
-    AlertReport, Delivery, Engine, EngineSnapshot, ProbeReport, RunReport, map_error_class,
-    to_event,
+    AlertReport, Delivery, Engine, EngineSnapshot, MAX_PENDING, PendingAlert, ProbeReport,
+    RunReport, map_error_class, to_event,
 };
 pub use error::WatchError;
 pub use probe::{NetProber, Probe, map_net_error};

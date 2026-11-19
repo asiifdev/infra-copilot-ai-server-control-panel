@@ -22,7 +22,7 @@ use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 use watch::{
     ChannelSpec, Clock, Delivery, Engine, EngineSnapshot, EnvSecrets, FakeClock, MinSeverity,
-    MonitorSpec, NetProber, NetTransport, Probe, SecretError, SecretSource, WatchConfig,
+    MonitorSpec, NetProber, NetTransport, Probe, QuietSpec, SecretError, SecretSource, WatchConfig,
     WatchError,
 };
 
@@ -276,6 +276,299 @@ async fn severity_policy_skips_recovery_when_min_is_critical() -> R {
     let r = eng.run_once(1_010).await;
     assert_eq!(r.alerts[0].delivery, Delivery::SkippedByPolicy);
     assert_eq!(channel.calls.load(Ordering::SeqCst), 1);
+    assert!(
+        eng.snapshot().pending.is_empty(),
+        "a user's severity choice is not a backlog"
+    );
+    Ok(())
+}
+
+#[test]
+fn distinct_reasons_map_to_distinct_alert_classes() {
+    use notifier::ErrorClass as N;
+    let all = [
+        (ErrorClass::Timeout, N::Timeout),
+        (ErrorClass::DnsFailure, N::Dns),
+        (ErrorClass::ConnectFailed, N::Connect),
+        (ErrorClass::TlsFailure, N::Tls),
+        (ErrorClass::UnexpectedStatus(500), N::HttpStatus),
+        (ErrorClass::KeywordMissing, N::KeywordMissing),
+        (ErrorClass::BlockedAddress, N::BlockedAddress),
+        (ErrorClass::Protocol, N::Protocol),
+        (ErrorClass::Other, N::Other),
+    ];
+    for (class, expected) in all {
+        assert_eq!(watch::map_error_class(class), expected);
+    }
+}
+
+#[test]
+fn cert_expiring_alert_carries_days_but_no_guessed_time() {
+    let spec = tcp_monitor("tls", 1);
+    let event = watch::to_event(
+        &spec.config,
+        monitor::Transition::CertExpiring { days_left: 6 },
+    );
+    assert_eq!(event.detail.days_left, Some(6));
+    assert_eq!(event.until, None);
+}
+
+// ---------- pending queue ----------
+
+/// 20000 days after the epoch, midnight UTC.
+const DAY0: i64 = 1_728_000_000;
+const H: i64 = 3_600;
+
+/// Quiet hours 22:00-06:00 UTC (wraps past midnight).
+fn quiet_cfg(monitors: Vec<MonitorSpec>, critical_bypasses: bool) -> WatchConfig {
+    let mut cfg = watch_cfg(monitors);
+    cfg.channel.quiet_hours = Some(QuietSpec {
+        start_min: 22 * 60,
+        end_min: 6 * 60,
+        utc_offset_min: 0,
+        critical_bypasses,
+    });
+    cfg
+}
+
+fn toggle_probe() -> (Arc<AtomicBool>, Arc<ScriptProbe>) {
+    let healthy = Arc::new(AtomicBool::new(false));
+    let h = Arc::clone(&healthy);
+    let probe = Arc::new(ScriptProbe::new(move |_, _| {
+        if h.load(Ordering::SeqCst) {
+            up()
+        } else {
+            down()
+        }
+    }));
+    (healthy, probe)
+}
+
+fn quiet_monitor(id: &str) -> MonitorSpec {
+    let mut m = tcp_monitor(id, 1);
+    m.config.repeat_every_secs = 0;
+    m
+}
+
+fn deliveries(r: &watch::RunReport) -> Vec<Delivery> {
+    r.alerts.iter().map(|a| a.delivery).collect()
+}
+
+#[tokio::test]
+async fn quiet_hours_across_midnight_defer_then_deliver() -> R {
+    let (_, probe) = toggle_probe();
+    let channel = Arc::new(ScriptChannel::default());
+    let mut eng = engine(
+        quiet_cfg(vec![quiet_monitor("web")], false),
+        &probe,
+        &channel,
+    )?;
+
+    let r = eng.run_once(DAY0 + 23 * H + 1_800).await;
+    assert_eq!(deliveries(&r), vec![Delivery::Deferred]);
+    assert!(deliveries(&eng.run_once(DAY0 + 86_400 + 2 * H).await).is_empty());
+    assert!(deliveries(&eng.run_once(DAY0 + 86_400 + 6 * H - 60).await).is_empty());
+    assert!(lock(&channel.sent).is_empty());
+    assert_eq!(eng.snapshot().pending.len(), 1);
+
+    let r = eng.run_once(DAY0 + 86_400 + 6 * H + 1_800).await;
+    assert_eq!(deliveries(&r), vec![Delivery::SentAfterDelay]);
+    let sent = lock(&channel.sent).clone();
+    assert_eq!(sent.len(), 1);
+    assert!(sent[0].title.contains("web"));
+    assert!(sent[0].body.contains("Delayed alert"), "{}", sent[0].body);
+    assert!(sent[0].body.contains("23:30 UTC"), "{}", sent[0].body);
+    assert!(eng.snapshot().pending.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn critical_bypass_sends_now_but_info_waits() -> R {
+    let (healthy, probe) = toggle_probe();
+    let channel = Arc::new(ScriptChannel::default());
+    let mut eng = engine(
+        quiet_cfg(vec![quiet_monitor("web")], true),
+        &probe,
+        &channel,
+    )?;
+    let r = eng.run_once(DAY0 + 23 * H).await;
+    assert_eq!(deliveries(&r), vec![Delivery::Sent]);
+    healthy.store(true, Ordering::SeqCst);
+    let r = eng.run_once(DAY0 + 23 * H + 600).await;
+    assert_eq!(deliveries(&r), vec![Delivery::Deferred]);
+    let r = eng.run_once(DAY0 + 86_400 + 7 * H).await;
+    assert_eq!(deliveries(&r), vec![Delivery::SentAfterDelay]);
+    assert_eq!(lock(&channel.sent).len(), 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn throttle_backlog_drains_in_order() -> R {
+    let probe = Arc::new(ScriptProbe::new(|_, _| down()));
+    let channel = Arc::new(ScriptChannel::default());
+    let mut cfg = watch_cfg(vec![
+        quiet_monitor("a"),
+        quiet_monitor("b"),
+        quiet_monitor("c"),
+    ]);
+    cfg.max_alerts_per_minute = 1;
+    let mut eng = engine(cfg, &probe, &channel)?;
+    let r = eng.run_once(1_000).await;
+    assert_eq!(
+        deliveries(&r),
+        vec![Delivery::Sent, Delivery::Deferred, Delivery::Deferred]
+    );
+    assert!(deliveries(&eng.run_once(1_030).await).is_empty());
+    let r = eng.run_once(1_061).await;
+    assert_eq!(deliveries(&r), vec![Delivery::SentAfterDelay]);
+    assert_eq!(r.alerts[0].id, "b");
+    let r = eng.run_once(1_122).await;
+    assert_eq!(deliveries(&r), vec![Delivery::SentAfterDelay]);
+    assert_eq!(r.alerts[0].id, "c");
+    let titles: Vec<String> = lock(&channel.sent)
+        .iter()
+        .map(|m| m.title.clone())
+        .collect();
+    assert_eq!(titles.len(), 3);
+    for (title, name) in titles.iter().zip(["a", "b", "c"]) {
+        assert!(title.contains(name), "{title}");
+    }
+    assert!(eng.snapshot().pending.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn repeated_reminders_coalesce_while_held_back() -> R {
+    let (_, probe) = toggle_probe();
+    let channel = Arc::new(ScriptChannel::default());
+    let mut spec = tcp_monitor("web", 1);
+    spec.config.repeat_every_secs = 20;
+    let mut eng = engine(quiet_cfg(vec![spec], false), &probe, &channel)?;
+    let t = DAY0 + 23 * H;
+    assert_eq!(deliveries(&eng.run_once(t).await), vec![Delivery::Deferred]);
+    assert_eq!(
+        deliveries(&eng.run_once(t + 30).await),
+        vec![Delivery::Deferred]
+    );
+    let r = eng.run_once(t + 60).await;
+    assert_eq!(
+        deliveries(&r),
+        vec![Delivery::Superseded, Delivery::Deferred],
+        "the older reminder is replaced by the newer"
+    );
+    assert_eq!(eng.snapshot().pending.len(), 2, "one Down, one StillDown");
+
+    // The pass after the window also raises a fresh reminder, which replaces the queued one.
+    let r = eng.run_once(DAY0 + 86_400 + 7 * H).await;
+    assert_eq!(
+        deliveries(&r),
+        vec![
+            Delivery::Superseded,
+            Delivery::Sent,
+            Delivery::SentAfterDelay
+        ]
+    );
+    let sent = lock(&channel.sent).clone();
+    assert_eq!(sent.len(), 2);
+    assert!(sent[0].title.starts_with("DOWN"), "{}", sent[0].title);
+    assert!(sent[1].title.starts_with("STILL DOWN"), "{}", sent[1].title);
+    assert!(sent[1].body.contains("in a row: 3"), "{}", sent[1].body);
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_pending_queue_is_bounded() -> R {
+    let (_, probe) = toggle_probe();
+    let channel = Arc::new(ScriptChannel::default());
+    let n = watch::MAX_PENDING + 2;
+    let monitors = (0..n).map(|i| quiet_monitor(&format!("m{i:03}"))).collect();
+    let mut eng = engine(quiet_cfg(monitors, false), &probe, &channel)?;
+    let r = eng.run_once(DAY0 + 23 * H).await;
+    let dropped: Vec<&str> = r
+        .alerts
+        .iter()
+        .filter(|a| a.delivery == Delivery::Dropped)
+        .map(|a| a.id.as_str())
+        .collect();
+    assert_eq!(dropped, vec!["m000", "m001"], "oldest go first");
+    assert_eq!(eng.snapshot().pending.len(), watch::MAX_PENDING);
+    Ok(())
+}
+
+#[tokio::test]
+async fn old_snapshots_without_a_queue_still_restore() -> R {
+    let (_, probe) = toggle_probe();
+    let channel = Arc::new(ScriptChannel::default());
+    let cfg = quiet_cfg(vec![quiet_monitor("web")], false);
+    let old: EngineSnapshot = serde_json::from_str(r#"{"states":[]}"#)?;
+    assert!(old.pending.is_empty());
+    let mut eng = engine(cfg.clone(), &probe, &channel)?;
+    assert_eq!(eng.restore(old), 0);
+
+    // A queue survives a JSON round trip and is delivered by the new engine, as delayed.
+    eng.run_once(DAY0 + 23 * H).await;
+    let mut snap: EngineSnapshot = serde_json::from_str(&serde_json::to_string(&eng.snapshot())?)?;
+    assert_eq!(snap.pending.len(), 1);
+    let mut stray = snap.pending[0].clone();
+    stray.id = "gone".into();
+    snap.pending.push(stray);
+    let mut fresh = engine(cfg, &probe, &channel)?;
+    assert_eq!(fresh.restore(snap), 1);
+    assert_eq!(fresh.snapshot().pending.len(), 1, "unknown monitor dropped");
+    let r = fresh.run_once(DAY0 + 86_400 + 7 * H).await;
+    assert_eq!(deliveries(&r), vec![Delivery::SentAfterDelay]);
+    assert!(lock(&channel.sent)[0].body.contains("Delayed alert"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn recovery_replaces_an_unsent_outage_alert_and_is_never_filtered() -> R {
+    for min in [MinSeverity::Info, MinSeverity::Critical] {
+        let (healthy, probe) = toggle_probe();
+        let channel = Arc::new(ScriptChannel::default());
+        let mut cfg = quiet_cfg(vec![quiet_monitor("web")], false);
+        cfg.channel.min_severity = min;
+        let mut eng = engine(cfg, &probe, &channel)?;
+        let t = DAY0 + 23 * H + 1_800;
+        assert_eq!(deliveries(&eng.run_once(t).await), vec![Delivery::Deferred]);
+        healthy.store(true, Ordering::SeqCst);
+        let r = eng.run_once(t + 600).await;
+        assert_eq!(
+            deliveries(&r),
+            vec![Delivery::Superseded, Delivery::Deferred],
+            "min severity {min:?}: the outage must still be announced"
+        );
+        let pending = eng.snapshot().pending;
+        assert_eq!(pending.len(), 1);
+        assert!(pending[0].escalated);
+
+        let r = eng.run_once(DAY0 + 86_400 + 7 * H).await;
+        assert_eq!(deliveries(&r), vec![Delivery::SentAfterDelay]);
+        let sent = lock(&channel.sent).clone();
+        assert_eq!(sent.len(), 1, "one message tells the whole story");
+        assert!(sent[0].title.starts_with("Recovered"), "{}", sent[0].title);
+        assert!(sent[0].body.contains("Since: ") && sent[0].body.contains("23:30 UTC"));
+        assert!(sent[0].body.contains("Resolved: ") && sent[0].body.contains("23:40 UTC"));
+        assert!(sent[0].body.contains("Delayed alert"));
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn recovery_after_a_delivered_outage_alert_stays_plain() -> R {
+    let (healthy, probe) = toggle_probe();
+    let channel = Arc::new(ScriptChannel::default());
+    let mut cfg = quiet_cfg(vec![quiet_monitor("web")], true);
+    cfg.channel.min_severity = MinSeverity::Critical;
+    let mut eng = engine(cfg, &probe, &channel)?;
+    assert_eq!(
+        deliveries(&eng.run_once(DAY0 + 23 * H).await),
+        vec![Delivery::Sent]
+    );
+    healthy.store(true, Ordering::SeqCst);
+    let r = eng.run_once(DAY0 + 23 * H + 600).await;
+    assert_eq!(deliveries(&r), vec![Delivery::SkippedByPolicy]);
+    assert!(eng.snapshot().pending.is_empty());
     Ok(())
 }
 
@@ -288,7 +581,7 @@ async fn throttle_caps_alerts_per_minute() -> R {
     let mut eng = engine(cfg, &probe, &channel)?;
     let r = eng.run_once(1_000).await;
     let d: Vec<Delivery> = r.alerts.iter().map(|a| a.delivery).collect();
-    assert_eq!(d, vec![Delivery::Sent, Delivery::Throttled]);
+    assert_eq!(d, vec![Delivery::Sent, Delivery::Deferred]);
     Ok(())
 }
 
