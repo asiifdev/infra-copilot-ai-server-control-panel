@@ -40,6 +40,7 @@ cannot drift apart. Release notes may get an Indonesian summary.
 - `net` crate: async HTTP/TLS client for the monitor (decision 0016): GET and JSON POST with redirect, size and time caps, an address check at the exact connect call (private, loopback, link-local and metadata ranges are refused by default), TCP connect timing and certificate inspection that also works for expired or self-signed servers.
 - `monitor` crate: pure uptime incident engine (failure and recovery thresholds, maintenance windows, repeat and flapping guards, uptime percentage); probe results carry no server text.
 - `notifier` crate: `NotificationChannel` contract with a shared contract suite, a send-only Telegram channel (MarkdownV2 escaping, closed error set, token never in any error or Debug output), localized en/id alerts, quiet hours and throttling.
+- `watch` crate: runs monitor probes through `net` (concurrent, bounded, per-check timeouts), feeds the incident engine and sends localized alerts through a `NotificationChannel` (Telegram over `net`). The bot token is read at send time from a named environment variable behind a `SecretSource` trait (a stop-gap, decision 0018); monitors on private addresses need an explicit per-monitor opt-in.
 
 ### Security
 

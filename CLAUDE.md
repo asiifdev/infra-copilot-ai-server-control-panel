@@ -3,7 +3,7 @@
 Panel pengelolaan server open-core (setara aaPanel + cPanel versi berbayar) dengan **agen AI bawaan yang mendalam** (OpenAI-compatible, persetujuan manusia). Migrasi dan pemeriksaan kesetaraan adalah fitur unggulan di dalamnya.
 Dijual sebagai self-host gratis (terbatas), self-host berlisensi, atau cloud berlangganan.
 
-**Status: tahap rencana, kode baru fondasi M0 dan M1-a (crate `core`, `i18n`, `db`, `inventory`, `collectors`, `parity`, `cli`, `net`, `monitor`, `notifier`, prototipe `proto-server` + `ui/`).** Baca [docs/plan.md](docs/plan.md) dan [docs/design.md](docs/design.md) sebelum mengerjakan apa pun. Sudah diputuskan: tetap dibangun, dogfooding dulu, pasar internasional, ID/EN (`docs/decisions/0002`). Belum final: nama, lisensi, kerangka UI, cakupan MVP (bagian 11 rencana). Jangan memilih sendiri; tanyakan atau catat sebagai usulan.
+**Status: tahap rencana, kode baru fondasi M0 dan M1-a (crate `core`, `i18n`, `db`, `inventory`, `collectors`, `parity`, `cli`, `net`, `monitor`, `notifier`, `watch`, prototipe `proto-server` + `ui/`).** Baca [docs/plan.md](docs/plan.md) dan [docs/design.md](docs/design.md) sebelum mengerjakan apa pun. Sudah diputuskan: tetap dibangun, dogfooding dulu, pasar internasional, ID/EN (`docs/decisions/0002`). Belum final: nama, lisensi, kerangka UI, cakupan MVP (bagian 11 rencana). Jangan memilih sendiri; tanyakan atau catat sebagai usulan.
 
 ## Klaim produk (jangan melenceng)
 
@@ -80,7 +80,7 @@ docs/plan.md          rencana produk (sumber kebenaran tahapan)
 docs/design.md        desain teknis: skema DB, format inventaris, protokol agen, alur persetujuan
 docs/market-research.md  riset pasar (fakta vs inferensi, sumber)
 docs/decisions/       catatan keputusan (0000 templat, 0001 tertunda, 0002 bangun/dogfood/ID-EN)
-crates/               workspace Rust: core, i18n, db, inventory, collectors, parity, cli, net, monitor, notifier, proto-server (prototipe sementara)
+crates/               workspace Rust: core, i18n, db, inventory, collectors, parity, cli, net, monitor, notifier, watch, proto-server (prototipe sementara)
 ui/                   prototipe Svelte 5 + Vite
 scripts/              skrip bantu (check-personal-data.sh, check-docs.py, measure.sh)
 .claude/skills/       skill khusus proyek

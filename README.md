@@ -64,6 +64,7 @@ crates/parity       parity rules PAR-001, PAR-002, PAR-006, PAR-007, PAR-008, PA
 crates/net          SSRF-safe async HTTP/TLS client (certificate inspection) for the monitor
 crates/monitor      uptime incident engine (thresholds, maintenance, uptime %), pure logic
 crates/notifier     NotificationChannel contract, Telegram send channel, localized alerts
+crates/watch        glue: probes via net, incidents via monitor, Telegram alerts via notifier (library)
 crates/cli          `infra collect` and `infra compare` (offline, read-only)
 crates/db           SQLite schema, tenant-scoped queries, hash-chained audit log
 crates/proto-server throwaway prototype used to measure binary size, memory and startup

@@ -70,6 +70,7 @@ crates/parity       aturan kesetaraan PAR-001, PAR-002, PAR-006, PAR-007, PAR-00
 crates/net          klien HTTP/TLS async aman SSRF (pemeriksaan sertifikat) untuk monitor
 crates/monitor      mesin insiden uptime (ambang, pemeliharaan, persen uptime), logika murni
 crates/notifier     kontrak NotificationChannel, channel kirim Telegram, alert terlokalisasi
+crates/watch        perekat: probe lewat net, insiden lewat monitor, alert Telegram lewat notifier (pustaka)
 crates/cli  dan `infra compare` (offline, hanya-baca)
 crates/db           skema SQLite, kueri per organisasi, log audit berantai-hash
 crates/proto-server prototipe sementara untuk mengukur ukuran biner, memori, dan waktu mulai
