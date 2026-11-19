@@ -6,7 +6,7 @@ Terakhir diperbarui: 2026-11-19 (setelah langkah 1-5 M0). Dokumen kerja internal
 
 - Repo publik dengan CI hijau (fmt, clippy, tes di Linux dan macOS, `cargo deny`, `cargo audit`, gitleaks, pemeriksaan dokumen) dan perlindungan cabang `main`.
 - Crate `core-domain` (tingkat risiko dan penyaring rahasia), 25 tes, tanpa dependensi luar.
-- Crate `i18n` (katalog en/id), `db` (skema SQLite M0, isolasi tenant, audit berantai-hash), dan prototipe `proto-server` + `ui/` dengan `scripts/measure.sh` (langkah 1-5 M0 selesai; keputusan 0007-0012 diterima; angka anggaran Linux menunggu kalibrasi).
+- Crate `i18n` (katalog en/id), `db` (skema SQLite M0, isolasi tenant, audit berantai-hash), dan prototipe `proto-server` + `ui/` dengan `scripts/measure.sh` (langkah 1-5 M0 selesai; keputusan 0007-0013 diterima; angka anggaran Linux menunggu kalibrasi).
 - Dokumen: `docs/design.md`, `docs/plan.md`, `docs/decisions/0000-0012`, `docs/market-research.md`, `docs/RELEASE-CHECKLIST.md`.
 - Konfigurasi pengembangan AI: `CLAUDE.md`, skill (parity-rules, ai-tool-tiers, migration-planning, security-review, repo-hygiene, rust-conventions, tauri-v2-*, svelte), hook `tauri-guard`, plugin Svelte (MCP dikunci 0.1.31).
 
@@ -24,7 +24,7 @@ Terakhir diperbarui: 2026-11-19 (setelah langkah 1-5 M0). Dokumen kerja internal
 3. **Katalog i18n (en, id)** dengan kunci stabil, dan uji yang menolak teks tampilan yang ditulis tetap. Selesai (0008).
 4. **Prototipe pengukuran:** satu halaman tabel di Svelte 5 + Vite (tanpa SvelteKit) ditanam ke satu biner Rust. Ukur ukuran bundel, ukuran biner, memori diam, dan waktu mulai. Jadikan angkanya **anggaran kinerja** yang diperiksa di CI. Pengukuran selesai (0010); pemeriksaan di CI sudah dipasang (`scripts/check-budget.py`, `docs/perf-budget.json`, job `perf-budget`); angka Linux menunggu kalibrasi dari run CI.
 5. **Skema database** (`docs/design.md` bagian 3) sebagai migrasi, SQLite lebih dulu, dengan uji isolasi tenant. Selesai (0009, 0012); pustaka AES-256-GCM untuk enkripsi rahasia belum dievaluasi.
-6. **M1:** kolektor inventaris Linux read-only, tiga aturan kesetaraan pertama dengan fixture anonim, monitor uptime dasar, mesin alert, dan bot Telegram.
+6. **M1** (dipecah; **M1-a selesai**: kontrak `inventory`, kolektor Linux `listeners`/`processes`/`cron`, aturan PAR-001/008/010, CLI `infra collect|compare`, ADR 0013. **Belum**: M1-b monitor uptime, mesin alert, bot Telegram; M1-c agen/SSH; kolektor systemd/docker/pm2/env_ref/database; aturan lain dari 11 aturan; uji di Linux nyata di luar CI). Rencana awal: kolektor inventaris Linux read-only, tiga aturan kesetaraan pertama dengan fixture anonim, monitor uptime dasar, mesin alert, dan bot Telegram.
 7. Cangkang Tauri tipis menyusul setelah M1-M2 (skill `tauri-v2-*`, command dibatasi `AppManifest::commands`).
 
 ## Keputusan yang masih menunggu pemilik

@@ -9,7 +9,7 @@ English | [Bahasa Indonesia](README.id.md)
 Last updated: 2026-11-19.
 
 > **Status: pre-alpha.** There is no installable release yet. This repository currently holds the
-> design, the architecture decisions and the first foundation crates (domain types, message catalog, database schema) plus a size and speed prototype. "Infra Copilot" is a provisional
+> design, the architecture decisions and the first foundation crates (domain types, message catalog, database schema), a size and speed prototype, and an offline command line that collects a Linux inventory read-only and compares two inventories with three parity rules. There is no agent, panel or monitor yet. "Infra Copilot" is a provisional
 > name and may change.
 
 ## What it is
@@ -58,6 +58,10 @@ Everything below is **planned**, not shipped:
 ```
 crates/core         shared domain types: risk tiers, secret redaction (no external dependencies)
 crates/i18n         en/id message catalog with stable keys and fallback
+crates/inventory    inventory model and the Collector / ParityRule contracts
+crates/collectors   read-only Linux collectors (listeners, processes, cron)
+crates/parity       parity rules PAR-001, PAR-008, PAR-010, comparer and localized report
+crates/cli          `infra collect` and `infra compare` (offline, read-only)
 crates/db           SQLite schema, tenant-scoped queries, hash-chained audit log
 crates/proto-server throwaway prototype used to measure binary size, memory and startup
 ui/                 Svelte 5 + Vite prototype page (embedded into the prototype binary)

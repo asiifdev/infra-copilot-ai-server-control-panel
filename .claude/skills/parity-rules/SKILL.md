@@ -41,3 +41,13 @@ Setiap aturan punya: `id` stabil (contoh `PAR-007`), judul, kategori, bobot (`cr
 3. Implementasikan aturan sampai uji lulus.
 4. Tambahkan juga fixture "tidak ada temuan" agar tidak ada positif palsu.
 5. Catat asal kasusnya (jenis kegagalan, tanpa nama nyata) di komentar aturan.
+
+## Status implementasi (2026-11-19)
+
+Penomoran: aturan ke-n pada daftar di atas = `PAR-00n` (n 1-9) atau `PAR-0nn`. Sudah ada: **PAR-001, PAR-008, PAR-010** (crate `parity`, kolektor `listeners`/`processes`/`cron` di crate `collectors`, kontrak di crate `inventory`, keputusan 0013). Belum ada: 2-7, 9, 11, dan aturan selisih OS/arsitektur (14.2).
+
+Konvensi yang berlaku untuk aturan baru:
+- Aturan mengimplementasikan `inventory::ParityRule` (id, versi, bobot, kategori, tingkat perbaikan AI, `evaluate(source, target, ctx)`), murni dan deterministik, dan hanya bergantung pada `inventory`.
+- Teks judul, penjelasan, dan saran **ada di katalog i18n** (`parity.parNNN.title|explanation|advice`, en dan id), bukan di kode. Tambahkan kunci ke `crates/i18n/locales/` dan petakan di `parity/src/render.rs`.
+- Inventaris `partial` tidak boleh dianggap bukti ketiadaan: gunakan pembantu `cap_if_partial` (menurunkan ke Info dan menandai `partial=true`).
+- Fixture anonim (JSON, `schema_version` 1) di `crates/parity/tests/fixtures/` dipakai bersama uji CLI.

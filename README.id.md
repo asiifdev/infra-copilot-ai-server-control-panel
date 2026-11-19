@@ -9,8 +9,9 @@
 Terakhir diperbarui: 2026-11-19.
 
 > **Status: pra-alfa.** Belum ada rilis yang bisa dipasang. Repositori ini saat ini berisi desain,
-> keputusan arsitektur, crate fondasi pertama (tipe domain, katalog pesan, skema database), dan prototipe
-> pengukur ukuran dan kecepatan. "Infra Copilot" adalah nama sementara dan bisa
+> keputusan arsitektur, crate fondasi pertama (tipe domain, katalog pesan, skema database), prototipe
+> pengukur ukuran dan kecepatan, dan baris perintah offline yang mengumpulkan inventaris Linux secara hanya-baca
+> serta membandingkan dua inventaris dengan tiga aturan kesetaraan. Belum ada agen, panel, atau monitor. "Infra Copilot" adalah nama sementara dan bisa
 > berubah.
 
 ## Apa ini
@@ -63,6 +64,10 @@ Semua yang tertulis di bawah ini **direncanakan**, belum dirilis:
 ```
 crates/core         tipe domain bersama: tingkat risiko, penyaring rahasia (tanpa dependensi luar)
 crates/i18n         katalog pesan en/id dengan kunci stabil dan fallback
+crates/inventory    model inventaris dan kontrak Collector / ParityRule
+crates/collectors   kolektor Linux hanya-baca (port mendengar, proses, cron)
+crates/parity       aturan kesetaraan PAR-001, PAR-008, PAR-010, pembanding, dan laporan terlokalisasi
+crates/cli          `infra collect` dan `infra compare` (offline, hanya-baca)
 crates/db           skema SQLite, kueri per organisasi, log audit berantai-hash
 crates/proto-server prototipe sementara untuk mengukur ukuran biner, memori, dan waktu mulai
 ui/                 halaman prototipe Svelte 5 + Vite (ditanam ke biner prototipe)

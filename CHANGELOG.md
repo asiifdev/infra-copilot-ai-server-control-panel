@@ -29,9 +29,20 @@ cannot drift apart. Release notes may get an Indonesian summary.
 - Decision records 0007 (core libraries), 0008 (own message catalog), 0009 (SQLite schema) and 0010
   (performance budget), all proposed; 0011 (own migrator, latest `rusqlite`), accepted.
 
+- `inventory` crate: inventory model (`Inventory`, `Item`, `Finding`, `Status`) and the `Collector` and `ParityRule` contracts, following `docs/design.md` 3.3, 4, 5 and 12.4 (decision 0013).
+- `collectors` crate: read-only Linux collectors for listening ports, processes and cron jobs, reading through a replaceable `RootFs` (tested on fixture trees); command lines and cron commands are redacted and `/proc/<pid>/environ` is never read.
+- `parity` crate: rules PAR-001 (listener without counterpart), PAR-008 (cron job without counterpart) and PAR-010 (port open to the internet), a deterministic comparer, and a renderer that takes all text from the en/id catalog. A partial inventory never proves absence: findings are capped at Info.
+- `cli` crate: `infra collect` and `infra compare` (exit code 1 on a critical finding), with English and Indonesian output.
+
+### Security
+
+- Redaction now treats `PASS` and `AUTH` named values as secrets, and collectors hide separate-argument secrets in process command lines and cron commands (`-p secret`, `--password x`, `curl -u user:pw`). Found by independent review, covered by tests.
+- Collectors resolve symlinks inside the chosen root only, so a symlink in a mounted or untrusted tree cannot read host files; a crontab or process name with multi-byte characters can no longer make the whole collection fail.
+
 ### Changed
 
 - `db` hashes the audit chain with the `sha2` crate instead of in-house SHA-256 (decision 0012); decisions 0008, 0009 and 0010 are accepted.
+- `.gitignore` now covers local databases, `measure.json`, and tool scratch directories.
 - CI now has a `perf-budget` job (Linux and macOS) that builds the prototype, measures it with `scripts/measure.sh` and fails when `scripts/check-budget.py` finds a metric over `docs/perf-budget.json`.
 - `db` now uses `rusqlite` 0.43 with its own `user_version` migrator instead of `rusqlite_migration` (decision 0011); a database newer than the build is refused.
 - `cargo-deny` allows workspace path dependencies; the docs check skips `ui/node_modules`.
