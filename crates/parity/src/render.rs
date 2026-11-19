@@ -46,15 +46,30 @@ fn keys_for(rule_id: &str) -> RuleKeys {
             explanation: MessageKey::new("parity.par001.explanation"),
             advice: MessageKey::new("parity.par001.advice"),
         },
+        "PAR-002" => RuleKeys {
+            title: MessageKey::new("parity.par002.title"),
+            explanation: MessageKey::new("parity.par002.explanation"),
+            advice: MessageKey::new("parity.par002.advice"),
+        },
         "PAR-006" => RuleKeys {
             title: MessageKey::new("parity.par006.title"),
             explanation: MessageKey::new("parity.par006.explanation"),
             advice: MessageKey::new("parity.par006.advice"),
         },
+        "PAR-007" => RuleKeys {
+            title: MessageKey::new("parity.par007.title"),
+            explanation: MessageKey::new("parity.par007.explanation"),
+            advice: MessageKey::new("parity.par007.advice"),
+        },
         "PAR-008" => RuleKeys {
             title: MessageKey::new("parity.par008.title"),
             explanation: MessageKey::new("parity.par008.explanation"),
             advice: MessageKey::new("parity.par008.advice"),
+        },
+        "PAR-009" => RuleKeys {
+            title: MessageKey::new("parity.par009.title"),
+            explanation: MessageKey::new("parity.par009.explanation"),
+            advice: MessageKey::new("parity.par009.advice"),
         },
         "PAR-010" => RuleKeys {
             title: MessageKey::new("parity.par010.title"),

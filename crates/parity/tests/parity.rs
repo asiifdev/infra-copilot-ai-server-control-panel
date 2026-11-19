@@ -13,7 +13,9 @@
 
 use i18n::{Catalog, Locale};
 use inventory::{Finding, Inventory, ParityRule, RuleContext, Severity};
-use parity::{Par001, Par006, Par008, Par010, UNKNOWN_ARG, all_rules, compare, render};
+use parity::{
+    Par001, Par002, Par006, Par007, Par008, Par009, Par010, UNKNOWN_ARG, all_rules, compare, render,
+};
 use std::error::Error;
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -259,8 +261,11 @@ fn report_order_and_rules_are_deterministic() -> TestResult {
         report.rules,
         [
             ("PAR-001", 1),
+            ("PAR-002", 1),
             ("PAR-006", 1),
+            ("PAR-007", 1),
             ("PAR-008", 1),
+            ("PAR-009", 1),
             ("PAR-010", 1)
         ]
     );
@@ -312,8 +317,11 @@ fn rule_metadata_matches_the_documents() {
         meta,
         [
             ("PAR-001", 1, Severity::Critical, "coverage", None),
+            ("PAR-002", 1, Severity::Important, "configuration", None),
             ("PAR-006", 1, Severity::Important, "runtime", None),
+            ("PAR-007", 1, Severity::Important, "configuration", None),
             ("PAR-008", 1, Severity::Important, "scheduling", None),
+            ("PAR-009", 1, Severity::Important, "versions", None),
             ("PAR-010", 1, Severity::Important, "security", None),
         ]
     );
@@ -470,5 +478,251 @@ fn par006_renders_in_both_locales() -> TestResult {
         id.explanation
     );
     assert!(!id.title.contains("parity."), "{}", id.title);
+    Ok(())
+}
+
+fn inventory_with(status: &str, items: &str) -> Result<Inventory, Box<dyn Error>> {
+    load(&format!(
+        r#"{{"schema_version":1,"taken_at":"t","collector_version":"c",
+        "platform":{{"os":"linux","arch":"x86_64"}},"status":"{status}","warnings":[],
+        "items":[{items}]}}"#
+    ))
+}
+
+fn env_ref(app: &str, name: &str, host: &str, port: Option<u16>, in_container: bool) -> String {
+    let port = port.map_or_else(|| "null".to_owned(), |p| p.to_string());
+    format!(
+        r#"{{"kind":"env_ref","key":"{app}:{name}","data":{{"app":"{app}","name":"{name}","target_host":"{host}","target_port":{port},"in_container":{in_container},"resolves_to":null}},"seen_via":"config"}}"#
+    )
+}
+
+fn docker(name: &str, version: Option<&str>) -> String {
+    let v = version.map_or_else(|| "null".to_owned(), |v| format!("\"{v}\""));
+    format!(
+        r#"{{"kind":"process","key":"docker:{name}","data":{{"version":{v}}},"seen_via":"docker"}}"#
+    )
+}
+
+fn empty() -> Result<Inventory, Box<dyn Error>> {
+    inventory_with("complete", "")
+}
+
+#[test]
+fn par007_flags_local_references_without_a_listener_on_the_target_only() -> TestResult {
+    let items = [
+        env_ref("pm2:web", "CACHE_URL", "127.0.0.1", Some(6379), false),
+        env_ref("pm2:web", "SEARCH_URL", "0.0.0.0", Some(7700), false),
+        env_ref("pm2:web", "DB_HOST", "localhost", Some(5432), false),
+        env_ref("pm2:web", "OTHER", "203.0.113.5", Some(9999), false),
+        env_ref("pm2:web", "NOPORT", "localhost", None, false),
+        env_ref("docker:app", "IN_BOX", "localhost", Some(8888), true),
+        node_listener(5432, "postgres"),
+    ]
+    .join(",");
+    let target = inventory_with("complete", &items)?;
+    let found = run(&Par007, &empty()?, &target);
+    assert_eq!(
+        keys(&found),
+        [
+            ("PAR-007", Severity::Important, "pm2:web:CACHE_URL"),
+            ("PAR-007", Severity::Important, "pm2:web:SEARCH_URL"),
+        ]
+    );
+    assert_eq!(arg(&found[0], "app"), Some("pm2:web"));
+    assert_eq!(arg(&found[0], "name"), Some("CACHE_URL"));
+    assert_eq!(arg(&found[0], "host"), Some("127.0.0.1"));
+    assert_eq!(arg(&found[0], "port"), Some("6379"));
+    assert_eq!(arg(&found[0], "partial"), None);
+    // The source side is never judged.
+    assert!(run(&Par007, &target, &empty()?).is_empty());
+    Ok(())
+}
+
+#[test]
+fn par007_is_silent_when_the_port_has_a_listener() -> TestResult {
+    let items = format!(
+        "{},{}",
+        env_ref("pm2:web", "CACHE_URL", "::1", Some(6379), false),
+        node_listener(6379, "redis-server")
+    );
+    assert!(run(&Par007, &empty()?, &inventory_with("complete", &items)?).is_empty());
+    Ok(())
+}
+
+#[test]
+fn par007_is_capped_on_a_partial_target() -> TestResult {
+    let items = env_ref("pm2:web", "CACHE_URL", "127.0.0.1", Some(6379), false);
+    let found = run(&Par007, &empty()?, &inventory_with("partial", &items)?);
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].severity, Severity::Info);
+    assert_eq!(arg(&found[0], "partial"), Some("true"));
+    // A partial SOURCE does not matter: only the target is read.
+    let complete = inventory_with("complete", &items)?;
+    let found = run(&Par007, &inventory_with("partial", "")?, &complete);
+    assert_eq!(found[0].severity, Severity::Important);
+    Ok(())
+}
+
+#[test]
+fn par002_flags_container_loopback_references_to_host_listeners() -> TestResult {
+    let items = [
+        env_ref("docker:app", "DB_HOST", "localhost", Some(5432), true),
+        env_ref("docker:app", "CACHE", "::1", Some(6379), true),
+        env_ref("docker:app", "ANY", "0.0.0.0", Some(5432), true),
+        env_ref("docker:app", "NOLISTEN", "127.0.0.1", Some(9999), true),
+        env_ref("docker:app", "NOPORT", "localhost", None, true),
+        env_ref("docker:app", "REMOTE", "203.0.113.7", Some(5432), true),
+        env_ref("pm2:web", "HOST_APP", "localhost", Some(5432), false),
+        node_listener(5432, "postgres"),
+        node_listener(6379, "redis-server"),
+    ]
+    .join(",");
+    let target = inventory_with("complete", &items)?;
+    let found = run(&Par002, &empty()?, &target);
+    assert_eq!(
+        keys(&found),
+        [
+            ("PAR-002", Severity::Important, "docker:app:CACHE"),
+            ("PAR-002", Severity::Important, "docker:app:DB_HOST"),
+        ]
+    );
+    assert_eq!(arg(&found[1], "port"), Some("5432"));
+    assert_eq!(arg(&found[1], "host"), Some("localhost"));
+    assert!(run(&Par002, &target, &empty()?).is_empty());
+    Ok(())
+}
+
+#[test]
+fn par002_is_not_capped_on_a_partial_target() -> TestResult {
+    let items = format!(
+        "{},{}",
+        env_ref("docker:app", "DB_HOST", "localhost", Some(5432), true),
+        node_listener(5432, "postgres")
+    );
+    let found = run(&Par002, &empty()?, &inventory_with("partial", &items)?);
+    assert_eq!(
+        keys(&found),
+        [("PAR-002", Severity::Important, "docker:app:DB_HOST")]
+    );
+    assert_eq!(arg(&found[0], "partial"), None);
+    Ok(())
+}
+
+#[test]
+fn par009_flags_major_version_changes_only() -> TestResult {
+    let source = inventory_with(
+        "complete",
+        &[
+            docker("db", Some("14.2")),
+            docker("cache", Some("7.0")),
+            docker("proxy", None),
+            docker("tool", Some("v1")),
+            docker("gone", Some("1.0")),
+            docker("pad", Some("08.1")),
+            docker("alpine", Some("1.25-alpine")),
+        ]
+        .join(","),
+    )?;
+    let target = inventory_with(
+        "partial",
+        &[
+            docker("db", Some("16.1")),
+            docker("cache", Some("7.2")),
+            docker("proxy", Some("1.0")),
+            docker("tool", Some("V2")),
+            docker("pad", Some("8.9")),
+            docker("alpine", Some("1.26-alpine")),
+            docker("new", Some("3.0")),
+        ]
+        .join(","),
+    )?;
+    let found = run(&Par009, &source, &target);
+    assert_eq!(
+        keys(&found),
+        [
+            ("PAR-009", Severity::Important, "docker:db"),
+            ("PAR-009", Severity::Important, "docker:tool"),
+        ]
+    );
+    assert_eq!(arg(&found[0], "name"), Some("docker:db"));
+    assert_eq!(arg(&found[0], "source_version"), Some("14.2"));
+    assert_eq!(arg(&found[0], "target_version"), Some("16.1"));
+    // Both versions were seen, so a partial target does not lower the severity.
+    assert_eq!(arg(&found[0], "partial"), None);
+    Ok(())
+}
+
+#[test]
+fn par009_non_numeric_majors_compare_whole_strings_ignoring_case() -> TestResult {
+    let s = inventory_with("complete", &docker("x", Some("Stable-1")))?;
+    let same = inventory_with("complete", &docker("x", Some("stable-1")))?;
+    let other = inventory_with("complete", &docker("x", Some("stable-2")))?;
+    assert!(run(&Par009, &s, &same).is_empty());
+    assert_eq!(run(&Par009, &s, &other).len(), 1);
+    Ok(())
+}
+
+fn configuration_pair() -> Result<(Inventory, Inventory), Box<dyn Error>> {
+    let source = inventory_with("complete", &docker("db", Some("14.2")))?;
+    let items = [
+        env_ref("pm2:web", "CACHE_URL", "127.0.0.1", Some(6379), false),
+        env_ref("docker:app", "DB_HOST", "localhost", Some(5432), true),
+        node_listener(5432, "postgres"),
+        docker("db", Some("16.1")),
+    ]
+    .join(",");
+    Ok((source, inventory_with("partial", &items)?))
+}
+
+#[test]
+fn new_rules_render_in_both_locales_without_leftovers() -> TestResult {
+    let (s, t) = configuration_pair()?;
+    let report = compare(&s, &t, &RuleContext::default());
+    let ids: Vec<_> = report.findings.iter().map(|f| f.rule_id.as_str()).collect();
+    for id in ["PAR-002", "PAR-007", "PAR-009"] {
+        assert!(ids.contains(&id), "{id} missing from {ids:?}");
+    }
+    let catalog = Catalog::builtin()?;
+    for f in &report.findings {
+        for locale in Locale::ALL {
+            let r = render(f, &catalog, locale);
+            for text in [&r.title, &r.explanation, &r.advice] {
+                assert!(!text.contains('{') && !text.contains('}'), "{text}");
+                assert!(!text.contains("parity."), "{text}");
+                assert!(!text.contains('\u{0}'), "{text}");
+            }
+        }
+    }
+    let by = |id: &str| report.findings.iter().find(|f| f.rule_id == id);
+    let p9 = by("PAR-009").ok_or("no PAR-009")?;
+    let en = render(p9, &catalog, Locale::En);
+    assert!(en.explanation.contains("14.2") && en.explanation.contains("16.1"));
+    let id = render(p9, &catalog, Locale::Id);
+    assert!(id.explanation.contains("versi mayor") || id.title.contains("versi mayor"));
+    let p7 = by("PAR-007").ok_or("no PAR-007")?;
+    assert!(render(p7, &catalog, Locale::En).note.is_some());
+    assert!(render(p7, &catalog, Locale::Id).note.is_some());
+    Ok(())
+}
+
+#[test]
+fn new_rules_are_deterministic_and_never_carry_values() -> TestResult {
+    let (s, t) = configuration_pair()?;
+    let ctx = RuleContext::default();
+    let report = compare(&s, &t, &ctx);
+    assert_eq!(report, compare(&s, &t, &ctx));
+    // Only the documented argument names appear; there is nowhere for a value to go.
+    for f in &report.findings {
+        let allowed: &[&str] = match f.rule_id.as_str() {
+            "PAR-002" | "PAR-007" => &["app", "name", "host", "port", "partial"],
+            "PAR-009" => &["name", "source_version", "target_version"],
+            _ => continue,
+        };
+        assert!(
+            f.args.keys().all(|k| allowed.contains(&k.as_str())),
+            "{:?}",
+            f.args
+        );
+    }
     Ok(())
 }

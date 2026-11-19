@@ -4,8 +4,18 @@
 //! One item per running container, key `docker:<name>`. Data (docs/design.md 4.1): `cmd` (the image
 //! reference, redacted and bounded), `cwd` (null), `mode` (`"unknown"`), `supervised` (true: the
 //! container runtime owns it), `env_refs` (variable **names** from `Config.Env`, never values),
-//! `instances` (1), plus `restart_policy` and `ports` (published `host/proto` strings) when
+//! `instances` (1), `version` (see below), plus `restart_policy` and `ports` (published `host/proto` strings) when
 //! `docker inspect` answered.
+//!
+//! `version` is the image **tag**: the text after the last `:` of the image reference when that
+//! colon comes after the last `/` (so a registry port is not a tag), after any `@sha256:...` digest
+//! was removed. It is `null` for no tag, for `latest`, for a digest-only reference and for a tag
+//! with characters Docker does not allow. The image reference itself stays redacted in `cmd`, so
+//! registry credentials are never stored.
+//!
+//! Each `Config.Env` entry `NAME=value` (split at the first `=`) that parses as a reference (see
+//! `crate::envref`, decision 0015) also becomes an `env_ref` item, key `docker:<name>:<NAME>`,
+//! `in_container` true. Only host and port are kept, never the value.
 //!
 //! No Docker installed (or not allowed to run) is normal and gives an empty collection without a
 //! warning. A failed or timed-out `docker ps` (for example no access to the socket) is a warning, so
@@ -20,6 +30,7 @@ use core_domain::redact::redact;
 use inventory::{CollectError, Collection, Collector, Item, Kind, SeenVia};
 use serde_json::{Map, Value, json};
 
+use crate::envref::{self, Extracted};
 use crate::exec::{Cmd, CommandRunner, ExecError};
 use crate::util::{MAX_CMD_CHARS, clean, truncate_chars};
 
@@ -31,6 +42,8 @@ const MAX_NAME_CHARS: usize = 100;
 const MAX_LIST: usize = 200;
 /// Characters of the container id used for `docker inspect`.
 const ID_CHARS: usize = 12;
+/// Longest image tag Docker allows.
+const MAX_TAG_CHARS: usize = 128;
 
 /// Collector of running Docker containers.
 #[derive(Clone)]
@@ -58,6 +71,7 @@ struct Inspected {
     restart_policy: Option<String>,
     ports: Vec<String>,
     env_names: Vec<String>,
+    refs: Extracted,
 }
 
 fn text<'a>(value: &'a Value, field: &str) -> Option<&'a str> {
@@ -70,7 +84,7 @@ fn env_name(entry: &str) -> Option<String> {
     (!name.is_empty()).then(|| clean(name, MAX_NAME_CHARS))
 }
 
-fn parse_inspect(output: &str) -> Option<Inspected> {
+fn parse_inspect(output: &str, app: &str) -> Option<Inspected> {
     let parsed: Value = serde_json::from_str(output).ok()?;
     let first = parsed.as_array()?.first()?;
     let mut out = Inspected {
@@ -92,6 +106,16 @@ fn parse_inspect(output: &str) -> Option<Inspected> {
         .filter_map(env_name)
         .collect();
     out.env_names = names.into_iter().take(MAX_LIST).collect();
+    let entries: Vec<(&str, &str)> = first
+        .get("Config")
+        .and_then(|c| c.get("Env"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter_map(|entry| entry.split_once('='))
+        .collect();
+    out.refs = envref::extract(app, entries.into_iter(), true, SeenVia::Docker);
     let mut ports = BTreeSet::new();
     if let Some(map) = first
         .get("NetworkSettings")
@@ -121,6 +145,25 @@ fn redacted_image(image: &str) -> String {
     truncate_chars(shown, MAX_CMD_CHARS)
 }
 
+/// The tag of an image reference, or `None` (no tag, `latest`, digest only, odd characters).
+fn image_tag(image: &str) -> Option<String> {
+    // A digest follows the last `@` and has no `/`; an `@` followed by a `/` is registry userinfo.
+    let without_digest = match image.rsplit_once('@') {
+        Some((head, tail)) if !tail.contains('/') => head,
+        _ => image,
+    };
+    let after_slash = without_digest
+        .rsplit_once('/')
+        .map_or(without_digest, |(_, rest)| rest);
+    let (_, tag) = after_slash.rsplit_once(':')?;
+    let valid = !tag.is_empty()
+        && tag.len() <= MAX_TAG_CHARS
+        && tag
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'));
+    (valid && tag != "latest").then(|| tag.to_owned())
+}
+
 fn build_item(name: &str, image: &str, inspected: Option<&Inspected>) -> Item {
     let mut data = Map::new();
     data.insert("cmd".into(), Value::from(redacted_image(image)));
@@ -132,6 +175,10 @@ fn build_item(name: &str, image: &str, inspected: Option<&Inspected>) -> Item {
         Value::from(inspected.map_or_else(Vec::new, |i| i.env_names.clone())),
     );
     data.insert("instances".into(), Value::from(1u64));
+    data.insert(
+        "version".into(),
+        image_tag(image).map_or(Value::Null, Value::from),
+    );
     if let Some(i) = inspected {
         if let Some(policy) = &i.restart_policy {
             data.insert("restart_policy".into(), Value::from(policy.clone()));
@@ -169,6 +216,8 @@ impl Collector for Docker {
             }
         };
         let mut items = Vec::new();
+        let mut refs: Vec<Item> = Vec::new();
+        let (mut unparsed, mut refs_over_cap) = (0usize, 0usize);
         let (mut malformed, mut inspect_failed, mut over_cap) = (0usize, 0usize, 0usize);
         for line in output.lines().filter(|l| !l.trim().is_empty()) {
             let Ok(entry) = serde_json::from_str::<Value>(line) else {
@@ -190,10 +239,12 @@ impl Collector for Docker {
                 over_cap += 1;
                 continue;
             }
+            let name = clean(name, MAX_NAME_CHARS);
+            let key = format!("docker:{name}");
             let short: String = id.chars().take(ID_CHARS).collect();
-            let inspected = match self.runner.run(&Cmd::DockerInspect(short)) {
+            let mut inspected = match self.runner.run(&Cmd::DockerInspect(short)) {
                 Ok(out) => {
-                    let parsed = parse_inspect(&out);
+                    let parsed = parse_inspect(&out, &key);
                     if parsed.is_none() {
                         inspect_failed += 1;
                     }
@@ -205,11 +256,12 @@ impl Collector for Docker {
                 }
             };
             let image = text(&entry, "Image").unwrap_or_default();
-            items.push(build_item(
-                &clean(name, MAX_NAME_CHARS),
-                image,
-                inspected.as_ref(),
-            ));
+            if let Some(found) = inspected.as_mut().map(|i| std::mem::take(&mut i.refs)) {
+                unparsed += found.unparsed;
+                refs_over_cap += found.over_cap;
+                refs.extend(found.items);
+            }
+            items.push(build_item(&name, image, inspected.as_ref()));
         }
         let mut warnings = Vec::new();
         if malformed > 0 {
@@ -225,6 +277,8 @@ impl Collector for Docker {
                 "{over_cap} container(s) beyond the limit of {MAX_CONTAINERS} were not recorded"
             ));
         }
+        warnings.extend(envref::warnings(unparsed, refs_over_cap));
+        items.extend(refs);
         Ok(Collection { items, warnings })
     }
 }
@@ -253,6 +307,72 @@ mod tests {
     const INSPECT: &str = r#"[{"Config":{"Env":["DB_PASSWORD=hunter2","PATH=/bin","TOKEN"]},
         "HostConfig":{"RestartPolicy":{"Name":"always"}},
         "NetworkSettings":{"Ports":{"80/tcp":[{"HostIp":"0.0.0.0","HostPort":"8080"}],"443/tcp":null}}}]"#;
+
+    #[test]
+    fn image_tags_become_versions() {
+        let cases: [(&str, Option<&str>); 11] = [
+            ("redis:7.2", Some("7.2")),
+            ("nginx", None),
+            ("nginx:latest", None),
+            ("repo/app@sha256:0123abcd", None),
+            ("repo/app:1.4@sha256:0123abcd", Some("1.4")),
+            ("registry:5000/app", None),
+            ("registry:5000/app:2.0-rc1", Some("2.0-rc1")),
+            ("user:pw@registry.example/app", None),
+            ("user:pw@registry.example/app:3", Some("3")),
+            ("app:", None),
+            ("app:bad tag", None),
+        ];
+        for (image, expected) in cases {
+            assert_eq!(image_tag(image).as_deref(), expected, "{image}");
+        }
+    }
+
+    #[test]
+    fn version_is_on_the_item() {
+        let out = collect(
+            FakeRunner::new()
+                .with(Cmd::DockerPs, Ok(ps(ID1, "cache", "redis:7.2")))
+                .with(inspect_cmd(ID1), Ok(INSPECT.into())),
+        );
+        assert_eq!(out.items[0].str_field("version"), Some("7.2"));
+        let out = collect(FakeRunner::new().with(Cmd::DockerPs, Ok(ps(ID1, "web", "nginx"))));
+        assert_eq!(out.items[0].data.get("version"), Some(&Value::Null));
+    }
+
+    #[test]
+    fn env_references_become_env_ref_items() {
+        // Built at run time so no token-shaped literal sits in the source (secret scanners).
+        let token = format!("ghp_{}", "q".repeat(36));
+        let inspect = format!(
+            r#"[{{"Config":{{"Env":[
+            "DATABASE_URL=postgres://admin:s3cr3t@localhost/prod?x=1",
+            "CACHE_HOST=redis","CACHE_PORT=6380","TOKEN={token}",
+            "PATH=/usr/bin:/bin","BROKEN_URL=@@@ nope"]}}}}]"#
+        );
+        let out = collect(
+            FakeRunner::new()
+                .with(Cmd::DockerPs, Ok(ps(ID1, "web", "app:1")))
+                .with(inspect_cmd(ID1), Ok(inspect.clone())),
+        );
+        let refs: Vec<&Item> = out
+            .items
+            .iter()
+            .filter(|i| i.kind == Kind::EnvRef)
+            .collect();
+        let keys: Vec<&str> = refs.iter().map(|i| i.key.as_str()).collect();
+        assert_eq!(keys, ["docker:web:CACHE_HOST", "docker:web:DATABASE_URL"]);
+        assert_eq!(refs[0].u64_field("target_port"), Some(6380));
+        assert_eq!(refs[1].str_field("target_host"), Some("localhost"));
+        assert_eq!(refs[1].u64_field("target_port"), Some(5432));
+        assert_eq!(refs[1].data.get("in_container"), Some(&json!(true)));
+        assert_eq!(refs[1].seen_via, SeenVia::Docker);
+        assert_eq!(out.warnings.len(), 1, "{:?}", out.warnings);
+        let all = format!("{:?}{:?}", out.items, out.warnings);
+        for secret in ["admin", "s3cr3t", "ghp_", "nope", "prod"] {
+            assert!(!all.contains(secret), "{secret}");
+        }
+    }
 
     #[test]
     fn normal_container_with_inspect() {

@@ -53,6 +53,16 @@ parity.par006.title = {process} di target berupa {reason}
 parity.par006.explanation = {process} melayani port {ports} di target tetapi berupa {reason}. Aplikasi seperti ini biasanya dijalankan manual atau dalam mode pengembangan: lebih lambat, dapat membuka fitur debug, dan tidak hidup kembali setelah crash atau reboot.
 parity.par006.advice = Jalankan {process} di bawah pengelola layanan (systemd, PM2, atau container) dengan konfigurasi produksi, lalu pastikan ia hidup kembali setelah reboot. Alat ini tidak mengubahnya secara otomatis.
 
+parity.par007.title = {name} di {app} menunjuk ke {host}:{port}, tempat tidak ada yang mendengarkan
+parity.par007.explanation = Pengaturan {name} milik {app} merujuk ke {host} pada port {port}, artinya mesin yang sama, tetapi tidak ada program yang mendengarkan di port itu pada target. Aplikasi mungkin tetap menyala dan baru gagal saat pertama kali memakai layanan itu. Alat ini hanya membaca host dan port, tidak pernah nilainya, dan tidak menguji koneksi.
+parity.par007.advice = Jalankan atau pasang layanan yang diharapkan {app} di port {port}, atau ubah {name} agar menunjuk ke tempat layanan itu sekarang berjalan. Alat ini tidak mengubahnya secara otomatis.
+parity.par002.title = {name} di container {app} menunjuk ke {host}:{port}, yaitu container itu sendiri
+parity.par002.explanation = Pengaturan {name} milik {app}, yang berjalan di dalam container, merujuk ke {host} pada port {port}. Di dalam container alamat itu adalah container itu sendiri, bukan host, padahal ada program yang mendengarkan di port {port} pada host. Listener apa pun di port itu dihitung, jadi ini bisa jadi alarm palsu bila container memakai jaringan host. Alat ini hanya membaca host dan port, tidak pernah nilainya.
+parity.par002.advice = Ubah {name} ke alamat yang bisa dipakai container untuk menjangkau host atau layanan lain (misalnya nama container pada jaringan bersama), atau jalankan container di jaringan host dengan sengaja. Alat ini tidak mengubahnya secara otomatis.
+parity.par009.title = {name} berjalan dengan versi mayor berbeda di target
+parity.par009.explanation = {name} berversi {source_version} di sumber dan {target_version} di target. Versi mayor yang berbeda dapat mengubah format data atau pengaturan, sehingga layanan bisa menolak menyala atau memigrasi datanya. Alat ini hanya membandingkan tag versi container yang berhasil dibaca, bukan isi datanya.
+parity.par009.advice = Periksa catatan rilis {name}, lalu kunci target ke {source_version} atau rencanakan peningkatan yang diuji dengan backup lebih dulu. Alat ini tidak mengubahnya secara otomatis.
+
 parity.unknown.title = Temuan dari aturan {rule_id}
 parity.unknown.explanation = Versi ini belum punya uraian untuk aturan {rule_id}.
 parity.unknown.advice = Perbarui aplikasi, atau tinjau bukti temuan ini secara manual.

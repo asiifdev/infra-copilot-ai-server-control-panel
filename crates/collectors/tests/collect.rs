@@ -1004,4 +1004,64 @@ mod all_collectors {
         assert!(!inv.to_json()?.contains("hunter2"));
         Ok(())
     }
+
+    #[cfg(target_endian = "little")]
+    #[test]
+    fn env_references_resolve_only_to_local_listeners() -> TestResult {
+        let tree = Tree::new("envref")?;
+        // 127.0.0.1:5432 and 0.0.0.0:8080 listen.
+        tree.write(
+            "proc/net/tcp",
+            b"  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n   0: 0100007F:1538 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 20001 1 0000000000000000 100 0 0 10 0\n   1: 00000000:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 20002 1 0000000000000000 100 0 0 10 0\n",
+        )?;
+        tree.write(
+            "root/.pm2/dump.pm2",
+            br#"[{"name":"web","pm_exec_path":"/srv/web/app.js","env":{
+              "REDIS_URL":"redis://:topsecret@127.0.0.1:6379/0",
+              "DB_HOST":"127.0.0.1","DB_PORT":"5432",
+              "WEB":"localhost:8080","OTHER":"10.0.0.5:5432","GARBAGE_URL":"%%%% pw=hunter2"}}]"#,
+        )?;
+        let runner = FakeRunner::new()
+            .with(
+                Cmd::DockerPs,
+                Ok(r#"{"ID":"0123456789abcdef","Names":"cache","Image":"redis:7.2","State":"running"}"#.into()),
+            )
+            .with(
+                Cmd::DockerInspect("0123456789ab".into()),
+                Ok(r#"[{"Config":{"Env":["DATABASE_URL=postgres://admin:dbpass@localhost/shop"]}}]"#.into()),
+            );
+        let inv = collect_inventory_with(
+            &tree.fs(),
+            Arc::new(runner),
+            "2026-01-01T00:00:00Z".into(),
+            platform(),
+        )?;
+        let resolves = |key: &str| -> Result<Option<String>, String> {
+            Ok(item(&inv, Kind::EnvRef, key)?
+                .str_field("resolves_to")
+                .map(str::to_owned))
+        };
+        assert_eq!(resolves("pm2:web:REDIS_URL")?, None);
+        assert_eq!(
+            resolves("pm2:web:DB_HOST")?.as_deref(),
+            Some("listener:tcp:5432")
+        );
+        assert_eq!(
+            resolves("pm2:web:WEB")?.as_deref(),
+            Some("listener:tcp:8080")
+        );
+        assert_eq!(resolves("pm2:web:OTHER")?, None);
+        let db = item(&inv, Kind::EnvRef, "docker:cache:DATABASE_URL")?;
+        assert_eq!(db.data.get("in_container"), Some(&Value::Bool(true)));
+        assert_eq!(db.str_field("resolves_to"), Some("listener:tcp:5432"));
+        assert_eq!(
+            item(&inv, Kind::Process, "docker:cache")?.str_field("version"),
+            Some("7.2")
+        );
+        let json = inv.to_json()?;
+        for secret in ["topsecret", "hunter2", "admin", "dbpass", "shop"] {
+            assert!(!json.contains(secret), "{secret}");
+        }
+        Ok(())
+    }
 }

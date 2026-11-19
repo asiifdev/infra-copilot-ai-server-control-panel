@@ -3,7 +3,7 @@
 use inventory::{Finding, Inventory, ParityRule, RuleContext};
 use std::cmp::Reverse;
 
-use crate::rules::{Par001, Par006, Par008, Par010};
+use crate::rules::{Par001, Par002, Par006, Par007, Par008, Par009, Par010};
 
 /// The result of comparing two inventories.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,8 +20,11 @@ pub struct Report {
 pub fn all_rules() -> Vec<Box<dyn ParityRule>> {
     vec![
         Box::new(Par001),
+        Box::new(Par002),
         Box::new(Par006),
+        Box::new(Par007),
         Box::new(Par008),
+        Box::new(Par009),
         Box::new(Par010),
     ]
 }

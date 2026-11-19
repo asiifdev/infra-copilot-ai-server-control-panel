@@ -20,10 +20,16 @@
 //! Also: [`Systemd`] (running services and timers), [`Docker`] (running containers) and [`Pm2`]
 //! (apps saved in `dump.pm2`, read from files only).
 //!
-//! Not covered yet: `env_ref`, databases, service versions, macOS.
+//! The PM2 and Docker collectors also emit `env_ref` items (host and port that an application's
+//! environment points at, never the value; decision 0015). After all collectors ran,
+//! `resolves_to` is set to `listener:tcp:<port>` for references to a loopback address or `0.0.0.0`
+//! whose port is a listener of the same inventory; every other reference keeps `null`.
+//!
+//! Not covered yet: databases, service versions beyond Docker image tags, macOS.
 
 mod cron;
 mod docker;
+mod envref;
 mod exec;
 mod listeners;
 mod pm2;
@@ -34,8 +40,8 @@ mod supervision;
 mod systemd;
 mod util;
 
-use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use inventory::{CollectError, Collector, Inventory, Item, Kind, Platform};
@@ -102,6 +108,7 @@ pub fn collect_inventory_with(
         );
     }
     let items = sanitize_items(items, &mut warnings);
+    let items = limit_and_resolve_env_refs(items, &mut warnings);
     // `sanitize_items` removed everything `Inventory::new` rejects (bad or too long keys,
     // duplicates), so user-controlled input can no longer make this fail.
     let inventory = Inventory::new(taken_at, COLLECTOR_VERSION.to_owned(), platform, items)
@@ -172,4 +179,48 @@ fn sanitize_items(items: Vec<Item>, warnings: &mut Vec<String>) -> Vec<Item> {
         ));
     }
     out
+}
+
+/// Keeps at most [`envref::MAX_PER_INVENTORY`] `env_ref` items (one warning when more were found),
+/// then sets `resolves_to` on the kept ones.
+fn limit_and_resolve_env_refs(items: Vec<Item>, warnings: &mut Vec<String>) -> Vec<Item> {
+    let mut kept = 0usize;
+    let mut dropped = 0usize;
+    let mut items: Vec<Item> = items
+        .into_iter()
+        .filter(|item| {
+            if item.kind != Kind::EnvRef {
+                return true;
+            }
+            if kept >= envref::MAX_PER_INVENTORY {
+                dropped += 1;
+                return false;
+            }
+            kept += 1;
+            true
+        })
+        .collect();
+    if dropped > 0 {
+        warnings.push(format!(
+            "inventory: {dropped} environment reference(s) beyond the limit of {} were not recorded",
+            envref::MAX_PER_INVENTORY
+        ));
+    }
+    let ports: BTreeSet<u64> = items
+        .iter()
+        .filter(|item| item.kind == Kind::Listener)
+        .filter_map(|item| item.key.strip_prefix("tcp:")?.parse().ok())
+        .collect();
+    for item in items.iter_mut().filter(|item| item.kind == Kind::EnvRef) {
+        let host = item.str_field("target_host").unwrap_or_default();
+        let local = matches!(host, "127.0.0.1" | "::1" | "localhost" | "0.0.0.0");
+        let resolved = item
+            .u64_field("target_port")
+            .filter(|port| local && ports.contains(port))
+            .map_or(serde_json::Value::Null, |port| {
+                serde_json::Value::from(format!("listener:tcp:{port}"))
+            });
+        item.data.insert("resolves_to".into(), resolved);
+    }
+    items
 }

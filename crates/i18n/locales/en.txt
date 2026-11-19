@@ -53,6 +53,16 @@ parity.par006.title = {process} on the target is {reason}
 parity.par006.explanation = {process} serves port {ports} on the target but is {reason}. Such an application is typically started by hand or in development mode: it is slower, may expose debug features, and will not come back after a crash or a reboot.
 parity.par006.advice = Run {process} under a service manager (systemd, PM2 or a container) with a production configuration, and confirm that it restarts after a reboot. This tool does not change this automatically.
 
+parity.par007.title = {name} in {app} points to {host}:{port}, where nothing listens
+parity.par007.explanation = The setting {name} of {app} refers to {host} on port {port}, which means this same machine, but no program listens on that port on the target. The application may start normally and fail only when it first uses that service. This tool read only the host and port, never the value, and does not test the connection.
+parity.par007.advice = Start or install the service that {app} expects on port {port}, or change {name} to point to where the service now runs. This tool does not change this automatically.
+parity.par002.title = {name} in container {app} points to {host}:{port}, which is the container itself
+parity.par002.explanation = The setting {name} of {app}, which runs in a container, refers to {host} on port {port}. Inside a container that address is the container itself, not the host, even though a program listens on port {port} on the host. Any listener on that port counts here, so this can be a false alarm if the container shares the host network. This tool read only the host and port, never the value.
+parity.par002.advice = Change {name} to an address the container can use to reach the host or the other service (for example its container name on a shared network), or run the container on the host network on purpose. This tool does not change this automatically.
+parity.par009.title = {name} runs a different major version on the target
+parity.par009.explanation = {name} is version {source_version} on the source and {target_version} on the target. A different major version can change the data format or settings, so the service may refuse to start or migrate its data. This tool compares only the version tags of containers it could read, not what is inside the data.
+parity.par009.advice = Check the release notes for {name}, then pin the target to {source_version} or plan a tested upgrade with a backup first. This tool does not change this automatically.
+
 parity.unknown.title = Finding from rule {rule_id}
 parity.unknown.explanation = This version has no description for rule {rule_id}.
 parity.unknown.advice = Update the application, or review the evidence of this finding by hand.

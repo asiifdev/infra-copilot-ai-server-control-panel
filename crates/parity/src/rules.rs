@@ -313,3 +313,238 @@ impl ParityRule for Par006 {
         findings
     }
 }
+
+/// Host strings that mean "this machine" (always lowercase in the inventory).
+fn is_loopback(host: &str) -> bool {
+    matches!(host, "127.0.0.1" | "::1" | "localhost")
+}
+
+/// The reference fields shared by PAR-002 and PAR-007: `(host, port)` when the target port is known.
+fn ref_target(item: &Item) -> Option<(&str, u64)> {
+    Some((
+        item.str_field("target_host")?,
+        item.u64_field("target_port")?,
+    ))
+}
+
+fn in_container(item: &Item) -> Option<bool> {
+    item.data.get("in_container").and_then(|v| v.as_bool())
+}
+
+fn env_ref_args(item: &Item, host: &str, port: u64) -> BTreeMap<String, String> {
+    BTreeMap::from([
+        (
+            "app".to_owned(),
+            item.str_field("app").unwrap_or(UNKNOWN_ARG).to_owned(),
+        ),
+        (
+            "name".to_owned(),
+            item.str_field("name").unwrap_or(UNKNOWN_ARG).to_owned(),
+        ),
+        ("host".to_owned(), host.to_owned()),
+        ("port".to_owned(), port.to_string()),
+    ])
+}
+
+fn has_listener(inventory: &Inventory, port: u64) -> bool {
+    inventory
+        .get(Kind::Listener, &format!("tcp:{port}"))
+        .is_some()
+}
+
+/// PAR-007: a configuration reference points at this machine (loopback or `0.0.0.0`) on a port
+/// where nothing listens.
+///
+/// Origin of the case: after a move, an application kept a reference to a local service (a cache,
+/// a search index) that was never started on the new server; the application started fine and
+/// failed only when it first used that service.
+///
+/// Target only. Fires for an `env_ref` with a loopback host or `0.0.0.0`, `in_container` false,
+/// a known port, and no `listener` `tcp:<port>` in the target inventory (any bind address counts
+/// as a listener). It claims an absence, so a partial target inventory caps it at Info. Findings
+/// carry the app, variable name, host and port, never a value.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Par007;
+
+impl ParityRule for Par007 {
+    fn id(&self) -> &'static str {
+        "PAR-007"
+    }
+
+    fn version(&self) -> u32 {
+        1
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Important
+    }
+
+    fn category(&self) -> &'static str {
+        "configuration"
+    }
+
+    fn fix_tier(&self) -> Option<Tier> {
+        None
+    }
+
+    fn evaluate(
+        &self,
+        _source: &Inventory,
+        target: &Inventory,
+        _ctx: &RuleContext,
+    ) -> Vec<Finding> {
+        target
+            .items_of(Kind::EnvRef)
+            .filter(|item| in_container(item) == Some(false))
+            .filter_map(|item| {
+                let (host, port) = ref_target(item)?;
+                let local = is_loopback(host) || host == "0.0.0.0";
+                if !local || has_listener(target, port) {
+                    return None;
+                }
+                Some(cap_if_partial(
+                    Finding {
+                        rule_id: self.id().to_owned(),
+                        severity: self.severity(),
+                        subject: subject(item),
+                        evidence: vec![subject(item)],
+                        args: env_ref_args(item, host, port),
+                    },
+                    target,
+                ))
+            })
+            .collect()
+    }
+}
+
+/// PAR-002: a configuration reference inside a container points at `localhost`, but the service
+/// is on the host.
+///
+/// Origin of the case: an application moved into a container kept `localhost` as the database
+/// host; the database ran on the host, but inside the container `localhost` is the container
+/// itself, so every connection failed.
+///
+/// Target only. Fires for an `env_ref` with `in_container` true, host `127.0.0.1`, `::1` or
+/// `localhost` (not `0.0.0.0`), a known port, where a `listener` `tcp:<port>` exists in the target
+/// inventory. ANY listener on that port counts, including a container port published by a Docker
+/// proxy: the rule does not try to tell those apart, so it can be a false positive when the
+/// container shares the host network or a sidecar really listens there. It reports something
+/// that was seen, so it is not capped for partial inventories.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Par002;
+
+impl ParityRule for Par002 {
+    fn id(&self) -> &'static str {
+        "PAR-002"
+    }
+
+    fn version(&self) -> u32 {
+        1
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Important
+    }
+
+    fn category(&self) -> &'static str {
+        "configuration"
+    }
+
+    fn fix_tier(&self) -> Option<Tier> {
+        None
+    }
+
+    fn evaluate(
+        &self,
+        _source: &Inventory,
+        target: &Inventory,
+        _ctx: &RuleContext,
+    ) -> Vec<Finding> {
+        target
+            .items_of(Kind::EnvRef)
+            .filter(|item| in_container(item) == Some(true))
+            .filter_map(|item| {
+                let (host, port) = ref_target(item)?;
+                (is_loopback(host) && has_listener(target, port)).then(|| Finding {
+                    rule_id: self.id().to_owned(),
+                    severity: self.severity(),
+                    subject: subject(item),
+                    evidence: vec![subject(item)],
+                    args: env_ref_args(item, host, port),
+                })
+            })
+            .collect()
+    }
+}
+
+/// The major component of a version: the text before the first `.`, `-` or `+`.
+fn major_of(version: &str) -> &str {
+    version.split(['.', '-', '+']).next().unwrap_or(version)
+}
+
+/// Whether two versions differ in major component. Purely numeric majors compare numerically (as
+/// text without leading zeros); if either is not purely numeric, whole strings compare
+/// case-insensitively.
+fn major_differs(a: &str, b: &str) -> bool {
+    let (ma, mb) = (major_of(a), major_of(b));
+    let numeric = |s: &str| !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit());
+    if numeric(ma) && numeric(mb) {
+        ma.trim_start_matches('0') != mb.trim_start_matches('0')
+    } else {
+        !a.eq_ignore_ascii_case(b)
+    }
+}
+
+/// PAR-009: a process item present on both sides runs a different MAJOR version.
+///
+/// Origin of the case: a database image was pulled at a newer major version on the new server; the
+/// data directory format changed and the service refused to start (or silently migrated).
+///
+/// Compares `Kind::Process` items with the same key whose `version` is a string on both sides.
+/// A null version on either side is silent (not known, not claimed). Minor and patch changes are
+/// ignored. Not capped for partial inventories: both versions were seen.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Par009;
+
+impl ParityRule for Par009 {
+    fn id(&self) -> &'static str {
+        "PAR-009"
+    }
+
+    fn version(&self) -> u32 {
+        1
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Important
+    }
+
+    fn category(&self) -> &'static str {
+        "versions"
+    }
+
+    fn fix_tier(&self) -> Option<Tier> {
+        None
+    }
+
+    fn evaluate(&self, source: &Inventory, target: &Inventory, _ctx: &RuleContext) -> Vec<Finding> {
+        target
+            .items_of(Kind::Process)
+            .filter_map(|t| {
+                let s = source.get(Kind::Process, &t.key)?;
+                let (sv, tv) = (s.str_field("version")?, t.str_field("version")?);
+                major_differs(sv, tv).then(|| Finding {
+                    rule_id: self.id().to_owned(),
+                    severity: self.severity(),
+                    subject: subject(t),
+                    evidence: vec![subject(s), subject(t)],
+                    args: BTreeMap::from([
+                        ("name".to_owned(), t.key.clone()),
+                        ("source_version".to_owned(), sv.to_owned()),
+                        ("target_version".to_owned(), tv.to_owned()),
+                    ]),
+                })
+            })
+            .collect()
+    }
+}

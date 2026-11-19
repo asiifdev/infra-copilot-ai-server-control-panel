@@ -23,6 +23,12 @@
 //! at the dump are skipped with a warning (never followed). File ownership is not checked: it needs
 //! metadata that `RootFs` does not expose.
 //!
+//! For each variable of the app's `env` that parses as a reference (URL, `host:port` or a
+//! `<PREFIX>_HOST` + `<PREFIX>_PORT` pair) the collector also emits an `env_ref` item, key
+//! `pm2:<name>:<VARIABLE>`, `in_container` false (see `crate::envref`, decision 0015). Only host
+//! and port are kept, never the value, user name, password or path. An app listed in several dumps
+//! takes its references from the first dump.
+//!
 //! Failure handling: no dump anywhere gives an empty collection without a warning (PM2 is simply
 //! not used). Unreadable, oversized or invalid dumps, and malformed app entries, each produce one
 //! counting warning per problem class. A warning never contains dump content. Environment values
@@ -33,6 +39,7 @@ use std::collections::BTreeMap;
 use inventory::{CollectError, Collection, Collector, Item, Kind, SeenVia};
 use serde_json::{Map, Value};
 
+use crate::envref::{self, Extracted};
 use crate::rootfs::{FsError, RootFs};
 use crate::supervision::is_dev_command;
 use crate::util::{MAX_CMD_CHARS, clean, redact_command_args, split_shell_words, truncate_chars};
@@ -141,6 +148,8 @@ impl Collector for Pm2 {
         }
 
         let mut apps: BTreeMap<String, Item> = BTreeMap::new();
+        let mut refs: Vec<Item> = Vec::new();
+        let (mut unparsed, mut over_cap) = (0usize, 0usize);
         for (owner, home) in &homes {
             let dir = format!("{home}/.pm2");
             let path = format!("{dir}/dump.pm2");
@@ -173,15 +182,24 @@ impl Collector for Pm2 {
             };
             for entry in entries.iter().take(MAX_APPS_PER_DUMP) {
                 match app_item(entry, owner) {
-                    Some(item) => merge(&mut apps, item),
+                    Some((item, found)) => {
+                        // The first dump that names an app supplies its references too.
+                        if !apps.contains_key(&item.key) {
+                            unparsed += found.unparsed;
+                            over_cap += found.over_cap;
+                            refs.extend(found.items);
+                        }
+                        merge(&mut apps, item);
+                    }
                     None => problems.bad_apps += 1,
                 }
             }
         }
-        Ok(Collection {
-            items: apps.into_values().collect(),
-            warnings: problems.warnings(),
-        })
+        let mut warnings = problems.warnings();
+        warnings.extend(envref::warnings(unparsed, over_cap));
+        let mut items: Vec<Item> = apps.into_values().collect();
+        items.extend(refs);
+        Ok(Collection { items, warnings })
     }
 }
 
@@ -202,7 +220,7 @@ fn merge(apps: &mut BTreeMap<String, Item>, item: Item) {
 }
 
 /// One app object of the dump as an item, or `None` when it has no usable name.
-fn app_item(app: &Value, owner: &str) -> Option<Item> {
+fn app_item(app: &Value, owner: &str) -> Option<(Item, Extracted)> {
     let name = clean(app.get("name")?.as_str()?, MAX_NAME_CHARS);
     if name.trim().is_empty() {
         return None;
@@ -256,6 +274,24 @@ fn app_item(app: &Value, owner: &str) -> Option<Item> {
     env_refs.dedup();
     env_refs.truncate(MAX_ENV_NAMES);
 
+    let key = format!("pm2:{name}");
+    // Values are inspected only inside `extract`, which keeps host and port and drops the rest.
+    let texts: Vec<(&str, String)> = env
+        .into_iter()
+        .flatten()
+        .filter_map(|(k, v)| match v {
+            Value::String(text) => Some((k.as_str(), text.clone())),
+            Value::Number(n) => Some((k.as_str(), n.to_string())),
+            _ => None,
+        })
+        .collect();
+    let found = envref::extract(
+        &key,
+        texts.iter().map(|(k, v)| (*k, v.as_str())),
+        false,
+        SeenVia::Config,
+    );
+
     let instances = app
         .get("instances")
         .and_then(Value::as_u64)
@@ -274,12 +310,13 @@ fn app_item(app: &Value, owner: &str) -> Option<Item> {
     data.insert("instances".into(), Value::from(instances));
     data.insert("saved_only".into(), Value::Bool(true));
     data.insert("owner".into(), Value::from(owner));
-    Some(Item {
+    let item = Item {
         kind: Kind::Process,
-        key: format!("pm2:{name}"),
+        key,
         data,
         seen_via: SeenVia::Config,
-    })
+    };
+    Some((item, found))
 }
 
 #[cfg(test)]
@@ -354,7 +391,8 @@ mod tests {
         t.write("home/deploy/.pm2/dump.pm2", NORMAL.as_bytes())?;
         let c = t.run()?;
         assert!(c.warnings.is_empty(), "{:?}", c.warnings);
-        assert_eq!(c.items.len(), 3);
+        let processes = c.items.iter().filter(|i| i.kind == Kind::Process).count();
+        assert_eq!(processes, 3);
         let web = find(&c, "pm2:web")?;
         assert_eq!(web.seen_via, SeenVia::Config);
         assert_eq!(web.str_field("mode"), Some("prod"));
@@ -373,6 +411,46 @@ mod tests {
         assert_eq!(worker.str_field("mode"), Some("unknown"));
         assert_eq!(worker.u64_field("instances"), Some(1));
         assert_eq!(worker.data.get("cwd"), Some(&Value::Null));
+        Ok(())
+    }
+
+    #[test]
+    fn env_references_become_env_ref_items() -> TestResult {
+        let t = Tree::new()?;
+        t.write(
+            "root/.pm2/dump.pm2",
+            br#"[{"name":"web","pm_exec_path":"/srv/web/s.js","env":{
+              "REDIS_URL":"redis://:topsecret@127.0.0.1:6379/0",
+              "DB_HOST":"127.0.0.1","DB_PORT":5432,
+              "BROKEN_URL":"not a url at all, hunter2",
+              "NODE_ENV":"production","PATH":"/usr/bin:/bin",
+              "API":"https://api.example.test/v1?token=ABCDEF"}}]"#,
+        )?;
+        let c = t.run()?;
+        let refs: Vec<&Item> = c.items.iter().filter(|i| i.kind == Kind::EnvRef).collect();
+        let keys: Vec<&str> = refs.iter().map(|i| i.key.as_str()).collect();
+        assert_eq!(
+            keys,
+            ["pm2:web:API", "pm2:web:DB_HOST", "pm2:web:REDIS_URL"]
+        );
+        let redis = find(&c, "pm2:web:REDIS_URL")?;
+        assert_eq!(redis.seen_via, SeenVia::Config);
+        assert_eq!(redis.str_field("app"), Some("pm2:web"));
+        assert_eq!(redis.str_field("name"), Some("REDIS_URL"));
+        assert_eq!(redis.str_field("target_host"), Some("127.0.0.1"));
+        assert_eq!(redis.u64_field("target_port"), Some(6379));
+        assert_eq!(redis.data.get("in_container"), Some(&Value::Bool(false)));
+        assert_eq!(redis.data.get("resolves_to"), Some(&Value::Null));
+        assert_eq!(
+            find(&c, "pm2:web:DB_HOST")?.u64_field("target_port"),
+            Some(5432)
+        );
+        assert_eq!(find(&c, "pm2:web:API")?.u64_field("target_port"), Some(443));
+        assert_eq!(c.warnings.len(), 1, "{:?}", c.warnings);
+        let all = format!("{:?}{:?}", c.items, c.warnings);
+        for secret in ["topsecret", "hunter2", "ABCDEF", "/v1"] {
+            assert!(!all.contains(secret), "{secret}");
+        }
         Ok(())
     }
 
