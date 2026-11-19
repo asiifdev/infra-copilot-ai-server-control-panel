@@ -4,9 +4,12 @@
 //! * [`Processes`]: running processes (`/proc/<pid>/{comm,cmdline,cwd}`), merged by name.
 //! * [`Cron`]: crontab files.
 //!
+//! External programs are run only through [`CommandRunner`] with a closed list of read-only [`Cmd`]s
+//! (decision 0014); tests use [`FakeRunner`].
+//!
 //! Every collector reads through a [`RootFs`], which has no write methods, so production points it
-//! at `/` and tests at a fixture tree. Nothing here runs an external command, uses `unsafe`, or
-//! reads process environments. A missing or unreadable source becomes a warning in
+//! at `/` and tests at a fixture tree. Collectors read files, never use `unsafe`, and never read process
+//! environments. A missing or unreadable source becomes a warning in
 //! [`inventory::Collection::warnings`] (the inventory then becomes `partial`), never a silent "nothing
 //! there". Values that cannot be determined are `null`/`unknown`, never guessed. Command lines and
 //! cron commands are redacted with [`core_domain::redact::redact`] before they enter an item.
@@ -17,6 +20,7 @@
 //! Not covered yet (M1-a): systemd, Docker, PM2, supervisors, `env_ref`, databases, macOS.
 
 mod cron;
+mod exec;
 mod listeners;
 mod processes;
 mod procfs;
@@ -30,6 +34,7 @@ use std::collections::btree_map::Entry;
 use inventory::{CollectError, Collector, Inventory, Item, Kind, Platform};
 
 pub use cron::Cron;
+pub use exec::{Cmd, CommandRunner, ExecError, FakeRunner, HostRunner};
 pub use listeners::Listeners;
 pub use processes::Processes;
 pub use rootfs::{DirNames, FileText, FsError, RootFs};
