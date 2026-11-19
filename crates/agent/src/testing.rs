@@ -1,0 +1,141 @@
+//! Shared test support: the contract suite every tool must pass, plus a configurable fake.
+//!
+//! Plain `pub` on purpose (no feature flag): other crates run [`contract_suite`] on their own
+//! tools in their tests (docs/design.md 12.4: one suite, every implementation).
+
+use crate::{
+    AiTool, Args, CallStatus, Executor, Registry, ToolContext, ToolError, ToolOutput, ToolSpec,
+};
+use core_domain::tier::Tier;
+use db::OrgId;
+
+/// A fixed organization id for tests.
+///
+/// # Panics
+/// Never: the constant is a valid id (checked by a unit test below).
+#[must_use]
+pub fn test_org() -> OrgId {
+    match OrgId::parse("00000000-0000-4000-8000-000000000001") {
+        Ok(org) => org,
+        Err(_) => unreachable!("constant org id is valid"),
+    }
+}
+
+/// A tool whose declaration and result are chosen by the test.
+pub struct FakeTool {
+    spec: ToolSpec,
+    result: Result<String, ToolError>,
+}
+
+impl FakeTool {
+    /// A tool that returns `result` for any valid call.
+    #[must_use]
+    pub fn new(spec: ToolSpec, result: Result<String, ToolError>) -> Self {
+        Self { spec, result }
+    }
+}
+
+impl AiTool for FakeTool {
+    fn spec(&self) -> &ToolSpec {
+        &self.spec
+    }
+
+    fn run(&self, _ctx: &ToolContext<'_>, _args: &Args) -> Result<ToolOutput, ToolError> {
+        self.result.clone().map(ToolOutput::new)
+    }
+}
+
+/// What every tool must satisfy, whatever it does. `valid_args` is a call the tool accepts.
+///
+/// # Panics
+/// On the first violated rule, naming it (this is a test helper).
+pub fn contract_suite(tool: Box<dyn AiTool>, valid_args: &str) {
+    let spec = *tool.spec();
+    let mut registry = Registry::new(Tier::Plan);
+    assert!(
+        registry.register(tool).is_ok(),
+        "{}: refused by the registry",
+        spec.name
+    );
+    let definitions = registry.definitions();
+    assert_eq!(definitions.len(), 1);
+    assert_eq!(
+        definitions[0].parameters["additionalProperties"], false,
+        "{}",
+        spec.name
+    );
+
+    let executor = Executor::new(registry);
+    let org = test_org();
+    let ctx = ToolContext { org: &org };
+
+    let ok = executor.call(&ctx, spec.name, valid_args);
+    assert_eq!(
+        ok.record.status,
+        CallStatus::Ok,
+        "{}: valid call refused",
+        spec.name
+    );
+    assert_eq!(ok.record.tier, Some(spec.tier));
+    assert!(
+        ok.content.starts_with("<untrusted_output"),
+        "{}: result not fenced",
+        spec.name
+    );
+
+    // A field the schema does not declare must be refused, including an identity field.
+    for extra in [r#"{"zz_unknown":1}"#, r#"{"org_id":"someone-else"}"#] {
+        let out = executor.call(&ctx, spec.name, extra);
+        assert!(
+            matches!(out.record.status, CallStatus::BadArguments(_)),
+            "{}: accepted {extra}",
+            spec.name
+        );
+    }
+    // Garbage must not reach the tool or crash the executor.
+    for garbage in ["{", "null", "[]", "\u{0}"] {
+        let out = executor.call(&ctx, spec.name, garbage);
+        assert!(
+            matches!(out.record.status, CallStatus::BadArguments(_)),
+            "{}: accepted {garbage:?}",
+            spec.name
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{ArgSchema, Field, Kind};
+
+    const READ_SPEC: ToolSpec = ToolSpec {
+        name: "echo",
+        description: "Echoes.",
+        tier: Tier::Read,
+        schema: ArgSchema {
+            fields: &[Field {
+                name: "text",
+                kind: Kind::Text {
+                    max_chars: 20,
+                    choices: None,
+                },
+                required: true,
+                description: "Text.",
+            }],
+        },
+        impact: None,
+    };
+
+    #[test]
+    fn the_test_org_constant_is_valid() {
+        assert_eq!(test_org().as_str().len(), 36);
+    }
+
+    #[test]
+    fn a_plain_read_tool_passes_the_suite() {
+        contract_suite(
+            Box::new(FakeTool::new(READ_SPEC, Ok("hello".into()))),
+            r#"{"text":"hi"}"#,
+        );
+    }
+}

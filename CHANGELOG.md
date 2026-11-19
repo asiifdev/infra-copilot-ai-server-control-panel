@@ -11,6 +11,8 @@ cannot drift apart. Release notes may get an Indonesian summary.
 
 ### Added
 
+- M2-a, the AI tool layer (`crates/agent`, ADR 0020): the `AiTool` contract, closed typed argument schemas, a registry that refuses any tool above tier 1 and any tool declaring an identity field (`org_id`, `user_id`, ...), and an executor that validates arguments, redacts and caps results, and fences them as untrusted data. No model is connected yet; 26 tests cover refusal paths.
+
 - A visual README in English and Indonesian: logo hero, honest status table, an operating-loop diagram (`docs/assets/operating-loop.svg`, every step labelled NOW, BUILDING or PLANNED), a real CLI output sample, a table of the safety rules enforced today with links to the code, and the roadmap.
 
 - Discoverability: a lead line and a one-line mechanism in both READMEs, a "Who is Nodivara for?" section by role, the same canonical definition in the README, FAQ and `llms.txt`, and a 1280x640 social preview image (`brand/nodivara-social-1280x640.png`; GitHub only accepts it through the repository settings).
