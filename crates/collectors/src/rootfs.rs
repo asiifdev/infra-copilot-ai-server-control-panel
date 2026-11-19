@@ -8,31 +8,57 @@
 //! component and no NUL byte; anything else is [`FsError::InvalidPath`]. Reads are bounded and
 //! lossy on invalid UTF-8, so hostile or broken files cannot exhaust memory or cause a panic.
 //!
-//! Symlinks are resolved inside the root, chroot style, one component at a time: an absolute
-//! target is taken relative to the root and `..` never climbs above it. With `--root /mnt/old-disk`
-//! a link such as `/etc/crontab -> /etc/shadow` therefore reads the old disk's file (or is not
-//! found), never the host's. More than 40 links in one path is [`FsError::SymlinkLoop`].
-//! [`RootFs::read_link`] resolves only the parent components and returns the last link's text.
+//! Symlinks are resolved inside the root, chroot style: an absolute target is taken relative to
+//! the root and `..` never climbs above it. With `--root /mnt/old-disk` a link such as
+//! `/etc/crontab -> /etc/shadow` therefore reads the old disk's file (or is not found), never the
+//! host's. More than 40 links in one path is [`FsError::SymlinkLoop`]. [`RootFs::read_link`]
+//! resolves only the parent components and returns the last link's text.
 //!
-//! [`RootFs::read_to_string_nolink`] closes the race for the final component (check after open);
-//! the limit below remains for the parent components.
+//! # Guarantee against concurrent changes (decision 0017)
 //!
-//! Limit (accepted, see decision 0013): a path is resolved and then opened, so another process that
-//! can **write inside the root while it is being read** could swap a component for a symlink in
-//! between (time-of-check to time-of-use) and make the open follow it out of the root. Closing that
-//! gap needs `openat2(RESOLVE_IN_ROOT)` or a per-component `openat` walk, which requires `unsafe`
-//! or a new dependency; both are outside the current rules. Collect from a root nobody can modify
-//! concurrently (the live `/` is not writable by unprivileged users where it matters, `/proc` is
-//! kernel-managed, and a mounted old disk or a snapshot is quiescent).
+//! Resolution never works on path strings that are opened later. Every component is looked up
+//! relative to a directory file descriptor that is already open: intermediate directories are
+//! opened with `O_NOFOLLOW | O_DIRECTORY`, a symlink is read with `readlinkat` and expanded inside
+//! the root, and the final component is opened with `O_NOFOLLOW` (and `O_NONBLOCK`, so a FIFO
+//! cannot block the collector). A process that can write inside the root while it is read can
+//! therefore not swap a parent directory for a symlink between the check and the open: the swap
+//! makes the open fail (closed), it never makes it leave the root. On Linux the kernel does the
+//! whole walk atomically with `openat2(RESOLVE_IN_ROOT | RESOLVE_NO_MAGICLINKS)`; the per-component
+//! walk is used where `openat2` is missing (kernel before 5.6, macOS and other Unix) or blocked
+//! (`ENOSYS`, `EPERM`, for example by an old container seccomp profile).
+//!
+//! Remaining limits, stated plainly:
+//! - The root itself is opened by path (`base`); if that path is replaced while the process runs,
+//!   the new tree is used from then on. Everything inside is safe, the root's own name is trusted.
+//! - Mount points inside the root are crossed (`RESOLVE_NO_XDEV` is not set), so `/proc` and bind
+//!   mounts work; a mount that someone else controls inside the root is followed.
+//! - [`RootFs::read_link`] reads a link's text; what the text names is not validated.
+//! - The `openat2` branch (Linux only) is compiled and tested in CI on Linux; it was written from
+//!   the documentation and could not be run on the macOS development machine. The walk is tested
+//!   everywhere, and on Linux a contract test compares both branches on the same tree.
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt;
-use std::fs;
+use std::fs::File;
 use std::io::{self, Read};
-use std::path::{Component, PathBuf};
+use std::os::unix::ffi::OsStrExt;
+use std::path::PathBuf;
+
+use rustix::fd::OwnedFd;
+use rustix::fs::{self, AtFlags, CWD, Dir, FileType, Mode, OFlags};
+use rustix::io::Errno;
 
 /// Most symbolic links followed while resolving one path (Linux uses the same limit).
 const MAX_SYMLINKS: usize = 40;
+
+/// Open flags for a file read: never blocks on a FIFO, never leaks into children.
+const FILE_FLAGS: OFlags = OFlags::RDONLY
+    .union(OFlags::NONBLOCK)
+    .union(OFlags::CLOEXEC);
+/// Open flags for a directory.
+const DIR_FLAGS: OFlags = OFlags::RDONLY
+    .union(OFlags::DIRECTORY)
+    .union(OFlags::CLOEXEC);
 
 /// Why a read failed. Callers turn this into a warning, never into a silent "nothing there".
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,6 +99,16 @@ impl From<&io::Error> for FsError {
             io::ErrorKind::PermissionDenied => Self::PermissionDenied,
             io::ErrorKind::IsADirectory | io::ErrorKind::NotADirectory => Self::WrongType,
             _ => Self::Other(err.to_string()),
+        }
+    }
+}
+
+impl From<Errno> for FsError {
+    fn from(errno: Errno) -> Self {
+        if errno == Errno::LOOP {
+            Self::SymlinkLoop
+        } else {
+            Self::from(&io::Error::from(errno))
         }
     }
 }
@@ -123,70 +159,29 @@ impl RootFs {
     /// # Errors
     /// [`FsError`] when the root is missing, not a directory, or unreadable.
     pub fn validate(&self) -> Result<(), FsError> {
-        let meta = fs::metadata(&self.base).map_err(|err| FsError::from(&err))?;
-        if meta.is_dir() {
+        let stat = fs::statat(CWD, &self.base, AtFlags::empty())?;
+        if FileType::from_raw_mode(stat.st_mode) == FileType::Directory {
             Ok(())
         } else {
             Err(FsError::WrongType)
         }
     }
 
-    /// Resolves `rel` inside the root: every symlink is expanded in chroot style. With
-    /// `follow_last == false` the final component is left alone (for `read_link`).
-    fn resolve(&self, rel: &str, follow_last: bool) -> Result<PathBuf, FsError> {
-        if !rel.starts_with('/') || rel.contains('\0') {
-            return Err(FsError::InvalidPath(rel.to_owned()));
+    /// Opens the root directory (a new descriptor per call, so `RootFs` stays plain data).
+    fn open_root(&self) -> Result<OwnedFd, FsError> {
+        Ok(fs::openat(CWD, &self.base, DIR_FLAGS, Mode::empty())?)
+    }
+
+    /// Opens `rel` inside the root. With `follow == false` the final component must not be a
+    /// symbolic link (the open fails with [`FsError::WrongType`]).
+    fn open_in_root(&self, rel: &str, follow: bool, flags: OFlags) -> Result<OwnedFd, FsError> {
+        let names = split_path(rel)?;
+        let root = self.open_root()?;
+        #[cfg(target_os = "linux")]
+        if let Some(result) = open_with_openat2(&root, &names, follow, flags) {
+            return result;
         }
-        let mut pending: Vec<Step> = Vec::new();
-        for part in rel.split('/').rev() {
-            match part {
-                "" | "." => {}
-                ".." => return Err(FsError::InvalidPath(rel.to_owned())),
-                part => pending.push(Step::Name(OsString::from(part))),
-            }
-        }
-        let mut resolved: Vec<OsString> = Vec::new();
-        let mut links = 0usize;
-        while let Some(step) = pending.pop() {
-            let name = match step {
-                Step::Parent => {
-                    resolved.pop(); // at the root, `..` stays at the root
-                    continue;
-                }
-                Step::Name(name) => name,
-            };
-            let mut candidate = self.base.clone();
-            candidate.extend(&resolved);
-            candidate.push(&name);
-            if pending.is_empty() && !follow_last {
-                return Ok(candidate);
-            }
-            let meta = fs::symlink_metadata(&candidate).map_err(|err| FsError::from(&err))?;
-            if !meta.file_type().is_symlink() {
-                resolved.push(name);
-                continue;
-            }
-            links += 1;
-            if links > MAX_SYMLINKS {
-                return Err(FsError::SymlinkLoop);
-            }
-            let target = fs::read_link(&candidate).map_err(|err| FsError::from(&err))?;
-            if target.has_root() {
-                resolved.clear(); // absolute targets are relative to the root, not the host
-            }
-            let steps: Vec<Step> = target
-                .components()
-                .filter_map(|component| match component {
-                    Component::Normal(name) => Some(Step::Name(name.to_owned())),
-                    Component::ParentDir => Some(Step::Parent),
-                    Component::RootDir | Component::CurDir | Component::Prefix(_) => None,
-                })
-                .collect();
-            pending.extend(steps.into_iter().rev());
-        }
-        let mut path = self.base.clone();
-        path.extend(&resolved);
-        Ok(path)
+        open_with_walk(root, &names, follow, flags)
     }
 
     /// Reads a regular file (following symlinks inside the root) as text, reading at most
@@ -196,21 +191,18 @@ impl RootFs {
     /// [`FsError`]; non-regular files (directories, FIFOs, devices) are refused so a planted FIFO
     /// cannot block the collector.
     pub fn read_to_string(&self, rel: &str, max_bytes: usize) -> Result<FileText, FsError> {
-        let path = self.resolve(rel, true)?;
-        read_file(&path, max_bytes, false)
+        read_file(self.open_in_root(rel, true, FILE_FLAGS)?, max_bytes)
     }
 
     /// Like [`RootFs::read_to_string`], but the **last** path component must not be a symbolic
-    /// link: it is refused with [`FsError::WrongType`], and the check is repeated after the file
-    /// is open (the opened file must be the very file `lstat` shows, same device and inode), so
-    /// the link cannot be swapped in between. Parent components are still resolved inside the root
-    /// (the limit in the module documentation applies to them).
+    /// link: it is refused with [`FsError::WrongType`]. The final open uses `O_NOFOLLOW`, so the
+    /// link cannot be swapped in between a check and the open; there is no separate check. Parent
+    /// components are resolved inside the root as usual.
     ///
     /// # Errors
     /// [`FsError`]; see [`RootFs::read_to_string`].
     pub fn read_to_string_nolink(&self, rel: &str, max_bytes: usize) -> Result<FileText, FsError> {
-        let path = self.resolve(rel, false)?;
-        read_file(&path, max_bytes, true)
+        read_file(self.open_in_root(rel, false, FILE_FLAGS)?, max_bytes)
     }
 
     /// Lists a directory: entry names sorted, at most `max_entries`.
@@ -219,17 +211,21 @@ impl RootFs {
     /// [`FsError`]. Entries that vanish while listing are skipped; names that are not valid UTF-8
     /// are counted in [`DirNames::non_utf8`].
     pub fn read_dir(&self, rel: &str, max_entries: usize) -> Result<DirNames, FsError> {
-        let path = self.resolve(rel, true)?;
-        let entries = fs::read_dir(&path).map_err(|err| FsError::from(&err))?;
+        let fd = self.open_in_root(rel, true, DIR_FLAGS)?;
+        let dir = Dir::read_from(&fd)?;
         let mut names = Vec::new();
         let mut truncated = false;
         let mut non_utf8 = 0usize;
-        for entry in entries.flatten() {
+        for entry in dir.flatten() {
+            let raw = entry.file_name().to_bytes();
+            if raw == b"." || raw == b".." {
+                continue;
+            }
             if names.len() >= max_entries {
                 truncated = true;
                 break;
             }
-            match entry.file_name().into_string() {
+            match String::from_utf8(raw.to_vec()) {
                 Ok(name) => names.push(name),
                 Err(_) => non_utf8 += 1,
             }
@@ -248,43 +244,209 @@ impl RootFs {
     /// # Errors
     /// [`FsError`].
     pub fn read_link(&self, rel: &str) -> Result<String, FsError> {
-        let path = self.resolve(rel, false)?;
-        let target = fs::read_link(&path).map_err(|err| FsError::from(&err))?;
-        Ok(target.to_string_lossy().into_owned())
+        let names = split_path(rel)?;
+        let walked = walk(self.open_root()?, &names, false)?;
+        let name = walked.last.as_deref().unwrap_or(OsStr::new("."));
+        let target = fs::readlinkat(&walked.dir, name, Vec::new())?;
+        Ok(String::from_utf8_lossy(target.to_bytes()).into_owned())
     }
 }
 
-/// Opens and reads a regular file; with `nolink` the final component must not be a symlink.
-fn read_file(path: &std::path::Path, max_bytes: usize, nolink: bool) -> Result<FileText, FsError> {
-    if nolink {
-        let link = fs::symlink_metadata(path).map_err(|err| FsError::from(&err))?;
-        if link.file_type().is_symlink() {
-            return Err(FsError::WrongType);
+/// Validates `rel` and returns its components (`.` and empty parts dropped).
+fn split_path(rel: &str) -> Result<Vec<&str>, FsError> {
+    if !rel.starts_with('/') || rel.contains('\0') {
+        return Err(FsError::InvalidPath(rel.to_owned()));
+    }
+    let mut names = Vec::new();
+    for part in rel.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => return Err(FsError::InvalidPath(rel.to_owned())),
+            part => names.push(part),
         }
     }
-    // Cheap early refusal; the authoritative check is on the opened file below, so a file
-    // swapped for a FIFO in between cannot block the open (it is opened non-blocking where the
-    // flag is known).
-    let meta = fs::metadata(path).map_err(|err| FsError::from(&err))?;
-    if !meta.is_file() {
-        return Err(FsError::WrongType);
+    Ok(names)
+}
+
+/// The final-component error: with `follow == false` a symlink (`ELOOP` from `O_NOFOLLOW`) is the
+/// wrong type; otherwise it is a loop.
+fn final_error(errno: Errno, follow: bool) -> FsError {
+    if errno == Errno::LOOP && !follow {
+        FsError::WrongType
+    } else {
+        FsError::from(errno)
     }
-    let file = open_nonblocking(path).map_err(|err| FsError::from(&err))?;
-    let opened = file.metadata().map_err(|err| FsError::from(&err))?;
-    if !opened.is_file() {
-        return Err(FsError::WrongType);
+}
+
+/// Linux fast path: the kernel resolves the whole path atomically inside the root. `None` means
+/// "use the walk" (the syscall is missing or blocked, or the answer needs the walk's precision).
+#[cfg(target_os = "linux")]
+fn open_with_openat2(
+    root: &OwnedFd,
+    names: &[&str],
+    follow: bool,
+    flags: OFlags,
+) -> Option<Result<OwnedFd, FsError>> {
+    use rustix::fs::ResolveFlags;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    /// Set once `openat2` answered `ENOSYS` or `EPERM`, so later calls skip it.
+    static UNAVAILABLE: AtomicBool = AtomicBool::new(false);
+
+    if UNAVAILABLE.load(Ordering::Relaxed) {
+        return None;
     }
-    if nolink {
-        let after = fs::symlink_metadata(path).map_err(|err| FsError::from(&err))?;
-        if after.file_type().is_symlink() || !same_file(&opened, &after) {
-            return Err(FsError::WrongType);
+    let rel = if names.is_empty() {
+        ".".to_owned()
+    } else {
+        names.join("/")
+    };
+    let mut oflags = flags | OFlags::CLOEXEC;
+    if !follow {
+        oflags |= OFlags::NOFOLLOW;
+    }
+    let resolve = ResolveFlags::IN_ROOT | ResolveFlags::NO_MAGICLINKS;
+    // `EAGAIN` means the kernel saw a rename or mount race during the walk; a few retries, then
+    // the walk decides.
+    for _ in 0..4 {
+        match fs::openat2(root, rel.as_str(), oflags, Mode::empty(), resolve) {
+            Ok(fd) => return Some(Ok(fd)),
+            Err(errno) if errno == Errno::NOSYS || errno == Errno::PERM => {
+                UNAVAILABLE.store(true, Ordering::Relaxed);
+                return None;
+            }
+            Err(errno) if errno == Errno::AGAIN => {}
+            // `ELOOP` with `O_NOFOLLOW` is either the final link or a loop in a parent; the walk
+            // tells the two apart.
+            Err(errno) if errno == Errno::LOOP && !follow => return None,
+            Err(errno) => return Some(Err(final_error(errno, follow))),
         }
+    }
+    None
+}
+
+/// The per-component fallback (and the only path off Linux).
+fn open_with_walk(
+    root: OwnedFd,
+    names: &[&str],
+    follow: bool,
+    flags: OFlags,
+) -> Result<OwnedFd, FsError> {
+    let walked = walk(root, names, follow)?;
+    // Everything on the way is resolved, so `O_NOFOLLOW` is always right for the last open: a link
+    // swapped in since the lookup makes it fail instead of leaving the root.
+    let name = walked.last.as_deref().unwrap_or(OsStr::new("."));
+    fs::openat(
+        &walked.dir,
+        name,
+        flags | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .map_err(|errno| final_error(errno, follow))
+}
+
+/// Where a walk ended: `dir` is open, and `last` (if any) is an entry of it, not yet opened.
+struct Walked {
+    dir: OwnedFd,
+    last: Option<OsString>,
+}
+
+/// One pending path component.
+enum Step {
+    Name(OsString),
+    Parent,
+}
+
+/// Walks `names` from `root`, one directory descriptor at a time. Symlinks are read with
+/// `readlinkat` and expanded in place (absolute targets restart at the root, `..` pops a
+/// descriptor and never goes below the root). The last component is returned unopened (and, with
+/// `follow == false`, unexamined).
+fn walk(root: OwnedFd, names: &[&str], follow: bool) -> Result<Walked, FsError> {
+    let mut current = root;
+    let mut parents: Vec<OwnedFd> = Vec::new();
+    let mut pending: Vec<Step> = names
+        .iter()
+        .rev()
+        .map(|name| Step::Name(OsString::from(name)))
+        .collect();
+    let mut links = 0usize;
+    while let Some(step) = pending.pop() {
+        let name = match step {
+            Step::Parent => {
+                if let Some(parent) = parents.pop() {
+                    current = parent; // at the root, `..` stays at the root
+                }
+                continue;
+            }
+            Step::Name(name) => name,
+        };
+        let is_last = pending.is_empty();
+        if is_last && !follow {
+            return Ok(Walked {
+                dir: current,
+                last: Some(name),
+            });
+        }
+        let stat = fs::statat(&current, name.as_os_str(), AtFlags::SYMLINK_NOFOLLOW)?;
+        match FileType::from_raw_mode(stat.st_mode) {
+            FileType::Symlink => {
+                links += 1;
+                if links > MAX_SYMLINKS {
+                    return Err(FsError::SymlinkLoop);
+                }
+                let target = fs::readlinkat(&current, name.as_os_str(), Vec::new())?;
+                let bytes = target.to_bytes();
+                if bytes.first() == Some(&b'/') {
+                    // Absolute targets are relative to the root, not the host.
+                    if let Some(root) = parents.drain(..).next() {
+                        current = root;
+                    }
+                }
+                for part in bytes.rsplit(|byte| *byte == b'/') {
+                    match part {
+                        b"" | b"." => {}
+                        b".." => pending.push(Step::Parent),
+                        part => pending.push(Step::Name(OsStr::from_bytes(part).to_owned())),
+                    }
+                }
+            }
+            _ if is_last => {
+                return Ok(Walked {
+                    dir: current,
+                    last: Some(name),
+                });
+            }
+            FileType::Directory => {
+                let next = fs::openat(
+                    &current,
+                    name.as_os_str(),
+                    DIR_FLAGS | OFlags::NOFOLLOW,
+                    Mode::empty(),
+                )?;
+                parents.push(std::mem::replace(&mut current, next));
+            }
+            _ => return Err(FsError::WrongType),
+        }
+    }
+    Ok(Walked {
+        dir: current,
+        last: None,
+    })
+}
+
+/// Reads an opened regular file; the type is checked on the descriptor itself, so a file swapped
+/// for something else after the open cannot matter.
+fn read_file(fd: OwnedFd, max_bytes: usize) -> Result<FileText, FsError> {
+    let stat = fs::fstat(&fd)?;
+    if FileType::from_raw_mode(stat.st_mode) != FileType::RegularFile {
+        return Err(FsError::WrongType);
     }
     let limit = u64::try_from(max_bytes)
         .unwrap_or(u64::MAX)
         .saturating_add(1);
     let mut bytes = Vec::new();
-    file.take(limit)
+    File::from(fd)
+        .take(limit)
         .read_to_end(&mut bytes)
         .map_err(|err| FsError::from(&err))?;
     let truncated = bytes.len() > max_bytes;
@@ -293,70 +455,6 @@ fn read_file(path: &std::path::Path, max_bytes: usize, nolink: bool) -> Result<F
         text: String::from_utf8_lossy(&bytes).into_owned(),
         truncated,
     })
-}
-
-#[cfg(unix)]
-fn same_file(a: &fs::Metadata, b: &fs::Metadata) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    a.dev() == b.dev() && a.ino() == b.ino()
-}
-
-#[cfg(not(unix))]
-fn same_file(_: &fs::Metadata, _: &fs::Metadata) -> bool {
-    true
-}
-
-/// One pending path component during resolution.
-enum Step {
-    Name(OsString),
-    Parent,
-}
-
-/// `O_NONBLOCK` for the platforms where its value is known without a C library binding; elsewhere
-/// the metadata checks above are the only guard against a FIFO.
-#[cfg(unix)]
-const O_NONBLOCK: Option<i32> = if cfg!(any(
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_os = "dragonfly"
-)) {
-    Some(0x0004)
-} else if cfg!(all(
-    any(target_os = "linux", target_os = "android"),
-    any(
-        target_arch = "x86",
-        target_arch = "x86_64",
-        target_arch = "arm",
-        target_arch = "aarch64",
-        target_arch = "riscv32",
-        target_arch = "riscv64",
-        target_arch = "powerpc",
-        target_arch = "powerpc64",
-        target_arch = "s390x",
-        target_arch = "loongarch64"
-    )
-)) {
-    Some(0o4000)
-} else {
-    None
-};
-
-#[cfg(unix)]
-fn open_nonblocking(path: &std::path::Path) -> io::Result<fs::File> {
-    use std::os::unix::fs::OpenOptionsExt;
-    let mut options = fs::OpenOptions::new();
-    options.read(true);
-    if let Some(flag) = O_NONBLOCK {
-        options.custom_flags(flag);
-    }
-    options.open(path)
-}
-
-#[cfg(not(unix))]
-fn open_nonblocking(path: &std::path::Path) -> io::Result<fs::File> {
-    fs::File::open(path)
 }
 
 #[cfg(test)]
@@ -385,5 +483,73 @@ mod tests {
             RootFs::new("/nonexistent-root").validate(),
             Err(FsError::NotFound)
         );
+    }
+
+    /// Builds a small tree with links of every kind under a unique temporary directory.
+    fn tree(name: &str) -> Result<PathBuf, io::Error> {
+        let top = std::env::temp_dir().join(format!("rootfs-unit-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&top);
+        let root = top.join("root");
+        std::fs::create_dir_all(root.join("a/b"))?;
+        std::fs::write(root.join("a/b/file"), "hello")?;
+        let link = std::os::unix::fs::symlink;
+        link("b/file", root.join("a/rel"))?;
+        link("/a/b", root.join("abs"))?;
+        link("../../a/b/file", root.join("a/b/climb"))?;
+        link("../../../../x/../a/b/file", root.join("a/b/deep"))?;
+        link("loop2", root.join("loop1"))?;
+        link("loop1", root.join("loop2"))?;
+        link("missing", root.join("dangling"))?;
+        Ok(root)
+    }
+
+    /// Both resolution strategies (the walk, and `openat2` on Linux) and the public API must give
+    /// the same answer on the same tree, for every kind of path.
+    #[test]
+    fn walk_openat2_and_public_api_agree() -> Result<(), io::Error> {
+        let root = tree("agree")?;
+        let fs = RootFs::new(&root);
+        let paths = [
+            "/a/b/file",
+            "/a/rel",
+            "/abs/file",
+            "/a/b/climb",
+            "/a/b/deep",
+            "/loop1",
+            "/dangling",
+            "/a/b",
+            "/a/none",
+            "/",
+        ];
+        for path in paths {
+            for follow in [true, false] {
+                let names = split_path(path).map_err(|e| io::Error::other(e.to_string()))?;
+                let walk_result =
+                    open_with_walk(fs.open_root().map_err(io_of)?, &names, follow, FILE_FLAGS)
+                        .and_then(|fd| read_file(fd, 64));
+                let public = if follow {
+                    fs.read_to_string(path, 64)
+                } else {
+                    fs.read_to_string_nolink(path, 64)
+                };
+                assert_eq!(walk_result, public, "{path} follow={follow}");
+                #[cfg(target_os = "linux")]
+                if let Some(kernel) =
+                    open_with_openat2(&fs.open_root().map_err(io_of)?, &names, follow, FILE_FLAGS)
+                {
+                    assert_eq!(
+                        kernel.and_then(|fd| read_file(fd, 64)),
+                        public,
+                        "{path} openat2"
+                    );
+                }
+            }
+        }
+        let _ = std::fs::remove_dir_all(root.parent().unwrap_or(&root));
+        Ok(())
+    }
+
+    fn io_of(err: FsError) -> io::Error {
+        io::Error::other(err.to_string())
     }
 }
