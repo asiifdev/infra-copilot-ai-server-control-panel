@@ -32,6 +32,7 @@ cannot drift apart. Release notes may get an Indonesian summary.
 - `inventory` crate: inventory model (`Inventory`, `Item`, `Finding`, `Status`) and the `Collector` and `ParityRule` contracts, following `docs/design.md` 3.3, 4, 5 and 12.4 (decision 0013).
 - `collectors` crate: read-only Linux collectors for listening ports, processes and cron jobs, reading through a replaceable `RootFs` (tested on fixture trees); command lines and cron commands are redacted and `/proc/<pid>/environ` is never read.
 - `parity` crate: rules PAR-001 (listener without counterpart), PAR-008 (cron job without counterpart) and PAR-010 (port open to the internet), a deterministic comparer, and a renderer that takes all text from the en/id catalog. A partial inventory never proves absence: findings are capped at Info.
+- PAR-006 (application serving a port runs a development server or outside any supervisor, target side only). The process collector now sets `mode` to `dev` for well-known development servers and `supervised` from the cgroup (systemd service, container scope, login session) and from supervisor ancestors such as PM2; `prod` is never claimed and unknown stays null.
 - `cli` crate: `infra collect` and `infra compare` (exit code 1 on a critical finding), with English and Indonesian output.
 
 ### Security

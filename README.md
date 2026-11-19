@@ -60,7 +60,7 @@ crates/core         shared domain types: risk tiers, secret redaction (no extern
 crates/i18n         en/id message catalog with stable keys and fallback
 crates/inventory    inventory model and the Collector / ParityRule contracts
 crates/collectors   read-only Linux collectors (listeners, processes, cron)
-crates/parity       parity rules PAR-001, PAR-008, PAR-010, comparer and localized report
+crates/parity       parity rules PAR-001, PAR-006, PAR-008, PAR-010, comparer and localized report
 crates/cli          `infra collect` and `infra compare` (offline, read-only)
 crates/db           SQLite schema, tenant-scoped queries, hash-chained audit log
 crates/proto-server throwaway prototype used to measure binary size, memory and startup
