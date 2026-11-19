@@ -1,0 +1,75 @@
+/*
+ * Nodivara design tokens (decision 0019, docs/brand.md). Colours are sampled from the logo:
+ * background #070812, brand lime #b6f205, light lime #e9fc61, green #429004, silver #d9deea.
+ * Light theme is the default; dark follows the system (prefers-color-scheme) unless the page sets
+ * data-theme="light" or "dark". The two dark blocks must stay identical and every text pair must
+ * keep its contrast: `python3 scripts/check-palette.py` checks both (WCAG 2.2 AA).
+ * Lime is never used as text on a light surface (1.3:1); the light theme uses deep green instead.
+ */
+:root {
+  color-scheme: light;
+  --nv-bg: #f6f8f2;
+  --nv-surface: #ffffff;
+  --nv-surface-2: #eef2e6;
+  --nv-border: #d5dccb;
+  --nv-border-strong: #7d8a6f;
+  --nv-text: #0b1020;
+  --nv-text-muted: #4b556b;
+  --nv-primary: #2c7a0b;
+  --nv-on-primary: #ffffff;
+  --nv-primary-hover: #236409;
+  --nv-link: #2c7a0b;
+  --nv-focus: #2c7a0b;
+  --nv-accent: #b6f205;
+  --nv-on-accent: #070812;
+  --nv-success: #2c7a0b;
+  --nv-warning: #8a5a00;
+  --nv-danger: #b42318;
+  --nv-info: #1d4ed8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --nv-bg: #070812;
+    --nv-surface: #0d1020;
+    --nv-surface-2: #151a2c;
+    --nv-border: #262d44;
+    --nv-border-strong: #5a6685;
+    --nv-text: #eef1f8;
+    --nv-text-muted: #a9b3c7;
+    --nv-primary: #b6f205;
+    --nv-on-primary: #070812;
+    --nv-primary-hover: #e9fc61;
+    --nv-link: #b6f205;
+    --nv-focus: #e9fc61;
+    --nv-accent: #b6f205;
+    --nv-on-accent: #070812;
+    --nv-success: #5fd01a;
+    --nv-warning: #f5b83d;
+    --nv-danger: #ff7b7b;
+    --nv-info: #7aa7ff;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --nv-bg: #070812;
+  --nv-surface: #0d1020;
+  --nv-surface-2: #151a2c;
+  --nv-border: #262d44;
+  --nv-border-strong: #5a6685;
+  --nv-text: #eef1f8;
+  --nv-text-muted: #a9b3c7;
+  --nv-primary: #b6f205;
+  --nv-on-primary: #070812;
+  --nv-primary-hover: #e9fc61;
+  --nv-link: #b6f205;
+  --nv-focus: #e9fc61;
+  --nv-accent: #b6f205;
+  --nv-on-accent: #070812;
+  --nv-success: #5fd01a;
+  --nv-warning: #f5b83d;
+  --nv-danger: #ff7b7b;
+  --nv-info: #7aa7ff;
+}

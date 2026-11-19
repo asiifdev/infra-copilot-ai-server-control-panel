@@ -8,7 +8,7 @@ export const LOCALES: readonly Locale[] = ['en', 'id'];
 
 const catalogs = {
   en: {
-    'app.title': 'Infra Copilot',
+    'app.title': 'Nodivara',
     'app.subtitle': 'Node inventory (prototype, dummy data)',
     'lang.label': 'Language',
     'lang.en': 'English',
@@ -29,7 +29,7 @@ const catalogs = {
     'footer.count': 'rows shown',
   },
   id: {
-    'app.title': 'Infra Copilot',
+    'app.title': 'Nodivara',
     'app.subtitle': 'Inventaris node (prototipe, data dummy)',
     'lang.label': 'Bahasa',
     'lang.en': 'Inggris',

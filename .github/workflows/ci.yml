@@ -93,6 +93,8 @@ jobs:
           persist-credentials: false
       - name: Check
         run: python3 scripts/check-docs.py
+      - name: Check the colour palette contrast
+        run: python3 scripts/check-palette.py
 
   perf-budget:
     name: Performance budget (${{ matrix.os }})
