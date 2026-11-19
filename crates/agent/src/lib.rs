@@ -15,8 +15,10 @@
 //! Tools are synchronous and read through the [`ToolContext`]; the async model loop (M2-d) calls
 //! the [`Executor`] from a blocking task.
 
+mod assistant;
 mod exec;
 mod persist;
+mod proposals;
 mod registry;
 mod schema;
 mod store;
@@ -25,11 +27,18 @@ mod tool;
 mod tools;
 mod untrusted;
 
+pub use assistant::{
+    Assistant, DbProviderLoader, LoadError, ProviderLoader, Turn, TurnConfig, TurnError, TurnReport,
+};
 pub use exec::{CallRecord, CallStatus, Executor, Limits, Outcome};
 pub use persist::{persist_comparison, persist_inventory};
+pub use proposals::{
+    DbProposalSink, MAX_PENDING_PER_CONVERSATION, NoProposals, ProposalDraft, ProposalSink,
+    SinkError,
+};
 pub use registry::{RegisterError, Registry, ToolDefinition};
 pub use schema::{ArgError, ArgSchema, Args, FORBIDDEN_FIELD_NAMES, Field, Kind};
 pub use store::{DbStore, FindingsView, NodeInfo, ReadStore, StoreError};
 pub use tool::{AiTool, ToolContext, ToolError, ToolOutput, ToolSpec};
-pub use tools::read_only_registry;
+pub use tools::assistant_registry;
 pub use untrusted::{CLOSE_TAG, OPEN_TAG, wrap_untrusted};

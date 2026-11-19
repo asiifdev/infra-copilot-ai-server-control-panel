@@ -12,6 +12,7 @@
 #[macro_use]
 mod enums;
 mod audit;
+mod conversations;
 mod error;
 mod identity;
 mod ids;
@@ -29,6 +30,13 @@ pub use audit::{
     ActorKind, AuditEntry, AuditOutcome, ChainBreak, ChainStatus, NewAuditEntry, append_audit,
     list_audit, verify_audit_chain,
 };
+pub use conversations::{
+    ClaimOutcome, ConversationRow, MessageRole, MessageRow, NewMessage, NewProposal, NewToolCall,
+    ProposalRow, ProposalStatus, ToolCallRow, TurnClaim, append_messages, archive_conversation,
+    claim_turn, count_pending_proposals, create_conversation, create_proposal, delete_conversation,
+    get_conversation, get_proposal, list_conversations, list_messages, list_proposals,
+    list_tool_calls, release_turn, touch_turn,
+};
 pub use error::{Error, Result};
 pub use identity::{
     ApiToken, Member, NewApiToken, Org, Role, User, add_member, create_api_token, create_org,
@@ -36,8 +44,8 @@ pub use identity::{
     revoke_api_token, set_member_role,
 };
 pub use ids::{
-    AgentId, AiProviderId, ApiTokenId, AuditId, ComparisonId, InventoryId, MembershipId, NodeId,
-    OrgId, SecretId, UserId,
+    AgentId, AiProviderId, ApiTokenId, AuditId, ComparisonId, ConversationId, InventoryId,
+    MembershipId, NodeId, OrgId, ProposalId, SecretId, UserId,
 };
 pub use migrate::{LATEST_VERSION, migrate, schema_version};
 pub use nodes::{
@@ -50,6 +58,7 @@ pub use providers::{
     delete_secret, get_ai_provider, get_secret, list_ai_providers, put_secret, replace_secret,
 };
 pub use secret::{SealedSecret, SecretText};
+pub use sha256::sha256_hex;
 pub use snapshots::{
     ComparisonRow, FindingRow, FindingSeverity, FindingStatus, InventoryRow, InventoryStatus,
     ItemKind, ItemRow, ItemSource, NewFinding, NewInventory, NewInventoryItem,

@@ -2,10 +2,12 @@
 //! change nothing. All wording a person might read comes from the i18n catalog (through
 //! `parity::render`); the rest is machine-oriented text for the model.
 
+use crate::proposals::{ProposalDraft, SinkError};
 use crate::registry::{RegisterError, Registry};
 use crate::schema::{ArgSchema, Args, Field, Kind};
 use crate::store::StoreError;
 use crate::tool::{AiTool, ToolContext, ToolError, ToolOutput, ToolSpec};
+use core_domain::redact::redact;
 use core_domain::tier::Tier;
 use inventory::{Finding, Inventory, Kind as ItemKind, Severity, Status};
 use std::fmt::Write as _;
@@ -355,16 +357,134 @@ impl AiTool for ExplainFinding {
     }
 }
 
-/// The registry M2 offers a model: every tool is tier 0, and nothing above tier 1 can be added.
+// ---- propose_fix -----------------------------------------------------------------------------
+
+struct ProposeFix;
+
+const PROPOSE_NAME: &str = "propose_fix";
+const PROPOSE_IMPACT: &str =
+    "Saves a pending proposal for a person to review. Changes nothing on any server.";
+
+const PROPOSE_FIELDS: &[Field] = &[
+    Field {
+        name: "title",
+        kind: Kind::Text {
+            max_chars: 120,
+            choices: None,
+        },
+        required: true,
+        description: "Short title of the recommendation.",
+    },
+    Field {
+        name: "rationale",
+        kind: Kind::Text {
+            max_chars: 1000,
+            choices: None,
+        },
+        required: true,
+        description: "Why, citing what the tools showed.",
+    },
+    Field {
+        name: "suggested_action",
+        kind: Kind::Text {
+            max_chars: 500,
+            choices: None,
+        },
+        required: true,
+        description: "What a person could do about it.",
+    },
+    Field {
+        name: "rule_id",
+        kind: Kind::Text {
+            max_chars: 20,
+            choices: None,
+        },
+        required: false,
+        description: "Rule id of the finding it relates to.",
+    },
+    Field {
+        name: "subject_key",
+        kind: Kind::Text {
+            max_chars: 500,
+            choices: None,
+        },
+        required: false,
+        description: "Key of the item it relates to.",
+    },
+];
+
+const PROPOSE_FIX: ToolSpec = ToolSpec {
+    name: PROPOSE_NAME,
+    description: "Record a recommendation for a person to review. It only saves a pending \
+                  proposal; nothing is changed or run on any server.",
+    tier: Tier::Plan,
+    schema: ArgSchema {
+        fields: PROPOSE_FIELDS,
+    },
+    impact: Some(PROPOSE_IMPACT),
+};
+
+impl AiTool for ProposeFix {
+    fn spec(&self) -> &ToolSpec {
+        &PROPOSE_FIX
+    }
+
+    fn run(&self, ctx: &ToolContext<'_>, args: &Args) -> Result<ToolOutput, ToolError> {
+        // Redact again before storing: a model could echo a value it should not have.
+        let text = |name: &str| args.text(name).map(|t| redact(t.trim()).text);
+        let (Some(title), Some(rationale), Some(action)) =
+            (text("title"), text("rationale"), text("suggested_action"))
+        else {
+            return Err(ToolError::Invalid("missing_text"));
+        };
+        if title.is_empty() || rationale.is_empty() || action.is_empty() {
+            return Err(ToolError::Invalid("empty_text"));
+        }
+        let (rule_id, subject_key) = (text("rule_id"), text("subject_key"));
+        let canonical = format!(
+            "{PROPOSE_NAME}\0{title}\0{rationale}\0{action}\0{}\0{}",
+            rule_id.as_deref().unwrap_or(""),
+            subject_key.as_deref().unwrap_or("")
+        );
+        let args_hash = db::sha256_hex(canonical.as_bytes());
+        let id = ctx
+            .proposals
+            .create_pending(
+                ctx.org,
+                &ProposalDraft {
+                    tool: PROPOSE_NAME,
+                    tier: PROPOSE_FIX.tier,
+                    title: &title,
+                    rationale: &rationale,
+                    suggested_action: &action,
+                    impact: PROPOSE_IMPACT,
+                    rule_id: rule_id.as_deref(),
+                    subject_key: subject_key.as_deref(),
+                    args_hash: &args_hash,
+                },
+            )
+            .map_err(|e| match e {
+                SinkError::TooManyPending => ToolError::Invalid("too_many_pending_proposals"),
+                SinkError::Unavailable => ToolError::Unavailable("proposals".to_owned()),
+            })?;
+        Ok(ToolOutput::new(format!(
+            "proposal {id} saved as pending. A person must review it; nothing was changed."
+        )))
+    }
+}
+
+/// The registry M2 offers a model: tier 0 reads plus the tier 1 `propose_fix`, and nothing above
+/// tier 1 can be added.
 ///
 /// # Errors
 /// [`RegisterError`] if a built-in tool breaks a registry rule (a bug caught by a unit test).
-pub fn read_only_registry() -> Result<Registry, RegisterError> {
+pub fn assistant_registry() -> Result<Registry, RegisterError> {
     let mut registry = Registry::new(Tier::Plan);
     registry.register(Box::new(ListNodes))?;
     registry.register(Box::new(GetInventorySummary))?;
     registry.register(Box::new(ListInventoryItems))?;
     registry.register(Box::new(ListFindings))?;
     registry.register(Box::new(ExplainFinding))?;
+    registry.register(Box::new(ProposeFix))?;
     Ok(registry)
 }

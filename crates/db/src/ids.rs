@@ -85,6 +85,14 @@ id_type!(
     AiProviderId
 );
 id_type!(
+    /// Assistant conversation identifier.
+    ConversationId
+);
+id_type!(
+    /// Proposal identifier.
+    ProposalId
+);
+id_type!(
     /// Audit entry identifier.
     AuditId
 );

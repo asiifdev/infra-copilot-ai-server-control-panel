@@ -6,12 +6,16 @@ version = 4
 name = "agent"
 version = "0.0.0"
 dependencies = [
+ "ai",
  "core-domain",
  "db",
  "i18n",
  "inventory",
+ "net",
  "parity",
  "serde_json",
+ "tokio",
+ "vault",
 ]
 
 [[package]]

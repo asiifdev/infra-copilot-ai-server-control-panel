@@ -4,8 +4,8 @@
 //! tools in their tests (docs/design.md 12.4: one suite, every implementation).
 
 use crate::{
-    AiTool, Args, CallStatus, Executor, FindingsView, NodeInfo, ReadStore, Registry, StoreError,
-    ToolContext, ToolError, ToolOutput, ToolSpec,
+    AiTool, Args, CallStatus, Executor, FindingsView, NoProposals, NodeInfo, ReadStore, Registry,
+    StoreError, ToolContext, ToolError, ToolOutput, ToolSpec,
 };
 use core_domain::tier::Tier;
 use db::OrgId;
@@ -47,6 +47,7 @@ pub fn with_null_context<R>(f: impl FnOnce(&ToolContext<'_>) -> R) -> R {
     let ctx = ToolContext {
         org: &org,
         store: &NullStore,
+        proposals: &NoProposals,
         catalog: &catalog,
         locale: Locale::En,
     };

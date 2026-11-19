@@ -49,6 +49,9 @@ pub enum CallStatus {
     BadArguments(&'static str),
     /// The tool ran and failed; carries the failure code.
     ToolFailed(&'static str),
+    /// The caller refused the call before it reached a tool (for example too many calls in one
+    /// response); carries the reason code.
+    Refused(&'static str),
 }
 
 impl CallStatus {
@@ -59,7 +62,7 @@ impl CallStatus {
             Self::Ok => "ok",
             Self::UnknownTool => "unknown_tool",
             Self::TierDenied => "tier_denied",
-            Self::BadArguments(code) | Self::ToolFailed(code) => code,
+            Self::BadArguments(code) | Self::ToolFailed(code) | Self::Refused(code) => code,
         }
     }
 }
@@ -119,6 +122,24 @@ impl Executor {
     #[must_use]
     pub fn registry(&self) -> &Registry {
         &self.registry
+    }
+
+    /// Answers a call without running it. The caller uses this when it must still give the model a
+    /// result for the call id (every call needs an answer) but will not execute it.
+    #[must_use]
+    pub fn refuse(&self, name: &str, raw_args: &str, code: &'static str) -> Outcome {
+        Outcome {
+            content: error_text(code),
+            record: CallRecord {
+                tool: sanitise_name(name),
+                tier: self.registry.get(name).map(|t| t.spec().tier),
+                args: cap_chars(&redact(raw_args).text, 1000),
+                status: CallStatus::Refused(code),
+                duration_ms: 0,
+                redactions: 0,
+                truncated: false,
+            },
+        }
     }
 
     /// Runs one call. Never panics and never returns an error: every refusal becomes an
@@ -186,6 +207,7 @@ impl Executor {
                 let code = match error {
                     ToolError::NotFound => "not_found",
                     ToolError::Unavailable(_) => "unavailable",
+                    ToolError::Invalid(_) => "invalid",
                 };
                 // The failure text may carry server data: redact and fence it like output.
                 let (text, redactions, truncated) = self.finalise(error.to_string());

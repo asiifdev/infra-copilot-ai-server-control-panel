@@ -1,5 +1,6 @@
 //! The `AiTool` contract (docs/design.md 12.4, skill `ai-tool-tiers`).
 
+use crate::proposals::ProposalSink;
 use crate::schema::{ArgSchema, Args};
 use crate::store::ReadStore;
 use core_domain::tier::Tier;
@@ -30,6 +31,8 @@ pub struct ToolContext<'a> {
     pub org: &'a OrgId,
     /// Everything a tool may read. Every method takes the org again, so no read can forget it.
     pub store: &'a dyn ReadStore,
+    /// The only write a tool has: recording pending proposals. It cannot approve or run one.
+    pub proposals: &'a dyn ProposalSink,
     /// Message catalog for localized explanations.
     pub catalog: &'a Catalog,
     /// The language of the person asking; text a tool writes follows it.
@@ -68,6 +71,9 @@ pub enum ToolError {
     NotFound,
     /// The tool cannot answer right now (database busy, collector failed).
     Unavailable(String),
+    /// The request is well-formed but not acceptable (for example a limit was reached). The code
+    /// is fixed text, safe to show to the model.
+    Invalid(&'static str),
 }
 
 impl fmt::Display for ToolError {
@@ -75,6 +81,7 @@ impl fmt::Display for ToolError {
         match self {
             Self::NotFound => f.write_str("not_found"),
             Self::Unavailable(why) => write!(f, "unavailable: {why}"),
+            Self::Invalid(why) => write!(f, "invalid: {why}"),
         }
     }
 }

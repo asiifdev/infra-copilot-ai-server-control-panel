@@ -2,8 +2,8 @@
 //! contract suite on every built-in tool.
 
 use agent::{
-    CallStatus, DbStore, Executor, ToolContext, persist_comparison, persist_inventory,
-    read_only_registry, testing,
+    CallStatus, DbStore, Executor, ToolContext, assistant_registry, persist_comparison,
+    persist_inventory, testing,
 };
 use db::{
     Connection, NewNode, NodeAccess, NodeKind, OrgId, create_node, create_org, open_in_memory,
@@ -86,12 +86,13 @@ fn ask(
     tool: &str,
     args: &str,
 ) -> Result<agent::Outcome, Box<dyn std::error::Error>> {
-    let executor = Executor::new(read_only_registry()?);
+    let executor = Executor::new(assistant_registry()?);
     let catalog = Catalog::builtin()?;
     let store = DbStore::new(&world.conn);
     let ctx = ToolContext {
         org,
         store: &store,
+        proposals: &agent::NoProposals,
         catalog: &catalog,
         locale: Locale::En,
     };
@@ -99,9 +100,9 @@ fn ask(
 }
 
 #[test]
-fn the_registry_holds_only_tier_zero_tools() -> TestResult {
-    let registry = read_only_registry()?;
-    assert_eq!(registry.len(), 5);
+fn the_registry_holds_the_read_tools_and_propose_fix() -> TestResult {
+    let registry = assistant_registry()?;
+    assert_eq!(registry.len(), 6);
     assert!(
         registry
             .definitions()
@@ -226,16 +227,17 @@ fn a_node_name_that_looks_like_sql_or_a_path_is_just_not_found() -> TestResult {
 #[test]
 fn every_builtin_tool_passes_the_contract_suite() -> TestResult {
     // The suite builds its own registry per tool, so rebuild each tool through the public one.
-    let registry = read_only_registry()?;
+    let registry = assistant_registry()?;
     for def in registry.definitions() {
         let valid = match def.name {
             "get_inventory_summary" | "list_inventory_items" => r#"{"node":"x"}"#,
             "explain_finding" => r#"{"rule_id":"PAR-001","subject_key":"tcp:1"}"#,
+            "propose_fix" => r#"{"title":"t","rationale":"r","suggested_action":"a"}"#,
             _ => "{}",
         };
         // Against the null store the tools answer not_found, which is a tool failure, not a
         // contract violation: only argument handling and fencing are under test here.
-        let executor = Executor::new(read_only_registry()?);
+        let executor = Executor::new(assistant_registry()?);
         testing::with_null_context(|ctx| {
             let ok = executor.call(ctx, def.name, valid);
             assert!(
@@ -260,18 +262,20 @@ fn every_builtin_tool_passes_the_contract_suite() -> TestResult {
 #[test]
 fn indonesian_locale_changes_the_explanation_text() -> TestResult {
     let w = world("acme")?;
-    let executor = Executor::new(read_only_registry()?);
+    let executor = Executor::new(assistant_registry()?);
     let catalog = Catalog::builtin()?;
     let store = DbStore::new(&w.conn);
     let en = ToolContext {
         org: &w.org,
         store: &store,
+        proposals: &agent::NoProposals,
         catalog: &catalog,
         locale: Locale::En,
     };
     let id = ToolContext {
         org: &w.org,
         store: &store,
+        proposals: &agent::NoProposals,
         catalog: &catalog,
         locale: Locale::Id,
     };

@@ -7,7 +7,8 @@ use sha2::{Digest, Sha256};
 use std::fmt::Write;
 
 /// SHA-256 of `data` as 64 lowercase hex characters.
-pub(crate) fn sha256_hex(data: &[u8]) -> String {
+#[must_use]
+pub fn sha256_hex(data: &[u8]) -> String {
     let digest = Sha256::digest(data);
     let mut out = String::with_capacity(64);
     for byte in digest {
