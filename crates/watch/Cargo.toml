@@ -1,0 +1,27 @@
+[package]
+name = "watch"
+description = "Glue for the uptime monitor: net-backed prober, Telegram transport, and the engine that turns checks into alerts."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+i18n = { path = "../i18n" }
+monitor = { path = "../monitor" }
+net = { path = "../net" }
+notifier = { path = "../notifier" }
+# Same versions and minimal features as crates/monitor and crates/notifier (decisions 0005, 0007).
+serde = { version = "1.0.229", default-features = false, features = ["std", "derive"] }
+serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
+# rt: JoinSet and spawn; time: sleep. No macros, no sync, no net (the net crate owns sockets).
+tokio = { version = "1", default-features = false, features = ["rt", "time"] }
+
+[dev-dependencies]
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tokio = { version = "1", default-features = false, features = ["rt", "time", "net", "io-util", "macros"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+
+[lints]
+workspace = true
