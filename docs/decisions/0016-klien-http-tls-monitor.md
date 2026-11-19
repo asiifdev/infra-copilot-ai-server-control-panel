@@ -1,7 +1,7 @@
 # 0016. Klien HTTP/TLS untuk monitor (M1-b)
 
 - Tanggal: 2026-11-19
-- Status: diusulkan
+- Status: diterima (pemilik memilih hyper + tokio-rustls, 2026-11-19). Syarat di bagian "Verifikasi yang masih harus dilakukan" dikerjakan oleh crate `net` dan diperiksa di CI Linux sebelum monitor dipakai; anggaran biner dinaikkan lewat keputusan baru saat klien ini ikut tertanam di server, bukan di crate `net` sendiri.
 - Pengambil keputusan: pemilik proyek
 
 ## Konteks
