@@ -93,3 +93,34 @@ jobs:
           persist-credentials: false
       - name: Check
         run: python3 scripts/check-docs.py
+
+  perf-budget:
+    name: Performance budget (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the stable Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustc --version
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Measure (UI bundle, binary size, idle memory, startup)
+        run: ./scripts/measure.sh > measure.json
+      - name: Check against docs/perf-budget.json
+        run: python3 scripts/check-budget.py measure.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: measure-${{ matrix.os }}
+          path: measure.json
+          if-no-files-found: ignore
