@@ -1,7 +1,7 @@
 # 0017. rustix untuk menutup TOCTOU direktori induk di RootFs
 
 - Tanggal: 2026-11-19
-- Status: diusulkan
+- Status: diterima (pemilik, 2026-11-19). Ukuran di Linux dan jalur `openat2` diverifikasi di CI Linux saat implementasi.
 - Pengambil keputusan: pemilik proyek (belum diputuskan; dokumen ini hanya evaluasi)
 
 ## Konteks
