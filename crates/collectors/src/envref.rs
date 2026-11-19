@@ -144,10 +144,10 @@ fn parse_url(value: &str) -> Option<Target> {
     let (scheme, rest) = split_scheme(value)?;
     let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
     let authority = rest.get(..end)?;
-    // An `@` after the first `/`, `?` or `#` with none before it means the userinfo (a password
-    // with an unencoded `/`, `?` or `#`) was cut in half: what is left of it would be read as
-    // host and port. Ambiguous, so discarded.
-    if !authority.contains('@') && rest.get(end..)?.contains('@') {
+    // An `@` anywhere after the authority is ambiguous: a password with an unencoded `/`, `?` or
+    // `#` may have been cut, and what is left of it would be read as host and port (even when the
+    // cut part itself holds an `@`). Such values are discarded.
+    if rest.get(end..)?.contains('@') {
         return None;
     }
     let hostport = authority.rsplit_once('@').map_or(authority, |(_, hp)| hp);
