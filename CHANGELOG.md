@@ -37,6 +37,7 @@ cannot drift apart. Release notes may get an Indonesian summary.
 ### Security
 
 - Redaction now treats `PASS` and `AUTH` named values as secrets, and collectors hide separate-argument secrets in process command lines and cron commands (`-p secret`, `--password x`, `curl -u user:pw`). Found by independent review, covered by tests.
+- Redaction of nested quoted commands (`sh -c '...'`), `--user`/`--proxy-user` values and cron hints; `infra compare` sanitizes control characters from untrusted inventories so they cannot repaint the terminal or forge report lines.
 - Collectors resolve symlinks inside the chosen root only, so a symlink in a mounted or untrusted tree cannot read host files; a crontab or process name with multi-byte characters can no longer make the whole collection fail.
 
 ### Changed
