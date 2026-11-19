@@ -1,0 +1,2 @@
+0 3 * * * root /usr/local/bin/backup --dest=example.test
+0  3 * * *   root   /opt/tools/backup

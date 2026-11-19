@@ -1,0 +1,17 @@
+[package]
+name = "collectors"
+description = "Read-only Linux collectors (listeners, processes, cron) behind the inventory Collector contract."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+core-domain = { path = "../core" }
+inventory = { path = "../inventory" }
+# Needed only to build `Item::data` (`serde_json::Map`); same pinned version and minimal features
+# as the `inventory` crate, so no new crate enters the lockfile (decisions 0005, 0013).
+serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

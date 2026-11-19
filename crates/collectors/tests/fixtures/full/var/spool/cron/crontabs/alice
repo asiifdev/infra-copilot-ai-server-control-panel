@@ -1,0 +1,4 @@
+MAILTO=alice@example.test
+@daily /home/alice/bin/cleanup.sh --password=hunter2
+*/5 * * * * curl -s https://x:pw@example.test/ping
+not a cron line
