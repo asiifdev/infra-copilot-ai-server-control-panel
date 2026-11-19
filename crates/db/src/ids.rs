@@ -81,6 +81,10 @@ id_type!(
     ComparisonId
 );
 id_type!(
+    /// AI provider identifier.
+    AiProviderId
+);
+id_type!(
     /// Audit entry identifier.
     AuditId
 );

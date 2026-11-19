@@ -17,6 +17,7 @@ mod identity;
 mod ids;
 mod migrate;
 mod nodes;
+mod providers;
 mod secret;
 mod sha256;
 mod snapshots;
@@ -35,14 +36,18 @@ pub use identity::{
     revoke_api_token, set_member_role,
 };
 pub use ids::{
-    AgentId, ApiTokenId, AuditId, ComparisonId, InventoryId, MembershipId, NodeId, OrgId, SecretId,
-    UserId,
+    AgentId, AiProviderId, ApiTokenId, AuditId, ComparisonId, InventoryId, MembershipId, NodeId,
+    OrgId, SecretId, UserId,
 };
 pub use migrate::{LATEST_VERSION, migrate, schema_version};
 pub use nodes::{
     Agent, NewAgent, NewNode, Node, NodeAccess, NodeKind, NodeSecretMeta, NodeStatus, create_node,
     delete_node, delete_node_secret, get_node, get_node_secret, list_agents, list_node_secrets,
     list_nodes, put_node_secret, register_agent, revoke_agent, set_node_status, touch_agent,
+};
+pub use providers::{
+    AiProvider, NewAiProvider, create_ai_provider, default_ai_provider, delete_ai_provider,
+    delete_secret, get_ai_provider, get_secret, list_ai_providers, put_secret, replace_secret,
 };
 pub use secret::{SealedSecret, SecretText};
 pub use snapshots::{

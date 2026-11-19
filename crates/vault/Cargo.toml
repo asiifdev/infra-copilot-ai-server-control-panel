@@ -1,0 +1,18 @@
+[package]
+name = "vault"
+description = "AES-256-GCM sealing of secrets at rest, with a master key held outside the database (ADR 0021)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+core-domain = { path = "../core" }
+db = { path = "../db" }
+# Same ring as rustls already links (ADR 0016): AES-256-GCM adds no new crypto code to the binary.
+ring = { version = "0.17", default-features = false }
+# Wipes key material on drop. No dependencies of its own with default features off.
+zeroize = { version = "1", default-features = false, features = ["alloc"] }
+
+[lints]
+workspace = true

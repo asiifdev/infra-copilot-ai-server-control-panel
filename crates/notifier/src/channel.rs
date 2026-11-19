@@ -80,33 +80,7 @@ impl fmt::Display for ConfigError {
 
 impl std::error::Error for ConfigError {}
 
-/// An opaque secret (for example a bot token). Never printed; read it only with
-/// [`Secret::expose_secret`] at the moment of use.
-pub struct Secret(String);
-
-impl Secret {
-    /// Wraps a secret value.
-    pub fn new(value: impl Into<String>) -> Self {
-        Secret(value.into())
-    }
-
-    /// The raw value. Call only where it is injected into a request.
-    pub fn expose_secret(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Debug for Secret {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Secret(***)")
-    }
-}
-
-impl fmt::Display for Secret {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("***")
-    }
-}
+pub use core_domain::secret::Secret;
 
 /// Proof of delivery.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

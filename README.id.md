@@ -170,6 +170,7 @@ crates/monitor      mesin insiden uptime (ambang, pemeliharaan, persen uptime), 
 crates/notifier     kontrak NotificationChannel, channel kirim Telegram, alert terlokalisasi
 crates/watch        perekat: probe lewat net, insiden lewat monitor, alert Telegram lewat notifier (pustaka)
 crates/agent        lapisan alat AI: kontrak alat, skema argumen ketat, registri berbatas tingkat, eksekutor (pustaka, belum ada model)
+crates/vault        penyegelan rahasia AES-256-GCM, rotasi kunci (pustaka)
 crates/cli          `infra collect` dan `infra compare` (offline, hanya-baca)
 crates/db           skema SQLite, kueri berbatas tenant, log audit berantai hash
 crates/proto-server prototipe sementara untuk mengukur ukuran biner, memori, dan waktu mulai
