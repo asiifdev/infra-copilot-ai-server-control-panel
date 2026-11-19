@@ -4,6 +4,11 @@
 1. Every public document has an English and an Indonesian version.
 2. Each version links to the other on its first line.
 3. Every relative Markdown link resolves.
+4. Drift against the code: every crate under crates/ is listed in both READMEs and in the
+   structure line of CLAUDE.md, decision files (docs/decisions/NNNN-*.md) are numbered without
+   gaps or duplicates, and database migrations (crates/db/migrations/NNNN_*.sql) likewise.
+5. No phrase from STALE_PHRASES (statements that were once true and no longer are) appears
+   outside docs/decisions/.
 Unset placeholders are reported as notices; they do not fail the check.
 """
 
@@ -45,6 +50,49 @@ for path in markdown:
         resolved = os.path.normpath(os.path.join(os.path.dirname(path), target))
         if not os.path.exists(resolved):
             failures.append(f"{path}: broken link -> {target}")
+
+# 4. Drift against the code.
+crate_dirs = sorted(
+    d for d in os.listdir("crates") if os.path.isfile(os.path.join("crates", d, "Cargo.toml"))
+) if os.path.isdir("crates") else []
+claude = read("CLAUDE.md") if os.path.exists("CLAUDE.md") else ""
+structure = next((l for l in claude.splitlines() if l.startswith("crates/") and "workspace" in l), "")
+for crate in crate_dirs:
+    for readme in ("README.md", "README.id.md"):
+        if os.path.exists(readme) and f"crates/{crate}" not in read(readme):
+            failures.append(f"{readme}: crate '{crate}' is not listed (crates/{crate})")
+    if not re.search(rf"(?<![\w-]){re.escape(crate)}(?![\w-])", structure):
+        failures.append(f"CLAUDE.md: crate '{crate}' is missing from the Struktur crates line")
+
+
+def check_sequence(label, pattern, directory):
+    numbers = []
+    for name in sorted(os.listdir(directory)) if os.path.isdir(directory) else []:
+        match = re.match(pattern, name)
+        if match:
+            numbers.append(int(match.group(1)))
+    for expected, found in enumerate(numbers, start=1 if numbers and numbers[0] == 1 else numbers[0] if numbers else 0):
+        if found != expected:
+            failures.append(f"{label}: numbering is not contiguous around {found:04d} (expected {expected:04d})")
+            break
+
+
+check_sequence("docs/decisions", r"^(\d{4})-.*\.md$", "docs/decisions")
+check_sequence("crates/db/migrations", r"^(\d{4})_.*\.sql$", "crates/db/migrations")
+
+# Phrases that were true once and must not come back outside the (historical) decision records.
+STALE_PHRASES = [
+    "Nama produk belum ditentukan",
+    "product name is not decided",
+    "belum ada kode",
+]
+for path in markdown:
+    if path.startswith("docs/decisions/"):
+        continue
+    text = read(path)
+    for phrase in STALE_PHRASES:
+        if phrase.lower() in text.lower():
+            failures.append(f"{path}: stale phrase '{phrase}'")
 
 notices = []
 for path in markdown:

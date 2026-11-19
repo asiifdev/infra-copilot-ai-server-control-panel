@@ -3,7 +3,7 @@
 Panel pengelolaan server open-core (setara aaPanel + cPanel versi berbayar) dengan **agen AI bawaan yang mendalam** (OpenAI-compatible, persetujuan manusia). Migrasi dan pemeriksaan kesetaraan adalah fitur unggulan di dalamnya.
 Dijual sebagai self-host gratis (terbatas), self-host berlisensi, atau cloud berlangganan.
 
-**Status: tahap rencana, kode baru fondasi M0 dan M1-a (crate `core`, `i18n`, `db`, `inventory`, `collectors`, `parity`, `cli`, `net`, `monitor`, `notifier`, `watch`, `agent` (M2-a/b, lapisan alat AI tanpa model), `vault` (enkripsi rahasia), `ai` (klien OpenAI-compatible), prototipe `proto-server` + `ui/`).** Baca [docs/plan.md](docs/plan.md) dan [docs/design.md](docs/design.md) sebelum mengerjakan apa pun. Sudah diputuskan: tetap dibangun, dogfooding dulu, pasar internasional, ID/EN (`docs/decisions/0002`). Nama produk: **Nodivara** (keputusan 0019; hanya nama produk/platform, nama repo, crate, dan biner tidak diganti; pemilik melaporkan nama masih tersedia dan unik; pencarian merek formal belum). Belum final: lisensi, kerangka UI, cakupan MVP (bagian 11 rencana). Palet UI dan logo: `docs/brand.md`. Jangan memilih sendiri; tanyakan atau catat sebagai usulan.
+**Status: tahap rencana, kode baru fondasi M0, M1-a, M2-a sampai M2-d, M3-a, dan M3-b (crate `core`, `i18n`, `db` (skema versi 8), `inventory`, `collectors`, `parity`, `cli`, `net`, `monitor`, `notifier`, `watch`, `agent` (lapisan alat AI M2-a/b dan putaran giliran asisten M2-d dengan `propose_fix` tingkat 1 yang hanya menulis Usulan pending), `vault` (enkripsi rahasia), `ai` (klien OpenAI-compatible, belum diuji hidup), `plan` (model rencana migrasi, murni), `transport` (spesifikasi transport, rencana perintah, wizard rclone; belum ada eksekusi), prototipe `proto-server` + `ui/`). Belum ada: persetujuan dan eksekusi Usulan (M4), UI, M2-e (memori, FTS5, `infra ask`), M3-c (alat AI dan CLI rencana).** Baca [docs/plan.md](docs/plan.md) dan [docs/design.md](docs/design.md) sebelum mengerjakan apa pun. Sudah diputuskan: tetap dibangun, dogfooding dulu, pasar internasional, ID/EN (`docs/decisions/0002`). Nama produk: **Nodivara** (keputusan 0019; hanya nama produk/platform, nama repo, crate, dan biner tidak diganti; pemilik melaporkan nama masih tersedia dan unik; pencarian merek formal belum). Belum final: lisensi, kerangka UI, cakupan MVP (bagian 11 rencana). Palet UI dan logo: `docs/brand.md`. Jangan memilih sendiri; tanyakan atau catat sebagai usulan.
 
 ## Klaim produk (jangan melenceng)
 
@@ -80,7 +80,7 @@ docs/plan.md          rencana produk (sumber kebenaran tahapan)
 docs/design.md        desain teknis: skema DB, format inventaris, protokol agen, alur persetujuan
 docs/market-research.md  riset pasar (fakta vs inferensi, sumber)
 docs/decisions/       catatan keputusan (0000 templat, 0001 tertunda, 0002 bangun/dogfood/ID-EN)
-crates/               workspace Rust: core, i18n, db, inventory, collectors, parity, cli, net, monitor, notifier, watch, agent, vault, ai, proto-server (prototipe sementara)
+crates/               workspace Rust: core, i18n, db, inventory, collectors, parity, cli, net, monitor, notifier, watch, agent, vault, ai, plan, transport, proto-server (prototipe sementara)
 ui/                   prototipe Svelte 5 + Vite
 scripts/              skrip bantu (check-personal-data.sh, check-docs.py, measure.sh)
 .claude/skills/       skill khusus proyek

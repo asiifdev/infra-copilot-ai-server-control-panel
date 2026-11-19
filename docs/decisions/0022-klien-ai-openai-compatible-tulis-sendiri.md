@@ -28,4 +28,4 @@ Crate `ai` menulis sendiri format kawat OpenAI-compatible (sekitar 1.000 baris t
 
 ## Dampak
 - `AiProvider` (trait) dipakai putaran agen M2-d lewat `ScriptedProvider` pada uji.
-- Pemuatan penyedia dari database (baris `ai_providers` + kunci dari `vault` + `ProviderConfig::from_params`) dikerjakan di M2-d bersama putaran agen.
+- Pemuatan penyedia dari database (baris `ai_providers` + kunci dari `vault` + `ProviderConfig::from_params`) dikerjakan di M2-d bersama putaran agen. Selesai di M2-d (`DbProviderLoader`, 0023).

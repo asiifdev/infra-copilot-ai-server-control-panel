@@ -41,5 +41,5 @@ Migrasi 0006 menambah `conversations` (dengan kolom klaim), `messages` (PK `org_
 - Pemisahan konteks saat riwayat melebihi 20 pesan memotong di batas pesan, belum di batas token.
 
 ## Dampak
-- Jalur persetujuan dan eksekusi proposal ada di M3; status selain `pending` belum dipakai kode.
+- Jalur persetujuan dan eksekusi proposal ada di M4; status selain `pending` belum dipakai kode.
 - CHANGELOG, README (en/id), NEXT-STEPS, dan bagian Struktur CLAUDE.md perlu mencatat modul `assistant`, migrasi 0006, dan alat `propose_fix` (dikerjakan orkestrator).

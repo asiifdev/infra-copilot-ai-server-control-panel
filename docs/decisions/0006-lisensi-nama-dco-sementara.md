@@ -1,7 +1,7 @@
 # 0006. Lisensi, nama, dan ketentuan kontribusi sementara; kebijakan dokumen dua bahasa
 
 - Tanggal: 2026-11-19
-- Status: diusulkan (sementara, menunggu konfirmasi pemilik dan nasihat hukum sebelum rilis publik)
+- Status: diusulkan (sementara, menunggu konfirmasi pemilik dan nasihat hukum sebelum rilis publik; bagian nama digantikan oleh 0019)
 - Pengambil keputusan: pemilik proyek
 
 ## Konteks

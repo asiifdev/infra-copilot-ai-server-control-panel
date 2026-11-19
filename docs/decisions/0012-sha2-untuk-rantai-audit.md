@@ -16,5 +16,5 @@ Pakai crate `sha2` 0.11 (RustCrypto, MIT/Apache-2.0, Rust murni), `default-featu
 - Dampak kecil: satu crate (plus `digest` dan sejenisnya) tanpa fitur bawaan.
 
 ## Belum diputuskan
-- Pustaka AES-256-GCM untuk `node_secrets` (belum dievaluasi; dilakukan saat enkripsi rahasia dikerjakan).
+- Pustaka AES-256-GCM untuk `node_secrets` (belum dievaluasi; dilakukan saat enkripsi rahasia dikerjakan; diselesaikan di 0021).
 - Hash audit masih tanpa kunci (batas yang sudah tercatat di 0009).

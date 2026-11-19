@@ -25,17 +25,19 @@
 
 **Nodivara adalah panel pengelolaan server open source, untuk pekerjaan yang sama dengan aaPanel dan cPanel, dengan agen AI bawaan yang mengusulkan perubahan dan menunggu persetujuan manusia.** Ditulis dengan Rust dan antarmuka Svelte, menyasar server Linux dan aplikasi desktop, dan masih pra-alfa: belum ada yang bisa dipasang.
 
-Terakhir diperbarui: 2026-11-19.
+Terakhir diperbarui: 2026-11-20.
 
 ## Yang sudah berjalan hari ini
 
-> **Status apa adanya.** Belum ada rilis yang bisa dipasang, belum ada agen, dan belum ada panel. Yang ada adalah inventaris hanya-baca dan pemeriksaan kesetaraan yang bisa dijalankan dari kode sumber, ditambah pustaka-pustaka bahan monitor uptime.
+> **Status apa adanya.** Belum ada rilis yang bisa dipasang, belum ada agen, dan belum ada panel. Yang ada adalah inventaris hanya-baca dan pemeriksaan kesetaraan yang bisa dijalankan dari kode sumber, ditambah pustaka untuk monitor uptime, asisten AI, dan perencana migrasi yang belum dijalankan menyeluruh oleh apa pun. Belum ada jalur persetujuan atau eksekusi: tidak ada kode yang bisa mengubah server.
 
 | Berjalan sekarang (dari kode sumber) | Sudah berupa pustaka, belum dijalankan | Direncanakan |
 |---|---|---|
 | Mengumpulkan inventaris Linux secara hanya-baca: port, proses, cron, PM2, systemd, Docker | Pengecekan uptime (HTTP, TCP, kedaluwarsa TLS) dengan perlindungan SSRF | Agen AI dan alur persetujuan |
 | Membandingkan dua inventaris dengan **7 aturan kesetaraan**, laporan dalam bahasa Indonesia atau Inggris | Mesin insiden dan alert Telegram | Panel web dan aplikasi desktop |
-| Kode keluar 1 bila ada celah kritis, jadi cocok untuk daftar periksa migrasi | Skema database dengan isolasi tenant dan log audit berantai hash | Deploy dari Git, DNS, dan Cloudflare Tunnel |
+| Kode keluar 1 bila ada celah kritis, jadi cocok untuk daftar periksa migrasi | Skema database (versi 8) dengan isolasi tenant dan log audit berantai hash | Deploy dari Git, DNS, dan Cloudflare Tunnel |
+| | Putaran giliran asisten AI dengan alat hanya-baca dan `propose_fix` tingkat 1 yang hanya menulis Usulan berstatus pending; penyimpanan rahasia terenkripsi; klien OpenAI-compatible (belum dijalankan ke penyedia nyata) | Persetujuan dan eksekusi Usulan (M4) |
+| | Model rencana migrasi dengan gerbang dan rencana tertulis; spesifikasi transport dan rencana perintah rclone (tidak ada yang dieksekusi) | Memori, pencarian, dan `infra ask` (M2-e); alat AI dan CLI untuk rencana (M3-c) |
 
 ### Coba sendiri
 
@@ -121,7 +123,11 @@ Alat yang bisa mengubah server harus mendapat kepercayaan lewat aturan yang bisa
 | Symlink yang ditanam tidak bisa membelokkan pembacaan | penelusuran jalur lewat descriptor direktori, perangkat tidak pernah dibuka ([`rootfs.rs`](crates/collectors/src/rootfs.rs), [0017](docs/decisions/0017-rustix-untuk-rootfs.md)) | terimplementasi, teruji |
 | Tenant tidak bisa melihat data satu sama lain; pengubahan data terlihat | kueri berbatas tenant dan log audit berantai hash ([`db`](crates/db)) | terimplementasi, teruji |
 | Rantai pasok dipantau di setiap push | `cargo deny`, `cargo audit`, pemindaian rahasia seluruh riwayat, tes Linux dan macOS | di [CI](.github/workflows/ci.yml) |
-| Persetujuan manusia untuk apa pun yang mengubah server | alur Usulan | **direncanakan** bersama agen |
+| Batas asisten ada di kode, bukan di prompt | putaran alat, panggilan per putaran, riwayat, dan anggaran token ditegakkan per giliran; satu giliran berjalan per percakapan; teks pengguna diredaksi sebelum disimpan atau dikirim; setiap panggilan alat diaudit; giliran butuh keanggotaan yang masih berlaku ([`agent`](crates/agent), [0023](docs/decisions/0023-putaran-asisten-ai-m2-d.md)) | terimplementasi, teruji |
+| AI tidak bisa melewati tingkat 1 | registri menolak alat di atas tingkat 1; `propose_fix` hanya menulis Usulan `pending` | terimplementasi, teruji |
+| Perintah transport tidak membawa rahasia di argumen | rahasia hanya lewat lingkungan atau stdin, daftar opsi rclone yang diizinkan per backend, tanpa shell ([`transport`](crates/transport), [0025](docs/decisions/0025-transport-dan-konfigurasi-rclone.md)); pelaksana tidak pernah diarahkan ke host nyata dalam uji | terimplementasi, teruji; belum ada yang dieksekusi |
+| Server lama tidak bisa dimatikan terlalu dini | urutan dan gerbang rencana di kode, ditambah pemicu database pada `decommission_source` ([`plan`](crates/plan), [0024](docs/decisions/0024-model-rencana-migrasi-crate-plan.md)) | terimplementasi, teruji; belum ada pelaksana |
+| Persetujuan manusia untuk apa pun yang mengubah server | alur Usulan | **direncanakan** (M4): Usulan baru ditulis, belum pernah disetujui atau dijalankan |
 
 Menemukan celah keamanan? Laporkan secara privat: lihat [SECURITY.id.md](SECURITY.id.md).
 
@@ -131,8 +137,8 @@ Menemukan celah keamanan? Laporkan secara privat: lihat [SECURITY.id.md](SECURIT
 |---|---|---|
 | M0 Fondasi | tipe domain, i18n, skema database, anggaran ukuran dan kecepatan | selesai |
 | M1 Inventaris dan kesetaraan, hanya-baca | kolektor, aturan kesetaraan, CLI, monitor uptime dan alert Telegram | berjalan: kolektor, aturan, dan CLI selesai; pustaka monitor selesai tetapi belum dirangkai |
-| M2 Asisten AI hanya-baca | penyedia OpenAI-compatible, chat, memori, alat tingkat 0-1 | direncanakan |
-| M3 Perencana migrasi | wizard, backup dan transport, rencana tertulis | direncanakan |
+| M2 Asisten AI hanya-baca | penyedia OpenAI-compatible, chat, memori, alat tingkat 0-1 | berjalan: lapisan alat, vault, penyedia, dan putaran giliran selesai (belum dijalankan ke penyedia nyata); memori, pencarian, dan `infra ask` (M2-e) direncanakan |
+| M3 Perencana migrasi | wizard, backup dan transport, rencana tertulis | berjalan: model rencana dan rencana tertulis (M3-a) serta spesifikasi transport, rencana perintah, dan wizard (M3-b) selesai sebagai pustaka; alat AI dan `infra plan` (M3-c) direncanakan |
 | M4 Eksekusi dengan persetujuan | tingkat 2-4, dry-run, rollback, verifikasi, audit | direncanakan |
 | M5 Panel server | situs, versi PHP, database | direncanakan |
 | M6 Komersial | lisensi, cloud terkelola, penagihan | direncanakan |
@@ -169,9 +175,11 @@ crates/net          klien HTTP/TLS async aman SSRF (pemeriksaan sertifikat) untu
 crates/monitor      mesin insiden uptime (ambang, pemeliharaan, persen uptime), logika murni
 crates/notifier     kontrak NotificationChannel, channel kirim Telegram, alert terlokalisasi
 crates/watch        perekat: probe lewat net, insiden lewat monitor, alert Telegram lewat notifier (pustaka)
-crates/agent        lapisan alat AI: kontrak alat, skema argumen ketat, registri berbatas tingkat, eksekutor (pustaka, belum ada model)
+crates/agent        lapisan alat AI dan putaran giliran asisten: kontrak alat, skema argumen ketat, registri berbatas tingkat, percakapan, `propose_fix` tingkat 1 (hanya Usulan pending) (pustaka; belum ada persetujuan atau eksekusi)
 crates/vault        penyegelan rahasia AES-256-GCM, rotasi kunci (pustaka)
 crates/ai           klien chat OpenAI-compatible: tool call, streaming SSE, retry, pemutus sirkuit (pustaka, belum dijalankan ke penyedia nyata)
+crates/plan         model rencana migrasi: spesifikasi ketat, urutan langkah dan gerbang, saran kapasitas, rencana tertulis (pustaka murni)
+crates/transport    spesifikasi transport, rencana perintah rclone/rsync/scp/ssh_pipe, pelaksana, wizard (pustaka; tidak ada yang dieksekusi ke host nyata)
 crates/cli          `infra collect` dan `infra compare` (offline, hanya-baca)
 crates/db           skema SQLite, kueri berbatas tenant, log audit berantai hash
 crates/proto-server prototipe sementara untuk mengukur ukuran biner, memori, dan waktu mulai

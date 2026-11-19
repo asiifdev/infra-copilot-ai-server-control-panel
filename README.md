@@ -25,17 +25,19 @@ English | [Bahasa Indonesia](README.id.md)
 
 **Nodivara is an open-source server control panel, aimed at the same job as aaPanel and cPanel, with a built-in AI agent that proposes changes and waits for human approval.** It is written in Rust with a Svelte interface, targets Linux servers and a desktop app, and is pre-alpha: nothing is installable yet.
 
-Last updated: 2026-11-19.
+Last updated: 2026-11-20.
 
 ## What works today
 
-> **Honest status.** There is no installable release, no agent and no panel yet. What exists is a read-only inventory and a parity check you can run from source, plus the libraries the uptime monitor will be built from.
+> **Honest status.** There is no installable release, no agent and no panel yet. What exists is a read-only inventory and a parity check you can run from source, plus libraries for the uptime monitor, the AI assistant and the migration planner that nothing runs end to end yet. No approval or execution path exists: no code can change a server.
 
 | Works now (from source) | Built as libraries, not running yet | Planned |
 |---|---|---|
 | Collect a Linux inventory, read-only: ports, processes, cron, PM2, systemd, Docker | Uptime checks (HTTP, TCP, TLS expiry) with SSRF protection | The AI agent and approval workflow |
 | Compare two inventories with **7 parity rules** and read the report in English or Indonesian | Incident engine and Telegram alerts | The web panel and desktop app |
-| Exit code 1 when a critical gap is found, so it fits a migration checklist | Database schema with tenant isolation and a hash-chained audit log | Git deploys, DNS and Cloudflare Tunnel |
+| Exit code 1 when a critical gap is found, so it fits a migration checklist | Database schema (version 8) with tenant isolation and a hash-chained audit log | Git deploys, DNS and Cloudflare Tunnel |
+| | AI assistant turn loop with read-only tools and a tier 1 `propose_fix` that only writes pending proposals; encrypted secret storage; OpenAI-compatible client (not yet run against a live provider) | Approval and execution of proposals (M4) |
+| | Migration plan model with gates and a written plan; transport specs and rclone command plans (nothing is executed) | Memory, search and `infra ask` (M2-e); an AI tool and CLI for plans (M3-c) |
 
 ### Try it
 
@@ -120,7 +122,11 @@ A tool that can change servers has to earn trust with rules you can check. These
 | A planted symlink cannot redirect a read | path walk by directory descriptor, devices never opened ([`rootfs.rs`](crates/collectors/src/rootfs.rs), [0017](docs/decisions/0017-rustix-untuk-rootfs.md)) | implemented, tested |
 | Tenants cannot see each other's data; tampering shows | tenant-scoped queries and a hash-chained audit log ([`db`](crates/db)) | implemented, tested |
 | Supply chain watched on every push | `cargo deny`, `cargo audit`, full-history secret scan, Linux and macOS tests | in [CI](.github/workflows/ci.yml) |
-| Human approval for anything that changes a server | proposal flow | **planned** with the agent |
+| The assistant's limits live in code, not in the prompt | tool rounds, calls per round, history and token budget are enforced per turn; one running turn per conversation; user text redacted before it is stored or sent; every tool call audited; a turn needs a current membership ([`agent`](crates/agent), [0023](docs/decisions/0023-putaran-asisten-ai-m2-d.md)) | implemented, tested |
+| The AI cannot pass tier 1 | the registry refuses any tool above tier 1; `propose_fix` only writes `pending` proposals | implemented, tested |
+| Transport commands carry no secrets in arguments | secrets only in the environment or stdin, a per-backend rclone option allow-list, no shell ([`transport`](crates/transport), [0025](docs/decisions/0025-transport-dan-konfigurasi-rclone.md)); the runner is never pointed at real hosts in tests | implemented, tested; nothing is executed yet |
+| The old server cannot be switched off early | plan ordering and gates in code, plus database triggers on `decommission_source` ([`plan`](crates/plan), [0024](docs/decisions/0024-model-rencana-migrasi-crate-plan.md)) | implemented, tested; no executor yet |
+| Human approval for anything that changes a server | proposal flow | **planned** (M4): proposals are only written, never approved or run |
 
 Found a vulnerability? Please report it privately: see [SECURITY.md](SECURITY.md).
 
@@ -130,8 +136,8 @@ Found a vulnerability? Please report it privately: see [SECURITY.md](SECURITY.md
 |---|---|---|
 | M0 Foundation | domain types, i18n, database schema, size and speed budget | done |
 | M1 Inventory and parity, read-only | collectors, parity rules, CLI, uptime monitor and Telegram alerts | in progress: collectors, rules and CLI done; monitor libraries done, not wired in |
-| M2 Read-only AI assistant | OpenAI-compatible provider, chat, memory, tools of tier 0-1 | planned |
-| M3 Migration planner | wizard, backup and transport, written plan | planned |
+| M2 Read-only AI assistant | OpenAI-compatible provider, chat, memory, tools of tier 0-1 | in progress: tool layer, vault, provider and the turn loop done (not yet run against a live provider); memory, search and `infra ask` (M2-e) planned |
+| M3 Migration planner | wizard, backup and transport, written plan | in progress: plan model and written plan (M3-a) and transport specs, command plans and setup wizard (M3-b) done as libraries; AI tool and `infra plan` (M3-c) planned |
 | M4 Execution with approval | tiers 2-4, dry-run, rollback, verification, audit | planned |
 | M5 Server panel | sites, PHP versions, databases | planned |
 | M6 Commercial | licenses, hosted cloud, billing | planned |
@@ -168,9 +174,11 @@ crates/net          SSRF-safe async HTTP/TLS client (certificate inspection) for
 crates/monitor      uptime incident engine (thresholds, maintenance, uptime %), pure logic
 crates/notifier     NotificationChannel contract, Telegram send channel, localized alerts
 crates/watch        glue: probes via net, incidents via monitor, Telegram alerts via notifier (library)
-crates/agent        AI tool layer: tool contract, strict argument schemas, tier-gated registry and executor (library, no model yet)
+crates/agent        AI tool layer and assistant turn loop: tool contract, strict argument schemas, tier-gated registry, conversations, tier 1 `propose_fix` (pending proposals only) (library; no approval or execution)
 crates/vault        AES-256-GCM sealing of secrets at rest, key rotation (library)
 crates/ai           OpenAI-compatible chat client: tool calls, SSE streaming, retries, circuit breaker (library, not yet run against a live provider)
+crates/plan         migration plan model: strict spec, step ordering and gates, capacity advice, written plan (pure library)
+crates/transport    transport specs, command plans for rclone/rsync/scp/ssh_pipe, runner seam, setup wizard (library; nothing is executed against real hosts)
 crates/cli          `infra collect` and `infra compare` (offline, read-only)
 crates/db           SQLite schema, tenant-scoped queries, hash-chained audit log
 crates/proto-server throwaway prototype used to measure binary size, memory and startup

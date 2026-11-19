@@ -30,8 +30,8 @@
 
 ## Belum diputuskan (butuh pemilik atau pengukuran)
 - Model async untuk akses SQLite (`tokio-rusqlite` vs `spawn_blocking`): putuskan setelah prototipe.
-- Pustaka i18n (kemungkinan katalog sendiri, sangat kecil, vs `fluent`): evaluasi terpisah.
-- Klien Telegram: tulis sendiri di atas klien HTTP atau pakai `teloxide`; evaluasi terpisah.
+- Pustaka i18n (kemungkinan katalog sendiri, sangat kecil, vs `fluent`): evaluasi terpisah. (Diputuskan di 0008: katalog sendiri.)
+- Klien Telegram: tulis sendiri di atas klien HTTP atau pakai `teloxide`; evaluasi terpisah. (Ditulis sendiri di atas klien HTTP `net`: 0016, crate `notifier`.)
 - Anggaran ukuran biner, memori diam, dan waktu mulai: dari pengukuran.
 
 ## Dampak

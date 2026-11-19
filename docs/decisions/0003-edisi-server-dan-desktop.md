@@ -34,7 +34,7 @@ Cangkang aplikasi desktop memakai **Tauri**: webview bawaan OS membungkus UI SPA
 - **Mode desktop ala FlyEnv** berarti mengelola dan mendistribusikan biner runtime (PHP, MySQL, nginx, dll) per OS dan versi. Itu pekerjaan besar dan berbeda dari panel server. Perlu dipotong ke ruang lingkup kecil di awal.
 - **Penandatanganan dan notarisasi** aplikasi (Apple, Windows) membutuhkan akun dan biaya tahunan; belum saya verifikasi nilainya.
 - **Desktop di belakang router tidak bisa dihubungi dari luar**, jadi mengelola server dari desktop memakai koneksi keluar (SSH atau agen), bukan sebaliknya.
-- Stack inti belum diputuskan; pilihan bahasa (misalnya Go atau Rust) menentukan seberapa mudah kompilasi lintas OS. Belum saya teliti terhadap kebutuhan ini.
+- Stack inti belum diputuskan; pilihan bahasa (misalnya Go atau Rust) menentukan seberapa mudah kompilasi lintas OS. Belum saya teliti terhadap kebutuhan ini. (Diputuskan kemudian: Rust, lihat 0004.)
 
 ## Alternatif
 - Hanya edisi server dulu, desktop belakangan: lebih cepat, tetapi risiko arsitektur kelak sulit mendukung desktop.

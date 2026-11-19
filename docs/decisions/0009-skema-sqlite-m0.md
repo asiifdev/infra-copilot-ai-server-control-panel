@@ -44,7 +44,7 @@ Per org: `hash = SHA-256(tag "infra-copilot/audit/v1" || bidang berawalan panjan
 - **Ketidakcocokan versi pada 0007**: tabel 0007 menulis `rusqlite` 0.43 dengan `rusqlite_migration` 2.7, tetapi `rusqlite_migration` 2.7.0 bergantung pada `rusqlite` 0.41 (`libsqlite3-sys` hanya boleh satu). Dipakai `rusqlite` 0.41 (resolver Cargo menolak 0.43). 0007 perlu dikoreksi, atau tunggu rilis `rusqlite_migration` yang mendukung 0.43.
 
 ## Ditunda atau terbuka
-- **Enkripsi rahasia**: pustaka AES-256-GCM belum dipilih; kunci utama di luar DB, rotasi `key_id`, siapa yang memanggil `get_node_secret`. Butuh keputusan pemilik.
+- **Enkripsi rahasia**: pustaka AES-256-GCM belum dipilih; kunci utama di luar DB, rotasi `key_id`, siapa yang memanggil `get_node_secret`. Butuh keputusan pemilik. (Diselesaikan di 0021: AES-256-GCM lewat `ring`.)
 - Pustaka hash (lihat di atas) dan jangkar rantai audit.
 - Tabel lain: inventories, comparisons, findings, migrasi, AI, usulan/persetujuan/eksekusi, lisensi, usage_counters.
 - Nilai enum `actor_kind` (`user|agent|api_token|system`) dan `result` (`success|failure|denied`) adalah usulan, design.md belum menetapkannya. `plan` organisasi belum dibatasi enum.

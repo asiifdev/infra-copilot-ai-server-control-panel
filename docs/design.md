@@ -129,6 +129,18 @@ licenses(id, org_id, key_id, tier, limits jsonb, valid_from, valid_to, instance_
 usage_counters(id, org_id, metric, period, value)    -- nodes, ai_messages, migrations
 ```
 
+### 3.7a Status implementasi skema (2026-11-20, skema versi 8)
+
+Kode menyimpang dari draf di atas pada hal berikut; kode yang benar, draf disesuaikan di sini.
+
+- **Sudah ada** (migrasi 0001-0008): identitas, node, audit, inventaris/item/perbandingan/temuan (0004), `secrets` dan `ai_providers` (0005), `conversations`, `messages`, `tool_calls`, `proposals` (0006), `transports` (0007), `migration_plans` dan `migration_steps` (0008).
+- **Belum ada:** `ai_provider_models`, `memories` (M2-e), `approvals`, `executions` (M4), `licenses`, `usage_counters`. Status `proposals` selain `pending` belum dipakai kode.
+- `conversations`: tanpa kolom `scope`; ada `turn_token` dan `turn_claimed_at` (klaim satu giliran berjalan per percakapan). `messages`: kunci utama `(org_id, conversation_id, seq)` dan kolom `tool_calls` (JSON) pada pesan asisten; tanpa `id`. `tool_calls`: kolom `message_seq`, `idx`, `call_id`, `duration_ms`, `redactions`, `truncated`, argumen dibatasi 4000 karakter; tanpa `proposal_id`/`result`.
+- `proposals`: kolom `title`, `rationale`, `suggested_action`, `impact`, `rule_id`, `subject_key`, `args_hash`, `expires_at`; tanpa `plan_step_id`, `target_node_id`, `dry_run`, `created_by`; status `cancelled` belum ada.
+- `migration_steps`: kunci utama `(org_id, plan_id, seq)`, tanpa `id`, `started_at`, `finished_at`, `result`; `depends_on` wajib array JSON. Dua pemicu database menjaga `decommission_source` (harus mulai `pending`; tidak boleh maju sebelum semua langkah lain `succeeded`, kecuali `delta` yang `skipped`). `migration_plans` tanpa `created_by`; sumber dan target harus berbeda.
+- `transports`: ada `created_at`; `name` unik per org; `config` objek JSON maksimal 8 KiB.
+- Giliran asisten (7.1) berjalan sebagai: maksimal 6 putaran alat lalu satu panggilan akhir tanpa alat, maksimal 8 panggilan alat per putaran, 20 pesan terakhir sebagai konteks, anggaran token per giliran, dan keanggotaan pengguna yang masih berlaku. Memori dan RAG (langkah 2) belum ada (M2-e).
+
 ### 3.8 Indeks dan aturan
 
 - Indeks `(org_id, ...)` di semua tabel; kunci unik mengikutkan `org_id` bila relevan.
