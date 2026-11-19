@@ -247,7 +247,7 @@ async fn a_slow_drip_cannot_outlast_the_total_limit() -> R {
         }
     };
     assert_eq!(end.err(), Some(NetError::Timeout));
-    assert!(got >= 1 && got < 20, "{got}");
+    assert!((1..20).contains(&got), "{got}");
     Ok(())
 }
 
