@@ -19,8 +19,9 @@ pub struct ToolSpec {
     pub tier: Tier,
     /// Closed argument schema.
     pub schema: ArgSchema,
-    /// What the tool changes, in one sentence. `None` for a read-only tool. Part of every
-    /// Proposal's impact summary for tier 1 and above.
+    /// What the tool changes, as an i18n catalog key (never the sentence itself, so it is shown in
+    /// the reader's language). `None` for a read-only tool. Part of every Proposal's impact
+    /// summary for tier 1 and above.
     pub impact: Option<&'static str>,
 }
 

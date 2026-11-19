@@ -97,3 +97,33 @@ fn output_is_capped_and_a_hung_process_is_killed() -> TestResult {
     assert!(started.elapsed() < Duration::from_secs(10));
     Ok(())
 }
+
+/// A grandchild that inherited the pipes can keep them open after its parent is killed or has
+/// exited. The run must still end by its own deadline, not by the grandchild's.
+#[test]
+fn a_grandchild_holding_the_pipes_cannot_defeat_the_timeout() -> TestResult {
+    let quick = ProcessRunner::new(Duration::from_millis(200), 1024).in_dir(std::env::temp_dir());
+    let started = std::time::Instant::now();
+    let result = quick.run(&plan("/bin/sh", &["-c", "sleep 3 & sleep 3"]));
+    assert_eq!(result.err(), Some(RunError::Timeout));
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "returned after {:?}",
+        started.elapsed()
+    );
+    Ok(())
+}
+
+#[test]
+fn output_is_returned_even_when_a_background_process_keeps_the_pipe_open() -> TestResult {
+    let started = std::time::Instant::now();
+    let out = runner().run(&plan("/bin/sh", &["-c", "sleep 3 & echo done"]))?;
+    assert!(out.success());
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "done\n");
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "returned after {:?}",
+        started.elapsed()
+    );
+    Ok(())
+}

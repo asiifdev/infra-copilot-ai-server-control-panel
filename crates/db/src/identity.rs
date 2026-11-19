@@ -246,6 +246,19 @@ pub fn set_member_role(
     found(n)
 }
 
+/// Whether `user` currently holds a membership in `org`. A removed member is not a member, so a
+/// caller holding a stale session or id cannot keep acting for the org.
+///
+/// # Errors
+/// Database failure.
+pub fn is_member(conn: &Connection, org: &OrgId, user: &UserId) -> Result<bool> {
+    Ok(conn.query_row(
+        "SELECT EXISTS (SELECT 1 FROM memberships WHERE org_id = ?1 AND user_id = ?2)",
+        params![org.as_str(), user.as_str()],
+        |row| row.get(0),
+    )?)
+}
+
 /// Removes a member from an org.
 ///
 /// # Errors

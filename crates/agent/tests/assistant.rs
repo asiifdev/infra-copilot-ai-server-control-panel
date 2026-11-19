@@ -466,6 +466,26 @@ async fn two_orgs_cannot_read_or_continue_each_others_conversations() -> TestRes
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn a_person_who_is_no_longer_a_member_cannot_continue_their_conversation() -> TestResult {
+    let w = world()?;
+    let provider = ScriptedProvider::new(vec![say("hi"), say("again")]);
+    let config = TurnConfig::default();
+    let who = (&w.org, &w.user, &w.conversation);
+    assert!(run_as(&w, who, &provider, config, "first").await.is_ok());
+    // The membership is removed (a stale session still presents the same ids).
+    let member = db::list_members(&w.conn, &w.org)?
+        .into_iter()
+        .find(|m| m.user_id == w.user)
+        .ok_or("member exists")?;
+    db::remove_member(&w.conn, &w.org, &member.id)?;
+    assert!(!db::is_member(&w.conn, &w.org, &w.user)?);
+    let err = run_as(&w, who, &provider, config, "second").await;
+    assert_eq!(err.err(), Some(TurnError::NotFound));
+    assert_eq!(provider.requests().len(), 1, "no request after removal");
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn a_secret_typed_by_the_person_is_neither_stored_nor_sent() -> TestResult {
     let w = world()?;
     let provider = ScriptedProvider::new(vec![
@@ -582,5 +602,49 @@ async fn history_is_replayed_to_the_model_on_the_next_turn() -> TestResult {
     assert!(texts.contains(&"first answer"));
     assert_eq!(texts.last(), Some(&"second question"));
     assert_eq!(second.messages[0].role, Role::System);
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn propose_fix_text_is_sanitised_and_its_impact_is_a_catalog_key() -> TestResult {
+    let w = world()?;
+    let args = serde_json::json!({
+        "title": "Open port\nFAKE LOG LINE: admin logged in",
+        "rationale": "Why",
+        "suggested_action": "Close it",
+    })
+    .to_string();
+    let provider = ScriptedProvider::new(vec![
+        calls(vec![call("c1", "propose_fix", &args)]),
+        say("noted"),
+    ]);
+    let who = (&w.org, &w.user, &w.conversation);
+    run_as(&w, who, &provider, TurnConfig::default(), "propose").await?;
+    let rows = db::list_proposals(&w.conn, &w.org, None, 10)?;
+    assert_eq!(rows.len(), 1);
+    assert!(!rows[0].title.contains('\n'), "{:?}", rows[0].title);
+    assert_eq!(rows[0].impact, "assistant.proposal.impact");
+    assert!(
+        Catalog::builtin()?
+            .raw(Locale::Id, &rows[0].impact)
+            .is_some_and(|t| !t.is_empty())
+    );
+
+    // Text that redaction makes longer than the limit is refused cleanly, not stored.
+    let secretish = format!("TOKEN={} ", "x".repeat(10)).repeat(11);
+    let args = serde_json::json!({
+        "title": secretish, "rationale": "Why", "suggested_action": "Do it",
+    })
+    .to_string();
+    let provider = ScriptedProvider::new(vec![
+        calls(vec![call("c2", "propose_fix", &args)]),
+        say("ok"),
+    ]);
+    run_as(&w, who, &provider, TurnConfig::default(), "again").await?;
+    assert_eq!(
+        db::list_proposals(&w.conn, &w.org, None, 10)?.len(),
+        1,
+        "nothing new stored"
+    );
     Ok(())
 }

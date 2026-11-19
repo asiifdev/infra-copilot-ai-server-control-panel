@@ -9,7 +9,7 @@ use std::fmt;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 /// What a finished process produced. `Debug` shows sizes only: output can carry tokens.
@@ -140,24 +140,48 @@ impl ProcessRunner {
     }
 }
 
+/// Output captured so far from one pipe, shared with its reader thread so a caller can take what
+/// has arrived without waiting for the thread to finish.
+#[derive(Default)]
+struct Capture {
+    kept: Vec<u8>,
+    truncated: bool,
+}
+
+/// How long to wait for a pipe to reach end-of-file after the child has exited or was killed. A
+/// grandchild that inherited the pipe can hold it open indefinitely; the timeout of the run must
+/// not depend on it.
+const PIPE_GRACE: Duration = Duration::from_millis(500);
+
 /// Reads a stream fully but keeps at most `cap` bytes; keeps draining so the child never blocks.
-fn drain(mut stream: impl Read, cap: usize) -> (Vec<u8>, bool) {
-    let mut kept = Vec::new();
-    let mut truncated = false;
+fn drain_into(mut stream: impl Read, cap: usize, shared: &Mutex<Capture>) {
     let mut buf = [0_u8; 8192];
     loop {
         match stream.read(&mut buf) {
             Ok(0) | Err(_) => break,
             Ok(n) => {
-                let room = cap.saturating_sub(kept.len());
+                let mut c = lock(shared);
+                let room = cap.saturating_sub(c.kept.len());
                 if n > room {
-                    truncated = true;
+                    c.truncated = true;
                 }
-                kept.extend_from_slice(&buf[..n.min(room)]);
+                c.kept.extend_from_slice(&buf[..n.min(room)]);
             }
         }
     }
-    (kept, truncated)
+}
+
+/// Waits for a helper thread until `deadline`, then gives up on it (the thread is detached and
+/// ends by itself when its pipe closes).
+fn wait_until(handle: &std::thread::JoinHandle<()>, deadline: Instant) {
+    while !handle.is_finished() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+fn take(shared: &Mutex<Capture>) -> (Vec<u8>, bool) {
+    let mut c = lock(shared);
+    (std::mem::take(&mut c.kept), c.truncated)
 }
 
 impl Runner for ProcessRunner {
@@ -197,8 +221,11 @@ impl Runner for ProcessRunner {
             return Err(RunError::Io);
         };
         let cap = self.max_output;
-        let out_thread = std::thread::spawn(move || drain(out, cap));
-        let err_thread = std::thread::spawn(move || drain(err, cap));
+        let out_buf = Arc::new(Mutex::new(Capture::default()));
+        let err_buf = Arc::new(Mutex::new(Capture::default()));
+        let (out_sink, err_sink) = (Arc::clone(&out_buf), Arc::clone(&err_buf));
+        let out_thread = std::thread::spawn(move || drain_into(out, cap, &out_sink));
+        let err_thread = std::thread::spawn(move || drain_into(err, cap, &err_sink));
         let in_thread = match (child.stdin.take(), plan.stdin.as_ref()) {
             (Some(mut pipe), Some(data)) => {
                 let bytes = data.bytes().to_vec();
@@ -222,11 +249,14 @@ impl Runner for ProcessRunner {
             }
         };
         let elapsed = started.elapsed();
-        let (stdout, cut_out) = out_thread.join().unwrap_or_default();
-        let (stderr, cut_err) = err_thread.join().unwrap_or_default();
-        if let Some(t) = in_thread {
-            let _ = t.join();
+        let deadline = Instant::now() + PIPE_GRACE;
+        wait_until(&out_thread, deadline);
+        wait_until(&err_thread, deadline);
+        if let Some(t) = &in_thread {
+            wait_until(t, deadline);
         }
+        let (stdout, cut_out) = take(&out_buf);
+        let (stderr, cut_err) = take(&err_buf);
         let status = status?;
         Ok(RunOutput {
             exit_code: status.code(),

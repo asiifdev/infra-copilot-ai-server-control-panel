@@ -362,14 +362,18 @@ impl AiTool for ExplainFinding {
 struct ProposeFix;
 
 const PROPOSE_NAME: &str = "propose_fix";
-const PROPOSE_IMPACT: &str =
-    "Saves a pending proposal for a person to review. Changes nothing on any server.";
+const TITLE_MAX: usize = 120;
+const RATIONALE_MAX: usize = 1000;
+const ACTION_MAX: usize = 500;
+/// Catalog key of the impact sentence (not the sentence itself): the proposal row stores the key
+/// and the reader renders it in their own language.
+const PROPOSE_IMPACT: &str = "assistant.proposal.impact";
 
 const PROPOSE_FIELDS: &[Field] = &[
     Field {
         name: "title",
         kind: Kind::Text {
-            max_chars: 120,
+            max_chars: TITLE_MAX,
             choices: None,
         },
         required: true,
@@ -378,7 +382,7 @@ const PROPOSE_FIELDS: &[Field] = &[
     Field {
         name: "rationale",
         kind: Kind::Text {
-            max_chars: 1000,
+            max_chars: RATIONALE_MAX,
             choices: None,
         },
         required: true,
@@ -387,7 +391,7 @@ const PROPOSE_FIELDS: &[Field] = &[
     Field {
         name: "suggested_action",
         kind: Kind::Text {
-            max_chars: 500,
+            max_chars: ACTION_MAX,
             choices: None,
         },
         required: true,
@@ -430,17 +434,35 @@ impl AiTool for ProposeFix {
     }
 
     fn run(&self, ctx: &ToolContext<'_>, args: &Args) -> Result<ToolOutput, ToolError> {
-        // Redact again before storing: a model could echo a value it should not have.
-        let text = |name: &str| args.text(name).map(|t| redact(t.trim()).text);
-        let (Some(title), Some(rationale), Some(action)) =
-            (text("title"), text("rationale"), text("suggested_action"))
-        else {
+        // Redact again before storing (a model could echo a value it should not have), turn
+        // control characters into spaces (a newline in a title could forge a line in a log or a
+        // rendered list), and re-check the length: redaction can make text longer than the
+        // schema's limit, which the database would otherwise reject as a store failure.
+        let text = |name: &str, max: usize| -> Result<Option<String>, ToolError> {
+            let Some(raw) = args.text(name) else {
+                return Ok(None);
+            };
+            let clean: String = redact(raw.trim())
+                .text
+                .chars()
+                .map(|c| if c.is_control() { ' ' } else { c })
+                .collect();
+            if clean.chars().count() > max {
+                return Err(ToolError::Invalid("text_too_long"));
+            }
+            Ok(Some(clean))
+        };
+        let (Some(title), Some(rationale), Some(action)) = (
+            text("title", TITLE_MAX)?,
+            text("rationale", RATIONALE_MAX)?,
+            text("suggested_action", ACTION_MAX)?,
+        ) else {
             return Err(ToolError::Invalid("missing_text"));
         };
-        if title.is_empty() || rationale.is_empty() || action.is_empty() {
+        if title.trim().is_empty() || rationale.trim().is_empty() || action.trim().is_empty() {
             return Err(ToolError::Invalid("empty_text"));
         }
-        let (rule_id, subject_key) = (text("rule_id"), text("subject_key"));
+        let (rule_id, subject_key) = (text("rule_id", 20)?, text("subject_key", 500)?);
         let canonical = format!(
             "{PROPOSE_NAME}\0{title}\0{rationale}\0{action}\0{}\0{}",
             rule_id.as_deref().unwrap_or(""),

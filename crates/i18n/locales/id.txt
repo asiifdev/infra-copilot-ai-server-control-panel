@@ -241,3 +241,6 @@ plan.capacity_staging_unknown.text = Ruang kosong di disk yang akan menyimpan ca
 plan.capacity_quota_small.text = Sisa kuota penyimpanan {available}, padahal butuh sekitar {needed}.
 plan.capacity_quota_unknown.text = Kuota penyimpanan belum diukur; butuh sekitar {needed}.
 plan.capacity_stream.text = Saran: alirkan cadangan langsung ke transport, jangan ditulis dulu ke disk itu.
+
+# Asisten
+assistant.proposal.impact = Menyimpan usulan yang menunggu ditinjau seseorang. Tidak mengubah apa pun di server mana pun.

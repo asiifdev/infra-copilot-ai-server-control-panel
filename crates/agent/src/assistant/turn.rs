@@ -161,8 +161,11 @@ impl<P: AiProvider> Assistant<'_, P> {
         let message = validate_message(turn.message, self.config.max_message_bytes)?;
         let conversation =
             db::get_conversation(self.conn, turn.org, turn.conversation).map_err(store_err)?;
-        // Another person's conversation is indistinguishable from a missing one.
-        if conversation.user_id != *turn.user {
+        // Another person's conversation is indistinguishable from a missing one, and so is the
+        // conversation of someone who is no longer a member: a stale session cannot keep using it.
+        if conversation.user_id != *turn.user
+            || !db::is_member(self.conn, turn.org, turn.user).map_err(store_err)?
+        {
             return Err(TurnError::NotFound);
         }
         let claim = match db::claim_turn(

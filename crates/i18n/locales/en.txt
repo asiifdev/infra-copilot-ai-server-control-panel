@@ -241,3 +241,6 @@ plan.capacity_staging_unknown.text = The free space on the disk that would hold 
 plan.capacity_quota_small.text = The storage quota left is {available} but about {needed} are needed.
 plan.capacity_quota_unknown.text = The storage quota was not measured; about {needed} are needed.
 plan.capacity_stream.text = Suggestion: stream the backup straight to the transport instead of writing it to that disk first.
+
+# Assistant
+assistant.proposal.impact = Saves a pending proposal for a person to review. Changes nothing on any server.
