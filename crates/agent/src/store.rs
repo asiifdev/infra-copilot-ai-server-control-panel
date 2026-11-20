@@ -185,20 +185,7 @@ impl ReadStore for DbStore<'_> {
         let rows = db::list_findings(self.conn, org, &id, min.map(severity_to_db), limit)?;
         let mut findings = Vec::with_capacity(rows.len());
         for r in rows {
-            let evidence: Vec<SubjectRef> =
-                serde_json::from_str(&r.evidence_json).map_err(|_| StoreError::Unavailable)?;
-            let args: BTreeMap<String, String> =
-                serde_json::from_str(&r.args_json).map_err(|_| StoreError::Unavailable)?;
-            findings.push(Finding {
-                rule_id: r.rule_id,
-                severity: severity_from_db(r.severity),
-                subject: SubjectRef {
-                    kind: kind_from_db(r.subject_kind),
-                    key: r.subject_key,
-                },
-                evidence,
-                args,
-            });
+            findings.push(finding_from_row(r)?);
         }
         Ok(FindingsView {
             source_node: self.node_name(org, &source_inventory_id)?,
@@ -207,6 +194,24 @@ impl ReadStore for DbStore<'_> {
             findings,
         })
     }
+}
+
+/// Rebuilds a [`Finding`] from its stored row (shared with the planning seam).
+pub(crate) fn finding_from_row(r: db::FindingRow) -> Result<Finding, StoreError> {
+    let evidence: Vec<SubjectRef> =
+        serde_json::from_str(&r.evidence_json).map_err(|_| StoreError::Unavailable)?;
+    let args: BTreeMap<String, String> =
+        serde_json::from_str(&r.args_json).map_err(|_| StoreError::Unavailable)?;
+    Ok(Finding {
+        rule_id: r.rule_id,
+        severity: severity_from_db(r.severity),
+        subject: SubjectRef {
+            kind: kind_from_db(r.subject_kind),
+            key: r.subject_key,
+        },
+        evidence,
+        args,
+    })
 }
 
 const fn kind_from_db(kind: ItemKind) -> Kind {

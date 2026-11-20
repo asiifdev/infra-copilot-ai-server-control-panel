@@ -357,6 +357,25 @@ impl AiTool for ExplainFinding {
     }
 }
 
+/// Text a model wrote that is about to be stored: redacted again (a model could echo a value it
+/// should not have), control characters turned into spaces (a newline in a title could forge a line
+/// in a log or a rendered list), trimmed, and length-checked **after** redaction, which can make
+/// text longer than the schema's limit and the database would otherwise reject it as a store
+/// failure.
+pub(crate) fn clean_text(raw: &str, max: usize) -> Result<String, ToolError> {
+    let clean: String = redact(raw.trim())
+        .text
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
+    // A control character at an edge became a space: trim again.
+    let clean = clean.trim().to_owned();
+    if clean.chars().count() > max {
+        return Err(ToolError::Invalid("text_too_long"));
+    }
+    Ok(clean)
+}
+
 // ---- propose_fix -----------------------------------------------------------------------------
 
 struct ProposeFix;
@@ -434,23 +453,8 @@ impl AiTool for ProposeFix {
     }
 
     fn run(&self, ctx: &ToolContext<'_>, args: &Args) -> Result<ToolOutput, ToolError> {
-        // Redact again before storing (a model could echo a value it should not have), turn
-        // control characters into spaces (a newline in a title could forge a line in a log or a
-        // rendered list), and re-check the length: redaction can make text longer than the
-        // schema's limit, which the database would otherwise reject as a store failure.
         let text = |name: &str, max: usize| -> Result<Option<String>, ToolError> {
-            let Some(raw) = args.text(name) else {
-                return Ok(None);
-            };
-            let clean: String = redact(raw.trim())
-                .text
-                .chars()
-                .map(|c| if c.is_control() { ' ' } else { c })
-                .collect();
-            if clean.chars().count() > max {
-                return Err(ToolError::Invalid("text_too_long"));
-            }
-            Ok(Some(clean))
+            args.text(name).map(|raw| clean_text(raw, max)).transpose()
         };
         let (Some(title), Some(rationale), Some(action)) = (
             text("title", TITLE_MAX)?,
@@ -509,5 +513,6 @@ pub fn assistant_registry() -> Result<Registry, RegisterError> {
     registry.register(Box::new(ExplainFinding))?;
     registry.register(Box::new(ProposeFix))?;
     crate::memory_tools::register(&mut registry)?;
+    crate::plan_tools::register(&mut registry)?;
     Ok(registry)
 }

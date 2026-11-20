@@ -319,3 +319,17 @@ plan.capacity_stream.text = Saran: alirkan cadangan langsung ke transport, janga
 
 # Asisten
 assistant.proposal.impact = Menyimpan usulan yang menunggu ditinjau seseorang. Tidak mengubah apa pun di server mana pun.
+assistant.plan.impact = Menyimpan draf rencana migrasi untuk ditinjau seseorang. Tidak mengubah apa pun di server mana pun.
+assistant.plan.accepted_reason = Diterima oleh seseorang di panel.
+assistant.plan.saved = Rencana disimpan dengan status draf. Tidak ada yang disetujui, dijadwalkan, atau dijalankan. Seseorang harus meninjaunya, dan persetujuan adalah langkah terpisah yang hanya bisa diambil oleh seseorang.
+assistant.plan.err_same_node = Sumber dan tujuan harus dua node yang berbeda.
+assistant.plan.err_source_missing = Tidak ada node dengan nama sumber itu. Pakai list_nodes untuk melihat namanya.
+assistant.plan.err_target_missing = Tidak ada node dengan nama tujuan itu. Pakai list_nodes untuk melihat namanya.
+assistant.plan.err_source_no_inventory = Node sumber belum punya inventaris. Rencana membutuhkannya, jadi kumpulkan inventarisnya dulu.
+assistant.plan.err_target_no_inventory = Node tujuan belum punya inventaris. Rencana membutuhkannya, jadi kumpulkan inventarisnya dulu.
+assistant.plan.err_transport_missing = Tidak ada transport dengan nama ini. Pakai list_transports untuk melihat namanya.
+assistant.plan.err_transport_required = Tidak ada transport yang disebut dan tidak ada tepat satu transport terverifikasi untuk dipilih. Pakai list_transports lalu berikan nama yang sudah terverifikasi.
+assistant.plan.err_transport_unverified = Transport ini belum lolos verifikasi. Seseorang harus memverifikasinya sebelum rencana boleh bergantung padanya.
+assistant.plan.err_name_taken = Sudah ada rencana dengan nama ini. Pilih nama lain.
+assistant.plan.err_too_many = Organisasi sudah memegang jumlah maksimum draf rencana. Seseorang harus meninjau atau menghapus sebagian sebelum draf baru dibuat.
+assistant.plan.err_rejected = Rencana tidak bisa dibuat dari masukan ini, jadi tidak ada yang disimpan.

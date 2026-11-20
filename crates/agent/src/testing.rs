@@ -108,6 +108,37 @@ pub fn contract_suite(tool: Box<dyn AiTool>, valid_args: &str) {
     with_null_context(|ctx| run_suite(&executor, ctx, spec, valid_args));
 }
 
+/// [`contract_suite`] for a tool that is already registered in `executor` (a built-in one, whose
+/// type is private), run over a context the caller built, for tools whose valid call needs data.
+/// The suite makes exactly one valid call, so a tool that writes writes once.
+///
+/// # Panics
+/// On the first violated rule, naming it, or when `name` is not registered (a test helper).
+pub fn contract_suite_for(
+    executor: &Executor,
+    name: &str,
+    valid_args: &str,
+    ctx: &ToolContext<'_>,
+) {
+    let Some(tool) = executor.registry().get(name) else {
+        panic!("{name}: not registered");
+    };
+    let spec = *tool.spec();
+    let definition = executor
+        .registry()
+        .definitions()
+        .into_iter()
+        .find(|d| d.name == name);
+    let Some(definition) = definition else {
+        panic!("{name}: no definition offered to the model");
+    };
+    assert_eq!(
+        definition.parameters["additionalProperties"], false,
+        "{name}"
+    );
+    run_suite(executor, ctx, spec, valid_args);
+}
+
 fn run_suite(executor: &Executor, ctx: &ToolContext<'_>, spec: ToolSpec, valid_args: &str) {
     let ctx = &ctx;
     let ok = executor.call(ctx, spec.name, valid_args);

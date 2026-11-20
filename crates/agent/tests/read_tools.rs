@@ -94,9 +94,9 @@ fn ask(
 }
 
 #[test]
-fn the_registry_holds_the_read_tools_and_propose_fix() -> TestResult {
+fn the_registry_holds_the_read_tools_propose_fix_and_the_planning_tools() -> TestResult {
     let registry = assistant_registry()?;
-    assert_eq!(registry.len(), 9);
+    assert_eq!(registry.len(), 14);
     assert!(
         registry
             .definitions()
@@ -229,6 +229,8 @@ fn every_builtin_tool_passes_the_contract_suite() -> TestResult {
             "propose_fix" => r#"{"title":"t","rationale":"r","suggested_action":"a"}"#,
             "search_inventory" => r#"{"query":"nginx"}"#,
             "remember" => r#"{"kind":"task","content":"c"}"#,
+            "draft_migration_plan" => r#"{"source_node":"x","target_node":"y"}"#,
+            "show_plan" | "check_plan_gates" => r#"{"name":"x"}"#,
             _ => "{}",
         };
         // Against the null store the tools answer not_found, which is a tool failure, not a

@@ -207,7 +207,7 @@ impl Executor {
                 let code = match error {
                     ToolError::NotFound => "not_found",
                     ToolError::Unavailable(_) => "unavailable",
-                    ToolError::Invalid(_) => "invalid",
+                    ToolError::Invalid(_) | ToolError::Explained { .. } => "invalid",
                 };
                 // The failure text may carry server data: redact and fence it like output.
                 let (text, redactions, truncated) = self.finalise(error.to_string());

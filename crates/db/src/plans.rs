@@ -163,7 +163,7 @@ fn node_in_org(conn: &Connection, org: &OrgId, node: &NodeId) -> Result<bool> {
     )?)
 }
 
-fn check_new(conn: &Connection, org: &OrgId, new: &NewPlan<'_>) -> Result<()> {
+pub(crate) fn check_new(conn: &Connection, org: &OrgId, new: &NewPlan<'_>) -> Result<()> {
     if new.source_node == new.target_node {
         return Err(Error::Invalid("plan source and target must differ"));
     }
@@ -199,7 +199,7 @@ fn parse_depends(text: &str) -> Result<Vec<u32>> {
         .collect()
 }
 
-fn insert_steps(
+pub(crate) fn insert_steps(
     tx: &rusqlite::Transaction<'_>,
     org: &OrgId,
     plan: &str,
@@ -222,6 +222,28 @@ fn insert_steps(
     Ok(())
 }
 
+/// Inserts the plan row (always `draft`: the column default is the only status a new plan gets).
+pub(crate) fn insert_plan_row(
+    conn: &Connection,
+    org: &OrgId,
+    id: &str,
+    new: &NewPlan<'_>,
+) -> Result<()> {
+    conn.execute(
+        "INSERT INTO migration_plans (id, org_id, name, source_node_id, target_node_id, spec) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            id,
+            org.as_str(),
+            new.name,
+            new.source_node.as_str(),
+            new.target_node.as_str(),
+            new.spec_json
+        ],
+    )?;
+    Ok(())
+}
+
 /// Stores a draft plan and its steps atomically.
 ///
 /// # Errors
@@ -236,26 +258,16 @@ pub fn create_plan(
     let id = new_uuid(conn)?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     check_new(&tx, org, new)?;
-    tx.execute(
-        "INSERT INTO migration_plans (id, org_id, name, source_node_id, target_node_id, spec) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![
-            id,
-            org.as_str(),
-            new.name,
-            new.source_node.as_str(),
-            new.target_node.as_str(),
-            new.spec_json
-        ],
-    )?;
+    insert_plan_row(&tx, org, &id, new)?;
     insert_steps(&tx, org, &id, steps)?;
     tx.commit()?;
     Ok(PlanId::from_db(id))
 }
 
-const PLAN_COLUMNS: &str = "id, name, source_node_id, target_node_id, status, spec, created_at";
+pub(crate) const PLAN_COLUMNS: &str =
+    "id, name, source_node_id, target_node_id, status, spec, created_at";
 
-fn map_plan(row: &rusqlite::Row<'_>) -> rusqlite::Result<[String; 7]> {
+pub(crate) fn map_plan(row: &rusqlite::Row<'_>) -> rusqlite::Result<[String; 7]> {
     Ok([
         row.get(0)?,
         row.get(1)?,
@@ -267,7 +279,7 @@ fn map_plan(row: &rusqlite::Row<'_>) -> rusqlite::Result<[String; 7]> {
     ])
 }
 
-fn build_plan(raw: [String; 7]) -> Result<PlanRow> {
+pub(crate) fn build_plan(raw: [String; 7]) -> Result<PlanRow> {
     let [id, name, source, target, status, spec, created_at] = raw;
     Ok(PlanRow {
         id: PlanId::from_db(id),

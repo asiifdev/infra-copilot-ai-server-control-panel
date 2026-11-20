@@ -7,6 +7,7 @@ use super::{Assistant, Turn, TurnError, TurnReport};
 use crate::exec::{CallStatus, Outcome};
 use crate::memory::DbMemorySink;
 use crate::memory_tools::hides_arguments;
+use crate::plans::{DbPlanSink, DbPlanStore};
 use crate::proposals::DbProposalSink;
 use crate::store::DbStore;
 use crate::tool::ToolContext;
@@ -246,9 +247,11 @@ impl<P: AiProvider> Assistant<'_, P> {
             Some(turn.conversation.clone()),
             Some(turn.user.clone()),
         );
+        let (plan_store, plan_sink) = (DbPlanStore::new(self.conn), DbPlanSink::new(self.conn));
         let tool_ctx = ToolContext::new(turn.org, &store, self.catalog, turn.locale)
             .with_proposals(&proposals)
-            .with_memory(&memory);
+            .with_memory(&memory)
+            .with_plans(&plan_store, &plan_sink);
 
         let mut tally = Tally::default();
         let (mut model_calls, mut tool_calls) = (0u32, 0u32);

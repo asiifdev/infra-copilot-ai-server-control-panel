@@ -20,6 +20,7 @@ mod memories;
 mod migrate;
 mod nodes;
 mod orgs;
+mod plan_support;
 mod plans;
 mod providers;
 mod search;
@@ -64,6 +65,9 @@ pub use nodes::{
     list_nodes, put_node_secret, register_agent, revoke_agent, set_node_status, touch_agent,
 };
 pub use orgs::list_orgs;
+pub use plan_support::{
+    DraftError, create_draft_plan, find_plan_by_name, latest_comparison_between,
+};
 pub use plans::{
     NewPlan, NewPlanStep, PlanRow, PlanStatus, PlanStepKind, PlanStepRow, PlanStepStatus,
     create_plan, get_plan, list_plan_steps, list_plans, replace_plan_content, set_plan_status,

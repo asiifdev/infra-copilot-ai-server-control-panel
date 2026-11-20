@@ -14,6 +14,7 @@ i18n = { path = "../i18n" }
 inventory = { path = "../inventory" }
 net = { path = "../net" }
 parity = { path = "../parity" }
+plan = { path = "../plan" }
 vault = { path = "../vault" }
 # JSON is the wire format of tool calls. Default features off, `std` only (ADR 0005).
 serde_json = { version = "1", default-features = false, features = ["std"] }

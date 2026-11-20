@@ -319,3 +319,17 @@ plan.capacity_stream.text = Suggestion: stream the backup straight to the transp
 
 # Assistant
 assistant.proposal.impact = Saves a pending proposal for a person to review. Changes nothing on any server.
+assistant.plan.impact = Saves a draft migration plan for a person to review. Changes nothing on any server.
+assistant.plan.accepted_reason = Accepted by a person in the panel.
+assistant.plan.saved = The plan was saved with status draft. Nothing was approved, scheduled or run. A person must review it, and approval is a separate step that only a person can take.
+assistant.plan.err_same_node = The source and the target must be two different nodes.
+assistant.plan.err_source_missing = No node with the source name exists. Use list_nodes to see the names.
+assistant.plan.err_target_missing = No node with the target name exists. Use list_nodes to see the names.
+assistant.plan.err_source_no_inventory = The source node has no inventory yet. A plan needs one, so collect an inventory of it first.
+assistant.plan.err_target_no_inventory = The target node has no inventory yet. A plan needs one, so collect an inventory of it first.
+assistant.plan.err_transport_missing = No transport with this name exists. Use list_transports to see the names.
+assistant.plan.err_transport_required = No transport was named and there is not exactly one verified transport to choose. Use list_transports and pass the name of a verified one.
+assistant.plan.err_transport_unverified = This transport has not passed a verification yet. A person must verify it before a plan may rely on it.
+assistant.plan.err_name_taken = A plan with this name already exists. Choose another name.
+assistant.plan.err_too_many = The organization already holds the maximum number of draft plans. A person must review or remove some before another is drafted.
+assistant.plan.err_rejected = The plan could not be built from these inputs, so nothing was saved.

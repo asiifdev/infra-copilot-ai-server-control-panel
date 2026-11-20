@@ -1,6 +1,7 @@
 //! The `AiTool` contract (docs/design.md 12.4, skill `ai-tool-tiers`).
 
 use crate::memory::{MemorySink, NoMemory};
+use crate::plans::{NoPlans, PlanSink, PlanStore};
 use crate::proposals::ProposalSink;
 use crate::schema::{ArgSchema, Args};
 use crate::store::ReadStore;
@@ -38,6 +39,10 @@ pub struct ToolContext<'a> {
     pub proposals: &'a dyn ProposalSink,
     /// Search and memory: reads, plus creating PENDING memories. It cannot approve one.
     pub memory: &'a dyn MemorySink,
+    /// What the planning tools may read besides inventories (transports, plans, comparisons).
+    pub plans: &'a dyn PlanStore,
+    /// The only plan write a tool has: one new **draft** plan. It cannot approve, schedule or run.
+    pub plan_sink: &'a dyn PlanSink,
     /// Message catalog for localized explanations.
     pub catalog: &'a Catalog,
     /// The language of the person asking; text a tool writes follows it.
@@ -49,6 +54,8 @@ static NO_PROPOSALS: crate::NoProposals = crate::NoProposals;
 
 /// Used when a caller supplies no memory sink: search finds nothing and nothing is remembered.
 static NO_MEMORY: NoMemory = NoMemory;
+/// Used when a caller supplies no plan seams: no plans, no transports, and no way to save a draft.
+static NO_PLANS: NoPlans = NoPlans;
 
 impl<'a> ToolContext<'a> {
     /// A read-only context. Writes a tool may perform (proposals, and later memory or plans) are
@@ -65,9 +72,19 @@ impl<'a> ToolContext<'a> {
             store,
             proposals: &NO_PROPOSALS,
             memory: &NO_MEMORY,
+            plans: &NO_PLANS,
+            plan_sink: &NO_PLANS,
             catalog,
             locale,
         }
+    }
+
+    /// Lets the planning tools read through `plans` and save drafts through `sink`.
+    #[must_use]
+    pub fn with_plans(mut self, plans: &'a dyn PlanStore, sink: &'a dyn PlanSink) -> Self {
+        self.plans = plans;
+        self.plan_sink = sink;
+        self
     }
 
     /// Lets tools record pending proposals through `proposals`.
@@ -120,6 +137,14 @@ pub enum ToolError {
     /// The request is well-formed but not acceptable (for example a limit was reached). The code
     /// is fixed text, safe to show to the model.
     Invalid(&'static str),
+    /// Like [`ToolError::Invalid`], with an explanation in the reader's language from the i18n
+    /// catalog. The code is fixed text; the explanation must not copy server data.
+    Explained {
+        /// Stable machine code.
+        code: &'static str,
+        /// The localized explanation.
+        text: String,
+    },
 }
 
 impl fmt::Display for ToolError {
@@ -128,6 +153,7 @@ impl fmt::Display for ToolError {
             Self::NotFound => f.write_str("not_found"),
             Self::Unavailable(why) => write!(f, "unavailable: {why}"),
             Self::Invalid(why) => write!(f, "invalid: {why}"),
+            Self::Explained { code, text } => write!(f, "invalid: {code}: {text}"),
         }
     }
 }
