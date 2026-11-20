@@ -96,7 +96,7 @@ fn ask(
 #[test]
 fn the_registry_holds_the_read_tools_and_propose_fix() -> TestResult {
     let registry = assistant_registry()?;
-    assert_eq!(registry.len(), 6);
+    assert_eq!(registry.len(), 9);
     assert!(
         registry
             .definitions()
@@ -227,6 +227,8 @@ fn every_builtin_tool_passes_the_contract_suite() -> TestResult {
             "get_inventory_summary" | "list_inventory_items" => r#"{"node":"x"}"#,
             "explain_finding" => r#"{"rule_id":"PAR-001","subject_key":"tcp:1"}"#,
             "propose_fix" => r#"{"title":"t","rationale":"r","suggested_action":"a"}"#,
+            "search_inventory" => r#"{"query":"nginx"}"#,
+            "remember" => r#"{"kind":"task","content":"c"}"#,
             _ => "{}",
         };
         // Against the null store the tools answer not_found, which is a tool failure, not a

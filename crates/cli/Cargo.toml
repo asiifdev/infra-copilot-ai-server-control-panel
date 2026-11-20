@@ -1,6 +1,6 @@
 [package]
 name = "cli"
-description = "The infra command line: read-only inventory collection and parity comparison."
+description = "The infra command line: inventory collection, parity comparison, providers, memories and the assistant."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,10 +11,22 @@ name = "infra"
 path = "src/main.rs"
 
 [dependencies]
+agent = { path = "../agent" }
+ai = { path = "../ai" }
 collectors = { path = "../collectors" }
+core-domain = { path = "../core" }
+db = { path = "../db" }
 i18n = { path = "../i18n" }
 inventory = { path = "../inventory" }
 parity = { path = "../parity" }
+vault = { path = "../vault" }
+# A current-thread runtime to drive the async assistant turn; `rt` only (ADR 0026). The timer and
+# I/O drivers come from the features `net` already enables.
+tokio = { version = "1", default-features = false, features = ["rt"] }
+
+[dev-dependencies]
+# Building and reading the JSON bodies of the fake provider server in the integration tests.
+serde_json = { version = "1", default-features = false, features = ["std"] }
 
 [lints]
 workspace = true

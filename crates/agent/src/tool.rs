@@ -1,5 +1,6 @@
 //! The `AiTool` contract (docs/design.md 12.4, skill `ai-tool-tiers`).
 
+use crate::memory::{MemorySink, NoMemory};
 use crate::proposals::ProposalSink;
 use crate::schema::{ArgSchema, Args};
 use crate::store::ReadStore;
@@ -35,6 +36,8 @@ pub struct ToolContext<'a> {
     pub store: &'a dyn ReadStore,
     /// The only write a tool has: recording pending proposals. It cannot approve or run one.
     pub proposals: &'a dyn ProposalSink,
+    /// Search and memory: reads, plus creating PENDING memories. It cannot approve one.
+    pub memory: &'a dyn MemorySink,
     /// Message catalog for localized explanations.
     pub catalog: &'a Catalog,
     /// The language of the person asking; text a tool writes follows it.
@@ -43,6 +46,9 @@ pub struct ToolContext<'a> {
 
 /// Used when a caller supplies no proposal sink: tools that try to propose get a clean refusal.
 static NO_PROPOSALS: crate::NoProposals = crate::NoProposals;
+
+/// Used when a caller supplies no memory sink: search finds nothing and nothing is remembered.
+static NO_MEMORY: NoMemory = NoMemory;
 
 impl<'a> ToolContext<'a> {
     /// A read-only context. Writes a tool may perform (proposals, and later memory or plans) are
@@ -58,6 +64,7 @@ impl<'a> ToolContext<'a> {
             org,
             store,
             proposals: &NO_PROPOSALS,
+            memory: &NO_MEMORY,
             catalog,
             locale,
         }
@@ -67,6 +74,13 @@ impl<'a> ToolContext<'a> {
     #[must_use]
     pub fn with_proposals(mut self, proposals: &'a dyn ProposalSink) -> Self {
         self.proposals = proposals;
+        self
+    }
+
+    /// Lets tools search and create pending memories through `memory`.
+    #[must_use]
+    pub fn with_memory(mut self, memory: &'a dyn MemorySink) -> Self {
+        self.memory = memory;
         self
     }
 }

@@ -17,6 +17,8 @@
 
 mod assistant;
 mod exec;
+mod memory;
+mod memory_tools;
 mod persist;
 mod proposals;
 mod registry;
@@ -31,6 +33,10 @@ pub use assistant::{
     Assistant, DbProviderLoader, LoadError, ProviderLoader, Turn, TurnConfig, TurnError, TurnReport,
 };
 pub use exec::{CallRecord, CallStatus, Executor, Limits, Outcome};
+pub use memory::{
+    DbMemorySink, MAX_MEMORIES_PER_CONVERSATION, MAX_PENDING_PER_ORG, MemoryDraft, MemoryError,
+    MemoryNote, MemorySink, NoMemory,
+};
 pub use persist::{persist_comparison, persist_inventory};
 pub use proposals::{
     DbProposalSink, MAX_PENDING_PER_CONVERSATION, NoProposals, ProposalDraft, ProposalSink,

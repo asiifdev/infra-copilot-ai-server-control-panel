@@ -14,6 +14,7 @@
 
 mod history;
 mod loader;
+mod notes;
 mod prompt;
 mod turn;
 

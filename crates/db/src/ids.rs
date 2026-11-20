@@ -105,6 +105,11 @@ id_type!(
     PlanId
 );
 
+id_type!(
+    /// Memory identifier.
+    MemoryId
+);
+
 #[cfg(test)]
 mod tests {
     use super::*;

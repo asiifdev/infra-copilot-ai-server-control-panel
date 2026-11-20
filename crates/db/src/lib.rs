@@ -16,10 +16,13 @@ mod conversations;
 mod error;
 mod identity;
 mod ids;
+mod memories;
 mod migrate;
 mod nodes;
+mod orgs;
 mod plans;
 mod providers;
+mod search;
 mod secret;
 mod sha256;
 mod snapshots;
@@ -47,7 +50,12 @@ pub use identity::{
 };
 pub use ids::{
     AgentId, AiProviderId, ApiTokenId, AuditId, ComparisonId, ConversationId, InventoryId,
-    MembershipId, NodeId, OrgId, PlanId, ProposalId, SecretId, TransportId, UserId,
+    MembershipId, MemoryId, NodeId, OrgId, PlanId, ProposalId, SecretId, TransportId, UserId,
+};
+pub use memories::{
+    MAX_MEMORIES_PER_ORG, MAX_MEMORY_CHARS, MemoryKind, MemoryRow, MemorySource, MemoryStatus,
+    NewMemory, approve_memory, clean_memory_text, count_memories, delete_memory, get_memory,
+    list_memories, prompt_memories, save_memory,
 };
 pub use migrate::{LATEST_VERSION, migrate, schema_version};
 pub use nodes::{
@@ -55,6 +63,7 @@ pub use nodes::{
     delete_node, delete_node_secret, get_node, get_node_secret, list_agents, list_node_secrets,
     list_nodes, put_node_secret, register_agent, revoke_agent, set_node_status, touch_agent,
 };
+pub use orgs::list_orgs;
 pub use plans::{
     NewPlan, NewPlanStep, PlanRow, PlanStatus, PlanStepKind, PlanStepRow, PlanStepStatus,
     create_plan, get_plan, list_plan_steps, list_plans, replace_plan_content, set_plan_status,
@@ -63,6 +72,9 @@ pub use plans::{
 pub use providers::{
     AiProvider, NewAiProvider, create_ai_provider, default_ai_provider, delete_ai_provider,
     delete_secret, get_ai_provider, get_secret, list_ai_providers, put_secret, replace_secret,
+};
+pub use search::{
+    MAX_HITS, MAX_QUERY_TOKENS, MAX_TOKEN_CHARS, SearchHit, SearchKind, fts_query, search,
 };
 pub use secret::{SealedSecret, SecretText};
 pub use sha256::sha256_hex;

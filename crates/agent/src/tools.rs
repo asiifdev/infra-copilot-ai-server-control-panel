@@ -495,8 +495,8 @@ impl AiTool for ProposeFix {
     }
 }
 
-/// The registry M2 offers a model: tier 0 reads plus the tier 1 `propose_fix`, and nothing above
-/// tier 1 can be added.
+/// The registry M2 offers a model: tier 0 reads plus the tier 1 `propose_fix` and `remember`, and
+/// nothing above tier 1 can be added.
 ///
 /// # Errors
 /// [`RegisterError`] if a built-in tool breaks a registry rule (a bug caught by a unit test).
@@ -508,5 +508,6 @@ pub fn assistant_registry() -> Result<Registry, RegisterError> {
     registry.register(Box::new(ListFindings))?;
     registry.register(Box::new(ExplainFinding))?;
     registry.register(Box::new(ProposeFix))?;
+    crate::memory_tools::register(&mut registry)?;
     Ok(registry)
 }

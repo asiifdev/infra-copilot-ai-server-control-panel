@@ -183,10 +183,17 @@ checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
 name = "cli"
 version = "0.0.0"
 dependencies = [
+ "agent",
+ "ai",
  "collectors",
+ "core-domain",
+ "db",
  "i18n",
  "inventory",
  "parity",
+ "serde_json",
+ "tokio",
+ "vault",
 ]
 
 [[package]]

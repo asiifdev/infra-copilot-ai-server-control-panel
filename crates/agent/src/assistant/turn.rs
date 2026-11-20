@@ -1,9 +1,12 @@
 //! The turn itself. See the module docs of [`super`] for the guarantees.
 
 use super::history::{build_history, calls_to_json, storable_args};
+use super::notes::system_addendum;
 use super::prompt::{FINAL_NOTE, system_prompt};
 use super::{Assistant, Turn, TurnError, TurnReport};
 use crate::exec::{CallStatus, Outcome};
+use crate::memory::DbMemorySink;
+use crate::memory_tools::hides_arguments;
 use crate::proposals::DbProposalSink;
 use crate::store::DbStore;
 use crate::tool::ToolContext;
@@ -199,7 +202,16 @@ impl<P: AiProvider> Assistant<'_, P> {
             self.config.history_messages,
         )
         .map_err(store_err)?;
-        let mut context = vec![Message::system(system_prompt(turn.locale))];
+        // Organization notes: ACTIVE memories only, fenced as data (pending ones never appear).
+        let mut system = system_prompt(turn.locale).to_owned();
+        system.push_str("\n\n");
+        system.push_str(&system_addendum(
+            self.conn,
+            turn.org,
+            turn.user,
+            turn.locale,
+        ));
+        let mut context = vec![Message::system(system)];
         context.extend(build_history(&rows));
 
         // Redact BEFORE anything is stored or sent: the raw text goes nowhere else.
@@ -229,8 +241,14 @@ impl<P: AiProvider> Assistant<'_, P> {
             .collect();
         let store = DbStore::new(self.conn);
         let proposals = DbProposalSink::new(self.conn, Some(turn.conversation.clone()));
+        let memory = DbMemorySink::new(
+            self.conn,
+            Some(turn.conversation.clone()),
+            Some(turn.user.clone()),
+        );
         let tool_ctx = ToolContext::new(turn.org, &store, self.catalog, turn.locale)
-            .with_proposals(&proposals);
+            .with_proposals(&proposals)
+            .with_memory(&memory);
 
         let mut tally = Tally::default();
         let (mut model_calls, mut tool_calls) = (0u32, 0u32);
@@ -354,7 +372,13 @@ impl<P: AiProvider> Assistant<'_, P> {
             .map(|((call, id), outcome)| ToolCall {
                 id: id.clone(),
                 name: outcome.record.tool.clone(),
-                arguments: storable_args(&call.arguments),
+                // What `remember` was asked to store stays out of replayed history: it is a
+                // pending note and must not reach a prompt before a person approves it.
+                arguments: if hides_arguments(&outcome.record.tool) {
+                    "{}".to_owned()
+                } else {
+                    storable_args(&call.arguments)
+                },
             })
             .collect();
         let calls_json = calls_to_json(&replay_calls);
