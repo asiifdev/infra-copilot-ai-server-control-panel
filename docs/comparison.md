@@ -5,7 +5,7 @@ English | [Bahasa Indonesia](comparison.id.md)
 Last updated: 2026-11-19. Facts below were read from the vendors' own pages on that date; prices
 and features change, so check the linked sources before relying on them.
 
-**Nodivara is pre-alpha and nothing in its row is available yet.** This page is not a claim
+**Nodivara is pre-alpha: only a read-only parity check and a local command line run today, from source, and the AI agent and approval workflow in its row are not available.** This page is not a claim
 that it is better than any product listed. The other products ship today.
 
 ## Overview
@@ -17,7 +17,7 @@ that it is better than any product listed. The other products ship today.
 | 1Panel | Open core, GPL-3.0 | Pro: $80/year or $200 perpetual | Manages AI apps and agents on the server (for example OpenClaw), per its feature list | [Pro edition](https://1panel.pro/pro-edition) |
 | Coolify | Open source, Apache-2.0 | Self-hosted free with all features; Cloud $5/month for 2 servers, plus $3 per extra server | None found in the pages read | [pricing](https://coolify.io/pricing) |
 | Dokploy | Open core: Apache-2.0 plus a proprietary directory | Cloud Hobby $4.50/server/month; Startup from $15/month | Bring-your-own-key AI assistant; log analysis is read-only per its docs | [pricing](https://dokploy.com/pricing) |
-| **Nodivara** | **Open core, provisional AGPL-3.0-only** | **Not set** | **Planned:** approval-gated AI agent, error analysis that cites evidence, migration parity check | [README](../README.md) |
+| **Nodivara** | **Open core, provisional AGPL-3.0-only** | **Not set** | **Available from source (2026-11-20):** read-only migration parity check (7 rules). **Planned:** approval-gated AI agent, error analysis that cites evidence | [README](../README.md) |
 
 ## What Nodivara intends to do differently
 
@@ -25,7 +25,7 @@ These are goals, not shipped features.
 
 - **Every state-changing action goes through a stored proposal and a human approval**, ranked in
   five risk tiers. Destructive actions need the target's name typed in.
-- **A parity check before a server migration is finished**, listing what was left behind.
+- **A parity check before a server migration is finished**, listing what was left behind (a read-only version with seven rules runs today).
 - **Error analysis that cites the evidence it used** and separates fact from guess.
 - **Secrets never reach the AI model**, enforced by redaction before logging, storage and prompts.
 

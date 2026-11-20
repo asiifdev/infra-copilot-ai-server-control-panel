@@ -29,15 +29,16 @@ Terakhir diperbarui: 2026-11-20.
 
 ## Yang sudah berjalan hari ini
 
-> **Status apa adanya.** Belum ada rilis yang bisa dipasang, belum ada agen, dan belum ada panel. Yang ada adalah inventaris hanya-baca dan pemeriksaan kesetaraan yang bisa dijalankan dari kode sumber, ditambah pustaka untuk monitor uptime, asisten AI, dan perencana migrasi yang belum dijalankan menyeluruh oleh apa pun. Belum ada jalur persetujuan atau eksekusi: tidak ada kode yang bisa mengubah server.
+> **Status apa adanya.** Belum ada rilis yang bisa dipasang, belum ada agen, dan belum ada panel. Yang ada adalah inventaris hanya-baca dan pemeriksaan kesetaraan yang bisa dijalankan dari kode sumber, serta baris perintah lokal (`infra`) yang menyimpan inventaris, menyimpan draf rencana migrasi dan pengaturan transport, dan berbicara dengan penyedia AI yang Anda atur. Monitor uptime masih berupa pustaka yang belum dijalankan oleh apa pun. Belum ada jalur persetujuan atau eksekusi: tidak ada kode yang bisa mengubah server, dan asisten AI belum pernah dijalankan ke penyedia nyata.
 
 | Berjalan sekarang (dari kode sumber) | Sudah berupa pustaka, belum dijalankan | Direncanakan |
 |---|---|---|
 | Mengumpulkan inventaris Linux secara hanya-baca: port, proses, cron, PM2, systemd, Docker | Pengecekan uptime (HTTP, TCP, kedaluwarsa TLS) dengan perlindungan SSRF | Agen AI dan alur persetujuan |
 | Membandingkan dua inventaris dengan **7 aturan kesetaraan**, laporan dalam bahasa Indonesia atau Inggris | Mesin insiden dan alert Telegram | Panel web dan aplikasi desktop |
-| Kode keluar 1 bila ada celah kritis, jadi cocok untuk daftar periksa migrasi | Skema database (versi 8) dengan isolasi tenant dan log audit berantai hash | Deploy dari Git, DNS, dan Cloudflare Tunnel |
-| | Putaran giliran asisten AI dengan alat hanya-baca dan `propose_fix` tingkat 1 yang hanya menulis Usulan berstatus pending; penyimpanan rahasia terenkripsi; klien OpenAI-compatible (belum dijalankan ke penyedia nyata) | Persetujuan dan eksekusi Usulan (M4) |
-| | Model rencana migrasi dengan gerbang dan rencana tertulis; spesifikasi transport dan rencana perintah rclone (tidak ada yang dieksekusi) | Memori, pencarian, dan `infra ask` (M2-e); alat AI dan CLI untuk rencana (M3-c) |
+| Kode keluar 1 bila ada celah kritis, jadi cocok untuk daftar periksa migrasi | Skema database (versi 9) dengan isolasi tenant dan log audit berantai hash | Deploy dari Git, DNS, dan Cloudflare Tunnel |
+| Menyimpan inventaris dan hasil perbandingan per node di database SQLite lokal (`--save`), dan mencarinya | Putaran giliran asisten AI dengan 14 alat (tingkat 0 untuk membaca, ditambah alat tingkat 1 yang hanya menulis Usulan pending, memori pending, dan draf rencana); `infra ask` menjalankannya; klien OpenAI-compatible (belum pernah dijalankan ke penyedia nyata) | Persetujuan dan eksekusi Usulan dan rencana (M4) |
+| Menyusun draf rencana migrasi dari inventaris tersimpan dan membaca gerbangnya (`infra plan`); rencananya hanya draf | Penyimpanan rahasia terenkripsi (AES-256-GCM) untuk kunci penyedia dan kredensial transport | Menjalankan rclone, rsync, scp, atau ssh sungguhan (seluruh jalur eksekusi baru diuji dengan pengganti uji) |
+| Menyimpan pengaturan transport, kredensial hanya dari stdin, dan melihat perintahnya sebagai uji coba (`infra transport check`) | Memori organisasi: catatan yang boleh diusulkan asisten, aktif hanya setelah orang menyetujuinya | Model AI diuji ke penyedia nyata (Muse, OpenAI, Ollama) |
 
 ### Coba sendiri
 
@@ -51,6 +52,27 @@ cargo run -q -p cli -- compare source.json target.json --lang id
 ```
 
 Pakai sebagai daftar periksa migrasi server: jalankan `collect` di mesin lama dan baru, lalu `compare`.
+
+Kode keluar `infra`: 0 berhasil, 1 ada temuan kritis atau cutover terblokir, 2 galat penggunaan, konfigurasi, atau I/O, 3 asisten atau penyedia gagal.
+
+### Baris perintah lokal
+
+Selain perintah berbasis berkas di atas, `infra` menyimpan keadaannya di satu database SQLite lokal (`--db PATH`, lalu `NODIVARA_DB`, lalu direktori data pengguna). Ia bertindak sebagai pemilik satu organisasi lokal: belum ada login. Jalankan perintah tanpa argumen untuk melihat teks penggunaan yang tepat. Contohnya menulis `infra` untuk biner hasil build `crates/cli` (atau `cargo run -q -p cli --`).
+
+```sh
+infra init                                                  # membuat organisasi lokal dan pemiliknya
+infra node add --name old-vps --kind vps                    # juga: --name new-vps
+infra collect --save --node old-vps                         # menyimpan inventaris untuk sebuah node
+infra compare --save --source-node old-vps --target-node new-vps
+infra plan draft --source old-vps --target new-vps          # hanya draf; juga: plan list | show NAMA | gates NAMA
+infra transport add --name backup --kind rclone ... --credentials-stdin
+infra transport check backup                                # uji coba: mencetak perintah, rahasia ditutup
+infra provider add --name muse --base-url URL --model MODEL --key-stdin
+infra ask "port apa saja yang terbuka di server baru?"
+infra memory pending                                        # catatan usulan asisten; juga: approve ID | delete ID
+```
+
+Variabel lingkungan: `NODIVARA_DB` (jalur database), `NODIVARA_MASTER_KEY` (kunci yang menyegel rahasia tersimpan, format `<id>:<64 hex>`, misalnya dari `openssl rand -hex 32`), `NODIVARA_PROVIDER_KEY` (kunci API penyedia AI, alternatif `--key-stdin`). Kunci dan kredensial tidak pernah diterima sebagai argumen baris perintah. `infra transport check` tidak menjalankan apa pun kecuali Anda menambah `--run`, dan produk tidak pernah memasang rclone sendiri. Tidak ada `plan approve` atau `plan run`: persetujuan dan eksekusi belum ada.
 
 Keluaran asli, dari data uji anonim di repositori ini (dipersingkat):
 
@@ -98,7 +120,7 @@ Agen tidak akan diberi shell. Ia memilih dari **daftar aksi tertutup**, diurutka
 | 3 Ubah berisiko | ganti `.env`, ubah DNS, restore database | Usulan, dry-run, ringkasan dampak, cadangan otomatis; disetujui **hanya di panel** |
 | 4 Merusak | hapus data, `DROP`, hapus backup | Usulan, ketik nama target, orang kedua di edisi cloud; **hanya di panel**, tidak pernah otomatis |
 
-*Ini adalah desainnya (lihat [docs/plan.md](docs/plan.md)); tingkat risiko dan penyaring rahasia sudah ada di kode, agen yang memakainya belum.*
+*Ini adalah desainnya (lihat [docs/plan.md](docs/plan.md)). Di kode, registri menolak alat di atas tingkat 1 dan alat asisten hanya tingkat 0 dan 1; tingkat 2-4 dan alur persetujuan belum dibangun (M4).*
 
 ## Mengapa Nodivara
 
@@ -124,9 +146,11 @@ Alat yang bisa mengubah server harus mendapat kepercayaan lewat aturan yang bisa
 | Tenant tidak bisa melihat data satu sama lain; pengubahan data terlihat | kueri berbatas tenant dan log audit berantai hash ([`db`](crates/db)) | terimplementasi, teruji |
 | Rantai pasok dipantau di setiap push | `cargo deny`, `cargo audit`, pemindaian rahasia seluruh riwayat, tes Linux dan macOS | di [CI](.github/workflows/ci.yml) |
 | Batas asisten ada di kode, bukan di prompt | putaran alat, panggilan per putaran, riwayat, dan anggaran token ditegakkan per giliran; satu giliran berjalan per percakapan; teks pengguna diredaksi sebelum disimpan atau dikirim; setiap panggilan alat diaudit; giliran butuh keanggotaan yang masih berlaku ([`agent`](crates/agent), [0023](docs/decisions/0023-putaran-asisten-ai-m2-d.md)) | terimplementasi, teruji |
-| AI tidak bisa melewati tingkat 1 | registri menolak alat di atas tingkat 1; `propose_fix` hanya menulis Usulan `pending` | terimplementasi, teruji |
-| Perintah transport tidak membawa rahasia di argumen | rahasia hanya lewat lingkungan atau stdin, daftar opsi rclone yang diizinkan per backend, tanpa shell ([`transport`](crates/transport), [0025](docs/decisions/0025-transport-dan-konfigurasi-rclone.md)); pelaksana tidak pernah diarahkan ke host nyata dalam uji | terimplementasi, teruji; belum ada yang dieksekusi |
+| AI tidak bisa melewati tingkat 1 | registri menolak alat di atas tingkat 1; `propose_fix`, `remember`, dan `draft_migration_plan` hanya bisa menulis Usulan `pending`, memori `pending`, atau rencana `draft`; tidak ada alat yang bisa menyetujui, menjadwalkan, atau menjalankan apa pun | terimplementasi, teruji |
+| Perintah transport tidak membawa rahasia di argumen | rahasia hanya lewat lingkungan atau stdin, daftar opsi rclone yang diizinkan per backend dan memisahkan opsi kredensial dari spesifikasi yang tersimpan, tanpa shell ([`transport`](crates/transport), [0025](docs/decisions/0025-transport-dan-konfigurasi-rclone.md)); pelaksana tidak pernah diarahkan ke host nyata dalam uji | terimplementasi, teruji; belum ada yang dieksekusi |
 | Server lama tidak bisa dimatikan terlalu dini | urutan dan gerbang rencana di kode, ditambah pemicu database pada `decommission_source` ([`plan`](crates/plan), [0024](docs/decisions/0024-model-rencana-migrasi-crate-plan.md)) | terimplementasi, teruji; belum ada pelaksana |
+| Catatan tulisan asisten tidak bisa mengarahkan giliran berikutnya sendirian | memori yang ditulis asisten mulai `pending` (dijamin pemicu database), tidak pernah ditampilkan ke model atau diindeks sampai orang menyetujuinya dengan `infra memory approve`; kueri pencarian dari model dikutip agar tidak bisa memakai sintaks FTS5 ([0026](docs/decisions/0026-memori-pencarian-fts5-dan-cli.md)) | terimplementasi, teruji |
+| Kredensial tidak pernah lewat argumen perintah | CLI membaca kredensial transport dan kunci penyedia hanya dari stdin atau lingkungan, menyegelnya dengan vault, dan `transport check` adalah uji coba kecuali `--run` ([0028](docs/decisions/0028-perintah-plan-dan-transport-di-cli.md)) | terimplementasi, teruji; belum pernah dijalankan ke host nyata |
 | Persetujuan manusia untuk apa pun yang mengubah server | alur Usulan | **direncanakan** (M4): Usulan baru ditulis, belum pernah disetujui atau dijalankan |
 
 Menemukan celah keamanan? Laporkan secara privat: lihat [SECURITY.id.md](SECURITY.id.md).
@@ -137,8 +161,8 @@ Menemukan celah keamanan? Laporkan secara privat: lihat [SECURITY.id.md](SECURIT
 |---|---|---|
 | M0 Fondasi | tipe domain, i18n, skema database, anggaran ukuran dan kecepatan | selesai |
 | M1 Inventaris dan kesetaraan, hanya-baca | kolektor, aturan kesetaraan, CLI, monitor uptime dan alert Telegram | berjalan: kolektor, aturan, dan CLI selesai; pustaka monitor selesai tetapi belum dirangkai |
-| M2 Asisten AI hanya-baca | penyedia OpenAI-compatible, chat, memori, alat tingkat 0-1 | berjalan: lapisan alat, vault, penyedia, dan putaran giliran selesai (belum dijalankan ke penyedia nyata); memori, pencarian, dan `infra ask` (M2-e) direncanakan |
-| M3 Perencana migrasi | wizard, backup dan transport, rencana tertulis | berjalan: model rencana dan rencana tertulis (M3-a) serta spesifikasi transport, rencana perintah, dan wizard (M3-b) selesai sebagai pustaka; alat AI dan `infra plan` (M3-c) direncanakan |
+| M2 Asisten AI hanya-baca | penyedia OpenAI-compatible, chat, memori, alat tingkat 0-1 | sebagian besar selesai sebagai pustaka dan baris perintah: lapisan alat, vault, penyedia, putaran giliran, memori, pencarian FTS5, dan `infra ask`; tersisa: uji ke penyedia nyata, antarmuka UI atau Telegram, login multi-pengguna |
+| M3 Perencana migrasi | wizard, backup dan transport, rencana tertulis | sebagian besar selesai sebagai pustaka dan baris perintah: model rencana (M3-a), spesifikasi transport dan wizard (M3-b), alat perencanaan AI (M3-c), `infra plan` dan `infra transport` (M3-d); tersisa: menjalankan transport sungguhan, perintah memperbarui kredensial transport, kebijakan endpoint untuk infrastruktur bersama (sebelum eksekusi terkelola), dan semua langkah persetujuan dan eksekusi (M4) |
 | M4 Eksekusi dengan persetujuan | tingkat 2-4, dry-run, rollback, verifikasi, audit | direncanakan |
 | M5 Panel server | situs, versi PHP, database | direncanakan |
 | M6 Komersial | lisensi, cloud terkelola, penagihan | direncanakan |
@@ -154,9 +178,9 @@ Menemukan celah keamanan? Laporkan secara privat: lihat [SECURITY.id.md](SECURIT
 
 ## Jawaban singkat
 
-**Apakah Nodivara siap dipakai?** Belum. Masih pra-alfa. Inventaris hanya-baca dan pemeriksaan kesetaraan bisa dijalankan dari kode sumber; belum ada pemasang, agen, atau panel.
+**Apakah Nodivara siap dipakai?** Belum. Masih pra-alfa. Inventaris hanya-baca, pemeriksaan kesetaraan, dan baris perintah lokal bisa dijalankan dari kode sumber; belum ada pemasang, agen, atau panel.
 
-**Apakah AI akan mengubah server saya sendiri?** Menurut desain, tidak: ia mengusulkan, Anda menyetujui, dan tingkat paling berisiko hanya bisa disetujui di panel. Agennya belum ada, jadi saat ini tidak ada yang bisa mengubah server.
+**Apakah AI akan mengubah server saya sendiri?** Menurut desain, tidak: ia mengusulkan, Anda menyetujui, dan tingkat paling berisiko hanya bisa disetujui di panel. Asistennya baru berupa pustaka dan baris perintah lokal, dan hanya bisa membaca atau menulis draf, jadi saat ini tidak ada yang bisa mengubah server.
 
 **Ditulis dengan apa?** Rust untuk inti dan agen, Svelte 5 untuk antarmuka, SQLite secara bawaan.
 
@@ -175,13 +199,13 @@ crates/net          klien HTTP/TLS async aman SSRF (pemeriksaan sertifikat) untu
 crates/monitor      mesin insiden uptime (ambang, pemeliharaan, persen uptime), logika murni
 crates/notifier     kontrak NotificationChannel, channel kirim Telegram, alert terlokalisasi
 crates/watch        perekat: probe lewat net, insiden lewat monitor, alert Telegram lewat notifier (pustaka)
-crates/agent        lapisan alat AI dan putaran giliran asisten: kontrak alat, skema argumen ketat, registri berbatas tingkat, percakapan, `propose_fix` tingkat 1 (hanya Usulan pending) (pustaka; belum ada persetujuan atau eksekusi)
+crates/agent        lapisan alat AI dan putaran giliran asisten: kontrak alat, skema argumen ketat, registri berbatas tingkat, percakapan, registri 14 alat, alat tingkat 1 hanya menulis Usulan pending, memori pending, dan draf rencana (pustaka; belum ada persetujuan atau eksekusi)
 crates/vault        penyegelan rahasia AES-256-GCM, rotasi kunci (pustaka)
 crates/ai           klien chat OpenAI-compatible: tool call, streaming SSE, retry, pemutus sirkuit (pustaka, belum dijalankan ke penyedia nyata)
 crates/plan         model rencana migrasi: spesifikasi ketat, urutan langkah dan gerbang, saran kapasitas, rencana tertulis (pustaka murni)
 crates/transport    spesifikasi transport, rencana perintah rclone/rsync/scp/ssh_pipe, pelaksana, wizard (pustaka; tidak ada yang dieksekusi ke host nyata)
-crates/cli          `infra collect` dan `infra compare` (offline, hanya-baca)
-crates/db           skema SQLite, kueri berbatas tenant, log audit berantai hash
+crates/cli          baris perintah `infra`: collect, compare, init, node, plan, transport, provider, ask, memory (mode lokal satu pengguna)
+crates/db           skema SQLite (versi 9, migrasi 0001-0009), kueri berbatas tenant, pencarian FTS5, log audit berantai hash
 crates/proto-server prototipe sementara untuk mengukur ukuran biner, memori, dan waktu mulai
 ui/                 halaman prototipe Svelte 5 + Vite (ditanam ke biner prototipe)
 brand/              berkas logo Nodivara (sudah dioptimalkan); warna dan pemakaian di docs/brand.md

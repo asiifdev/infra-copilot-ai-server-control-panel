@@ -1,7 +1,7 @@
 # 0025. Transport (M3-b): rencana perintah, konfigurasi rclone lewat lingkungan, dan wizard
 
 - Tanggal: 2026-11-19
-- Status: diterima
+- Status: diterima (catatan 2026-11-20: daftar opsi rclone dipisah menjadi opsi biasa dan opsi kredensial per backend; nama kredensial ditolak sebagai opsi biasa, jadi tidak pernah tersimpan plaintext atau masuk argumen perintah. Lihat `RemoteKind::plain_options` dan `credential_options`)
 - Pengambil keputusan: pemilik produk (instruksi: bangun M3-b), dieksekusi oleh trek C
 
 ## Konteks

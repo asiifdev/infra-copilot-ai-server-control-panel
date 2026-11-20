@@ -1,6 +1,6 @@
 # Rencana produk: platform migrasi + kelola infrastruktur + asisten AI
 
-Status: rencana awal (2026-11-19); dokumen ini tidak ditulis ulang, status pembangunan ada di `docs/NEXT-STEPS.md` (per 2026-11-20 kode sudah ada: M0, M1-a, M2-a sampai M2-d, M3-a, M3-b). Nama produk: **Nodivara** (keputusan 0019); tulisan ini memakai "Produk" sebagai sebutan umum.
+Status: rencana awal (2026-11-19); dokumen ini tidak ditulis ulang, status pembangunan ada di `docs/NEXT-STEPS.md` (per 2026-11-20 kode sudah ada: M0, M1-a, M2-a sampai M2-e, M3-a sampai M3-d; belum ada eksekusi, persetujuan, atau UI). Nama produk: **Nodivara** (keputusan 0019); tulisan ini memakai "Produk" sebagai sebutan umum.
 Asal ide: sebuah migrasi VPS nyata ke laptop, dan prototipe panel internal yang dibangun saat itu.
 
 ## 1. Masalah dan klaim utama

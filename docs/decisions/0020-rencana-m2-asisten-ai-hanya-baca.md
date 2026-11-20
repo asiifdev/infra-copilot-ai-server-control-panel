@@ -20,6 +20,8 @@ Bangun M2 dalam lima irisan kecil, masing-masing dapat diuji dan di-commit sendi
 | M2-d | Putaran agen: riwayat percakapan, batas langkah per giliran, pencatatan `tool_calls` + `audit_log`, anggaran token. Alat tingkat 1 `propose_fix` hanya menulis baris `proposals` berstatus `pending` (tanpa pelaksana, tanpa tombol setuju). | `agent` | giliran yang berputar tanpa akhir terhenti; semua panggilan tercatat |
 | M2-e | Memori organisasi dan tugas (lihat, ubah, hapus oleh pengguna), pencarian teks FTS5 atas inventaris dan temuan, perintah CLI `infra ask` sebagai antarmuka pertama. UI/Telegram menyusul. | `agent`, `cli` | pengguna bisa menghapus memori; tidak ada rahasia tersimpan |
 
+Status pelaksanaan (2026-11-20): M2-a sampai M2-d selesai (0021, 0022, 0023); M2-e selesai, rinciannya di 0026 (memori yang ditulis asisten selalu `pending` sampai orang menyetujui, FTS5, perintah `infra`).
+
 ## Alasan
 - **Lapisan eksekusi lebih dulu (M2-a), model belakangan (M2-c).** Aturan 1 dan 3 proyek: keamanan ada di kode, bukan di prompt. Dengan urutan ini, setiap alat sudah terbukti aman sebelum ada model yang bisa memanggilnya.
 - **CLI dulu, bukan UI.** Kerangka UI dan perilaku jendela belum final; `infra ask` membuktikan nilai tanpa menambah anggaran biner UI.

@@ -2,7 +2,7 @@
 
 # Pertanyaan yang sering diajukan
 
-Terakhir diperbarui: 2026-11-19. Nodivara masih **pra-alfa**: fitur yang di sini disebut
+Terakhir diperbarui: 2026-11-20. Nodivara masih **pra-alfa**: fitur yang di sini disebut
 direncanakan belum tersedia.
 
 ## Apa itu Nodivara?
@@ -14,8 +14,12 @@ pra-alfa: belum ada yang bisa dipasang.
 
 ## Bisakah saya memasangnya sekarang?
 
-Belum. Belum ada rilis. Repositori ini saat ini berisi desain, keputusan arsitektur, dan crate inti
-pertama (tingkat risiko dan penyaring rahasia). Semua hal lain di README masih direncanakan.
+Belum. Belum ada rilis dan belum ada pemasang. Dari kode sumber Anda bisa menjalankan inventaris
+hanya-baca, pemeriksaan kesetaraan dua inventaris, dan baris perintah lokal (`infra`) yang menyimpan
+inventaris, menyimpan draf rencana migrasi dan pengaturan transport, serta bisa berbicara dengan
+penyedia AI yang Anda atur. Monitor uptime masih berupa pustaka yang belum dijalankan oleh apa pun,
+dan belum ada yang bisa menyetujui atau menjalankan perubahan. Semua hal lain di README masih
+direncanakan.
 
 ## Apa itu agen AI pengelola server dalam proyek ini?
 
@@ -34,7 +38,10 @@ usulan tersimpan butuh persetujuan manusia, dan aksi merusak juga butuh nama tar
 
 Menurut desain, tidak. Rahasia seperti kata sandi di URL, nilai `.env`, token, dan kunci privat
 disamarkan sebelum apa pun dicatat, disimpan, ditampilkan, atau dikirim ke model. Kode
-penyamarannya sudah ada di repositori ini dan punya tes. Bagian alur lainnya belum dibangun.
+penyamarannya sudah ada di repositori ini dan punya tes, dan kunci penyedia serta kredensial
+transport dienkripsi saat disimpan dan tidak pernah diterima sebagai argumen baris perintah.
+Asisten belum pernah dijalankan ke penyedia nyata, jadi seluruh jalurnya baru diuji dengan
+pengganti uji lokal.
 
 ## Apa bedanya dengan aaPanel, cPanel, 1Panel, Coolify, atau Dokploy?
 
@@ -47,7 +54,10 @@ bertanggal dan bersumber.
 
 Membandingkan apa yang berjalan di server lama dengan yang berjalan di server baru, lalu melaporkan
 yang tertinggal sebelum server lama dimatikan: layanan yang tidak tercatat, `localhost` yang
-menunjuk mesin yang salah, rekaman DNS yang tidak pernah dipindah. Direncanakan, belum dibangun.
+menunjuk mesin yang salah, rekaman DNS yang tidak pernah dipindah. Versi hanya-baca dengan tujuh
+aturan sudah berjalan dari kode sumber (`infra collect` dan `infra compare`); ia tidak membuktikan
+dua server setara, dan laporannya menyebut aturan mana yang diperiksa. Aturan tambahan dan bagian
+yang butuh persetujuan direncanakan.
 
 ## Sistem operasi apa yang didukung?
 

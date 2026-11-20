@@ -2,7 +2,7 @@ English | [Bahasa Indonesia](faq.id.md)
 
 # Frequently asked questions
 
-Last updated: 2026-11-19. Nodivara is **pre-alpha**: features described here as planned are not
+Last updated: 2026-11-20. Nodivara is **pre-alpha**: features described here as planned are not
 available yet.
 
 ## What is Nodivara?
@@ -14,9 +14,11 @@ installable yet.
 
 ## Can I install it today?
 
-No. There is no release. The repository currently holds the design, the architecture decisions,
-and the first core crate (risk tiers and secret redaction). Everything else in the README is
-planned.
+No. There is no release and no installer. From source you can run a read-only inventory, a
+parity check of two inventories and a local command line (`infra`) that stores inventories, keeps
+migration plan drafts and transport settings, and can talk to an AI provider you configure. The
+uptime monitor is a library nothing runs yet, and nothing can approve or execute a change.
+Everything else in the README is planned.
 
 ## What is an AI server management agent, in this project?
 
@@ -34,7 +36,9 @@ proposal needs a human approval, and destructive actions also need the target's 
 
 By design, no. Secrets such as passwords in URLs, `.env` values, tokens and private keys are
 redacted before anything is logged, stored, shown, or sent to a model. The redaction code exists in
-this repository and has tests. The rest of the pipeline is not built yet.
+this repository and has tests, and provider keys and transport credentials are encrypted at rest
+and never accepted as command-line arguments. The assistant has not yet been run against a live
+provider, so the whole path is tested only against local test doubles.
 
 ## How is it different from aaPanel, cPanel, 1Panel, Coolify or Dokploy?
 
@@ -46,7 +50,9 @@ error analysis that cites its evidence. See the dated, sourced [comparison](comp
 
 It compares what runs on the old server with what runs on the new one and reports what was left
 behind before you switch the old one off: a service nobody listed, a `localhost` that points at the
-wrong machine, a DNS record that never moved. It is planned, not built.
+wrong machine, a DNS record that never moved. A read-only version with seven rules runs today from
+source (`infra collect` and `infra compare`); it does not prove two servers are equivalent, and the
+report lists which rules were checked. More rules and the approval-gated parts are planned.
 
 ## Which operating systems does it support?
 

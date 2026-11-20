@@ -7,7 +7,9 @@
 4. Drift against the code: every crate under crates/ is listed in both READMEs and in the
    structure line of CLAUDE.md, decision files (docs/decisions/NNNN-*.md) are numbered without
    gaps or duplicates, and database migrations (crates/db/migrations/NNNN_*.sql) likewise.
-5. No phrase from STALE_PHRASES (statements that were once true and no longer are) appears
+5. The schema version quoted in README, CLAUDE.md, NEXT-STEPS, design and llms.txt equals the
+   highest migration number.
+6. No phrase from STALE_PHRASES (statements that were once true and no longer are) appears
    outside docs/decisions/.
 Unset placeholders are reported as notices; they do not fail the check.
 """
@@ -85,6 +87,9 @@ STALE_PHRASES = [
     "Nama produk belum ditentukan",
     "product name is not decided",
     "belum ada kode",
+    "first core crate",
+    "nothing in its row is available",
+    "planned, not built",
 ]
 for path in markdown:
     if path.startswith("docs/decisions/"):
@@ -93,6 +98,24 @@ for path in markdown:
     for phrase in STALE_PHRASES:
         if phrase.lower() in text.lower():
             failures.append(f"{path}: stale phrase '{phrase}'")
+
+# The schema version quoted in the status documents must be the highest migration number.
+migrations = sorted(
+    int(m.group(1))
+    for m in (re.match(r"^(\d{4})_.*\.sql$", n) for n in os.listdir("crates/db/migrations"))
+    if m
+) if os.path.isdir("crates/db/migrations") else []
+if migrations:
+    latest = migrations[-1]
+    version_re = re.compile(r"(?:schema version|skema versi|schema \(version|schema \(versi)\s*(\d+)", re.I)
+    for path in ("README.md", "README.id.md", "CLAUDE.md", "docs/NEXT-STEPS.md", "docs/design.md", "llms.txt"):
+        if not os.path.exists(path):
+            continue
+        for match in version_re.finditer(read(path)):
+            if int(match.group(1)) != latest:
+                failures.append(
+                    f"{path}: says schema version {match.group(1)} but the latest migration is {latest:04d}"
+                )
 
 notices = []
 for path in markdown:

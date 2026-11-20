@@ -29,15 +29,16 @@ Last updated: 2026-11-20.
 
 ## What works today
 
-> **Honest status.** There is no installable release, no agent and no panel yet. What exists is a read-only inventory and a parity check you can run from source, plus libraries for the uptime monitor, the AI assistant and the migration planner that nothing runs end to end yet. No approval or execution path exists: no code can change a server.
+> **Honest status.** There is no installable release, no agent and no panel yet. What exists is a read-only inventory and a parity check you can run from source, and a local command line (`infra`) that stores inventories, keeps migration plan drafts and transport settings, and talks to an AI provider you configure. The uptime monitor is a library that nothing runs yet. No approval or execution path exists: no code can change a server, and the AI assistant has never been run against a live provider.
 
 | Works now (from source) | Built as libraries, not running yet | Planned |
 |---|---|---|
 | Collect a Linux inventory, read-only: ports, processes, cron, PM2, systemd, Docker | Uptime checks (HTTP, TCP, TLS expiry) with SSRF protection | The AI agent and approval workflow |
 | Compare two inventories with **7 parity rules** and read the report in English or Indonesian | Incident engine and Telegram alerts | The web panel and desktop app |
-| Exit code 1 when a critical gap is found, so it fits a migration checklist | Database schema (version 8) with tenant isolation and a hash-chained audit log | Git deploys, DNS and Cloudflare Tunnel |
-| | AI assistant turn loop with read-only tools and a tier 1 `propose_fix` that only writes pending proposals; encrypted secret storage; OpenAI-compatible client (not yet run against a live provider) | Approval and execution of proposals (M4) |
-| | Migration plan model with gates and a written plan; transport specs and rclone command plans (nothing is executed) | Memory, search and `infra ask` (M2-e); an AI tool and CLI for plans (M3-c) |
+| Exit code 1 when a critical gap is found, so it fits a migration checklist | Database schema (version 9) with tenant isolation and a hash-chained audit log | Git deploys, DNS and Cloudflare Tunnel |
+| Store inventories and comparisons for a node in a local SQLite database (`--save`), and search them | AI assistant turn loop with 14 tools (tier 0 reads, plus tier 1 tools that only write pending proposals, pending memories and draft plans); `infra ask` runs it; OpenAI-compatible client (never run against a live provider) | Approval and execution of proposals and plans (M4) |
+| Draft a migration plan from stored inventories and read its gates (`infra plan`); the plan is only a draft | Encrypted secret storage (AES-256-GCM) for provider keys and transport credentials | Running rclone, rsync, scp or ssh for real (the whole run path is covered only by test doubles) |
+| Save transport settings, with credentials from stdin only, and preview the commands as a dry run (`infra transport check`) | Organization memory: notes the assistant may propose, active only after a person approves them | An AI model checked against a live provider (Muse, OpenAI, Ollama) |
 
 ### Try it
 
@@ -51,6 +52,27 @@ cargo run -q -p cli -- compare source.json target.json --lang en
 ```
 
 Use it as a server migration checklist: run `collect` on the old and the new machine, then `compare`.
+
+Exit codes of `infra`: 0 success, 1 a critical finding or a blocked cutover, 2 a usage, configuration or I/O error, 3 an assistant or provider failure.
+
+### The local command line
+
+Besides the file-based commands above, `infra` keeps its state in one local SQLite database (`--db PATH`, else `NODIVARA_DB`, else your user data directory). It acts as the owner of a single local organization: there is no login yet. Run a command without arguments for its exact usage text. The examples write `infra` for the binary built from `crates/cli` (or `cargo run -q -p cli --`).
+
+```sh
+infra init                                                  # create the local organization and its owner
+infra node add --name old-vps --kind vps                    # also: --name new-vps
+infra collect --save --node old-vps                         # store an inventory for a node
+infra compare --save --source-node old-vps --target-node new-vps
+infra plan draft --source old-vps --target new-vps          # a draft only; also: plan list | show NAME | gates NAME
+infra transport add --name backup --kind rclone ... --credentials-stdin
+infra transport check backup                                # dry run: prints the commands, secrets masked
+infra provider add --name muse --base-url URL --model MODEL --key-stdin
+infra ask "which ports are open on the new server?"
+infra memory pending                                        # notes the assistant proposed; also: approve ID | delete ID
+```
+
+Environment variables: `NODIVARA_DB` (database path), `NODIVARA_MASTER_KEY` (the key that seals stored secrets, format `<id>:<64 hex>`, for example from `openssl rand -hex 32`), `NODIVARA_PROVIDER_KEY` (the AI provider's API key, an alternative to `--key-stdin`). Keys and credentials are never accepted as command-line arguments. `infra transport check` executes nothing unless you add `--run`, and the product never installs rclone itself. There is no `plan approve` or `plan run`: approval and execution do not exist yet.
 
 Real output, from the anonymous test fixtures in this repository (shortened):
 
@@ -97,7 +119,7 @@ The agent will not get a shell. It will pick from a **closed list of actions**, 
 | 3 Risky change | edit `.env`, change DNS, restore a database | Proposal, dry-run, impact summary, automatic backup; approved **in the panel only** |
 | 4 Destructive | delete data, `DROP`, delete backups | Proposal, type the target's name, a second person in the cloud edition; **panel only**, never automatic |
 
-*This is the design (see [docs/plan.md](docs/plan.md)); the tiers and redaction types exist in code, the agent that uses them does not yet.*
+*This is the design (see [docs/plan.md](docs/plan.md)). In code, the registry refuses any tool above tier 1 and the assistant's tools are tier 0 and 1 only; tiers 2-4 and the approval flow are not built (M4).*
 
 ## Why Nodivara
 
@@ -123,9 +145,11 @@ A tool that can change servers has to earn trust with rules you can check. These
 | Tenants cannot see each other's data; tampering shows | tenant-scoped queries and a hash-chained audit log ([`db`](crates/db)) | implemented, tested |
 | Supply chain watched on every push | `cargo deny`, `cargo audit`, full-history secret scan, Linux and macOS tests | in [CI](.github/workflows/ci.yml) |
 | The assistant's limits live in code, not in the prompt | tool rounds, calls per round, history and token budget are enforced per turn; one running turn per conversation; user text redacted before it is stored or sent; every tool call audited; a turn needs a current membership ([`agent`](crates/agent), [0023](docs/decisions/0023-putaran-asisten-ai-m2-d.md)) | implemented, tested |
-| The AI cannot pass tier 1 | the registry refuses any tool above tier 1; `propose_fix` only writes `pending` proposals | implemented, tested |
-| Transport commands carry no secrets in arguments | secrets only in the environment or stdin, a per-backend rclone option allow-list, no shell ([`transport`](crates/transport), [0025](docs/decisions/0025-transport-dan-konfigurasi-rclone.md)); the runner is never pointed at real hosts in tests | implemented, tested; nothing is executed yet |
+| The AI cannot pass tier 1 | the registry refuses any tool above tier 1; `propose_fix`, `remember` and `draft_migration_plan` can only write a `pending` proposal, a `pending` memory or a `draft` plan; no tool can approve, schedule or run anything | implemented, tested |
+| Transport commands carry no secrets in arguments | secrets only in the environment or stdin, a per-backend rclone option allow-list that keeps credential options out of stored specs, no shell ([`transport`](crates/transport), [0025](docs/decisions/0025-transport-dan-konfigurasi-rclone.md)); the runner is never pointed at real hosts in tests | implemented, tested; nothing is executed yet |
 | The old server cannot be switched off early | plan ordering and gates in code, plus database triggers on `decommission_source` ([`plan`](crates/plan), [0024](docs/decisions/0024-model-rencana-migrasi-crate-plan.md)) | implemented, tested; no executor yet |
+| Notes written by the assistant cannot steer the next turn on their own | a memory the assistant writes starts `pending` (enforced by a database trigger), is never shown to a model or indexed until a person approves it with `infra memory approve`; search queries from a model are quoted so they cannot use FTS5 syntax ([0026](docs/decisions/0026-memori-pencarian-fts5-dan-cli.md)) | implemented, tested |
+| Credentials never travel in command arguments | the CLI reads transport credentials and the provider key from stdin or the environment only, seals them with the vault, and `transport check` is a dry run unless `--run` ([0028](docs/decisions/0028-perintah-plan-dan-transport-di-cli.md)) | implemented, tested; nothing has run against a real host |
 | Human approval for anything that changes a server | proposal flow | **planned** (M4): proposals are only written, never approved or run |
 
 Found a vulnerability? Please report it privately: see [SECURITY.md](SECURITY.md).
@@ -136,8 +160,8 @@ Found a vulnerability? Please report it privately: see [SECURITY.md](SECURITY.md
 |---|---|---|
 | M0 Foundation | domain types, i18n, database schema, size and speed budget | done |
 | M1 Inventory and parity, read-only | collectors, parity rules, CLI, uptime monitor and Telegram alerts | in progress: collectors, rules and CLI done; monitor libraries done, not wired in |
-| M2 Read-only AI assistant | OpenAI-compatible provider, chat, memory, tools of tier 0-1 | in progress: tool layer, vault, provider and the turn loop done (not yet run against a live provider); memory, search and `infra ask` (M2-e) planned |
-| M3 Migration planner | wizard, backup and transport, written plan | in progress: plan model and written plan (M3-a) and transport specs, command plans and setup wizard (M3-b) done as libraries; AI tool and `infra plan` (M3-c) planned |
+| M2 Read-only AI assistant | OpenAI-compatible provider, chat, memory, tools of tier 0-1 | mostly done as libraries and a command line: tool layer, vault, provider, turn loop, memory, FTS5 search and `infra ask`; remaining: a run against a live provider, any UI or Telegram interface, multi-user login |
+| M3 Migration planner | wizard, backup and transport, written plan | mostly done as libraries and a command line: plan model (M3-a), transport specs and wizard (M3-b), AI planning tools (M3-c), `infra plan` and `infra transport` (M3-d); remaining: running transports for real, a command to update transport credentials, an endpoint policy for shared infrastructure (before managed execution), and every approval and execution step (M4) |
 | M4 Execution with approval | tiers 2-4, dry-run, rollback, verification, audit | planned |
 | M5 Server panel | sites, PHP versions, databases | planned |
 | M6 Commercial | licenses, hosted cloud, billing | planned |
@@ -153,9 +177,9 @@ Found a vulnerability? Please report it privately: see [SECURITY.md](SECURITY.md
 
 ## Quick answers
 
-**Is Nodivara ready to use?** No. It is pre-alpha. The read-only inventory and parity check run from source; there is no installer, agent or panel yet.
+**Is Nodivara ready to use?** No. It is pre-alpha. The read-only inventory, the parity check and a local command line run from source; there is no installer, agent or panel yet.
 
-**Will the AI change my server by itself?** By design, no: it proposes, you approve, and the riskiest tiers can only be approved in the panel. The agent does not exist yet, so today nothing can change a server.
+**Will the AI change my server by itself?** By design, no: it proposes, you approve, and the riskiest tiers can only be approved in the panel. The assistant exists only as a library and a local command line, and it can only read or write drafts, so today nothing can change a server.
 
 **What is it written in?** Rust for the core and agent, Svelte 5 for the interface, SQLite by default.
 
@@ -174,13 +198,13 @@ crates/net          SSRF-safe async HTTP/TLS client (certificate inspection) for
 crates/monitor      uptime incident engine (thresholds, maintenance, uptime %), pure logic
 crates/notifier     NotificationChannel contract, Telegram send channel, localized alerts
 crates/watch        glue: probes via net, incidents via monitor, Telegram alerts via notifier (library)
-crates/agent        AI tool layer and assistant turn loop: tool contract, strict argument schemas, tier-gated registry, conversations, tier 1 `propose_fix` (pending proposals only) (library; no approval or execution)
+crates/agent        AI tool layer and assistant turn loop: tool contract, strict argument schemas, tier-gated registry, conversations, 14-tool registry, tier 1 tools write only pending proposals, pending memories and draft plans (library; no approval or execution)
 crates/vault        AES-256-GCM sealing of secrets at rest, key rotation (library)
 crates/ai           OpenAI-compatible chat client: tool calls, SSE streaming, retries, circuit breaker (library, not yet run against a live provider)
 crates/plan         migration plan model: strict spec, step ordering and gates, capacity advice, written plan (pure library)
 crates/transport    transport specs, command plans for rclone/rsync/scp/ssh_pipe, runner seam, setup wizard (library; nothing is executed against real hosts)
-crates/cli          `infra collect` and `infra compare` (offline, read-only)
-crates/db           SQLite schema, tenant-scoped queries, hash-chained audit log
+crates/cli          the `infra` command line: collect, compare, init, node, plan, transport, provider, ask, memory (local single-user mode)
+crates/db           SQLite schema (version 9, migrations 0001-0009), tenant-scoped queries, FTS5 search, hash-chained audit log
 crates/proto-server throwaway prototype used to measure binary size, memory and startup
 ui/                 Svelte 5 + Vite prototype page (embedded into the prototype binary)
 brand/              Nodivara logo files (optimized); colours and usage in docs/brand.md

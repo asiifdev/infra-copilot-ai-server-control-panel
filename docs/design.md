@@ -129,17 +129,19 @@ licenses(id, org_id, key_id, tier, limits jsonb, valid_from, valid_to, instance_
 usage_counters(id, org_id, metric, period, value)    -- nodes, ai_messages, migrations
 ```
 
-### 3.7a Status implementasi skema (2026-11-20, skema versi 8)
+### 3.7a Status implementasi skema (2026-11-20, skema versi 9)
 
 Kode menyimpang dari draf di atas pada hal berikut; kode yang benar, draf disesuaikan di sini.
 
-- **Sudah ada** (migrasi 0001-0008): identitas, node, audit, inventaris/item/perbandingan/temuan (0004), `secrets` dan `ai_providers` (0005), `conversations`, `messages`, `tool_calls`, `proposals` (0006), `transports` (0007), `migration_plans` dan `migration_steps` (0008).
-- **Belum ada:** `ai_provider_models`, `memories` (M2-e), `approvals`, `executions` (M4), `licenses`, `usage_counters`. Status `proposals` selain `pending` belum dipakai kode.
+- **Sudah ada** (migrasi 0001-0009): identitas, node, audit, inventaris/item/perbandingan/temuan (0004), `secrets` dan `ai_providers` (0005), `conversations`, `messages`, `tool_calls`, `proposals` (0006), `transports` (0007), `migration_plans` dan `migration_steps` (0008), `memories`, `search_docs` dan tabel virtual FTS5 `search_fts` (0009).
+- **Belum ada:** `ai_provider_models`, `approvals`, `executions` (M4), `licenses`, `usage_counters`. Status `proposals` selain `pending` belum dipakai kode.
 - `conversations`: tanpa kolom `scope`; ada `turn_token` dan `turn_claimed_at` (klaim satu giliran berjalan per percakapan). `messages`: kunci utama `(org_id, conversation_id, seq)` dan kolom `tool_calls` (JSON) pada pesan asisten; tanpa `id`. `tool_calls`: kolom `message_seq`, `idx`, `call_id`, `duration_ms`, `redactions`, `truncated`, argumen dibatasi 4000 karakter; tanpa `proposal_id`/`result`.
 - `proposals`: kolom `title`, `rationale`, `suggested_action`, `impact`, `rule_id`, `subject_key`, `args_hash`, `expires_at`; tanpa `plan_step_id`, `target_node_id`, `dry_run`, `created_by`; status `cancelled` belum ada.
 - `migration_steps`: kunci utama `(org_id, plan_id, seq)`, tanpa `id`, `started_at`, `finished_at`, `result`; `depends_on` wajib array JSON. Dua pemicu database menjaga `decommission_source` (harus mulai `pending`; tidak boleh maju sebelum semua langkah lain `succeeded`, kecuali `delta` yang `skipped`). `migration_plans` tanpa `created_by`; sumber dan target harus berbeda.
 - `transports`: ada `created_at`; `name` unik per org; `config` objek JSON maksimal 8 KiB.
-- Giliran asisten (7.1) berjalan sebagai: maksimal 6 putaran alat lalu satu panggilan akhir tanpa alat, maksimal 8 panggilan alat per putaran, 20 pesan terakhir sebagai konteks, anggaran token per giliran, dan keanggotaan pengguna yang masih berlaku. Memori dan RAG (langkah 2) belum ada (M2-e).
+- Giliran asisten (7.1) berjalan sebagai: maksimal 6 putaran alat lalu satu panggilan akhir tanpa alat, maksimal 8 panggilan alat per putaran, 20 pesan terakhir sebagai konteks, anggaran token per giliran, dan keanggotaan pengguna yang masih berlaku. Memori dan pencarian (langkah 2) berjalan seperti di 7.4 (M2-e, keputusan 0026); embedding belum ada.
+- `memories` (0009): kolom `id`, `org_id`, `user_id` (hanya untuk `preference`, CHECK dua arah), `kind` (`org_fact|task|preference`; tanpa `inventory_summary`), `content` (1 sampai 1000 karakter, sudah diredaksi), `source` (`person|assistant`), `status` (`pending|active`), `conversation_id` (kunci komposit `(org_id, id)`; dikosongkan oleh pemicu bila percakapan dihapus), `created_at`, `updated_at`. Tanpa `scope`, `embedding`, `created_by`, `deleted_at` (hapus adalah hapus baris). Pemicu menjamin memori dengan `source = 'assistant'` selalu mulai `pending` dan identitas (`id`, `org_id`, `user_id`, `source`) tidak berubah.
+- Pencarian (0009): `search_docs` (`org_id`, `kind` `item|finding|memory`, `src`, `owner_id`, `ref`, `title`, `body`, unik `(org_id, kind, src)`) adalah data turunan yang diisi dan dihapus pemicu dari `inventory_items`, `findings` dan `memories` (tidak boleh di-UPDATE); `search_fts` adalah FTS5 external-content di atasnya (`unicode61 remove_diacritics 2`). Hanya memori `active` bukan `preference` yang diindeks. Indeks GIN pada `data` di bagian 3.8 berlaku untuk PostgreSQL; SQLite memakai FTS5.
 
 ### 3.8 Indeks dan aturan
 
@@ -233,9 +235,10 @@ Sebelum apa pun disimpan atau dikirim ke model: hapus pola rahasia (kata sandi d
 Keluaran dari Node masuk ke model dalam blok bertanda "data tak tepercaya". Penegakan tidak bergantung pada instruksi ke model: alat tingkat 2+ selalu butuh persetujuan di lapisan eksekusi.
 
 ### 7.4 Memori
-- Ditulis atas permintaan pengguna atau saran AI yang disetujui pengguna. Dapat dilihat, diedit, dihapus.
-- Pencarian memakai embedding (bila penyedia mendukung) atau pencarian teks sebagai cadangan.
-- Tidak menyimpan rahasia. Terikat org.
+- Ditulis oleh orang (`source = person`; skema dan `db::save_memory` mengizinkannya langsung `active`, tetapi belum ada perintah CLI untuk menambahkan) atau diusulkan asisten lewat alat `remember` (tingkat 1). **Memori buatan asisten selalu `pending`**: tidak pernah ditampilkan ke model dan tidak diindeks sampai orang menyetujuinya (`infra memory approve ID`); tidak ada alat untuk menyetujui, mengubah, atau menghapus. Orang dapat melihat (`list`, `pending`) dan menghapus (`delete`); perintah untuk mengubah isi belum ada.
+- Pembacaan: blok "catatan organisasi" di prompt sistem berisi paling banyak 20 memori `active` (4 KiB), diberi label data dan dipagari; preferensi pribadi hanya tampil untuk pemiliknya. Batas penulisan: 5 per percakapan, 50 `pending` per org, 200 per org.
+- Pencarian memakai teks FTS5 (alat `search_inventory`; kueri dari model dipecah dan dikutip, tanpa sintaks FTS5). Embedding bersifat opsional dan belum ada.
+- Tidak menyimpan rahasia (teks diredaksi sebelum disimpan). Terikat org.
 
 ## 8. Protokol agen
 
