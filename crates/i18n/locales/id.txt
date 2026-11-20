@@ -333,3 +333,67 @@ assistant.plan.err_transport_unverified = Transport ini belum lolos verifikasi. 
 assistant.plan.err_name_taken = Sudah ada rencana dengan nama ini. Pilih nama lain.
 assistant.plan.err_too_many = Organisasi sudah memegang jumlah maksimum draf rencana. Seseorang harus meninjau atau menghapus sebagian sebelum draf baru dibuat.
 assistant.plan.err_rejected = Rencana tidak bisa dibuat dari masukan ini, jadi tidak ada yang disimpan.
+
+# Command line: rencana dan transport (keputusan 0028)
+cli.usage.plan = Penggunaan: infra plan draft --source NODE --target NODE [--transport NAMA] [--backup-location source|local|intermediary] [--cutover tunnel|dns] [--name NAMA] | list | show NAMA | gates NAMA   [--lang en|id] [--db PATH] [--org SLUG]   (rencana yang dibuat di sini hanya draf; gates keluar dengan kode 1 selama cutover masih terblokir)
+cli.usage.transport = Penggunaan: infra transport add --name NAMA --kind rclone|rsync|scp|ssh_pipe [--credentials-stdin] dengan, untuk rclone, --remote-kind s3|b2|drive|sftp|dropbox|onedrive|webdav --remote NAMA [--path PATH] [--options kunci=nilai,kunci=nilai] dan, untuk rsync, scp, dan ssh_pipe, --host HOST --user PENGGUNA [--port N] --path PATH | list | show NAMA | remove NAMA | check NAMA [--run]   (kredensial dibaca dari stdin sebagai baris nama=nilai, tidak pernah dari argumen; check hanya mencetak perintah kecuali Anda menambahkan --run)
+cli.plan.drafted = Draf rencana {name} disimpan (id {id}).
+cli.plan.draft_note = Status: draf. Tidak ada yang disetujui, dijadwalkan, atau dijalankan di server mana pun. Bacalah dengan `infra plan show "{name}"`; persetujuan adalah langkah terpisah yang hanya bisa diambil seseorang, dan belum menjadi bagian dari baris perintah ini.
+cli.plan.comparison_current = Gerbang memakai perbandingan terbaru antara {source} dan {target}, yang mencakup inventaris terbaru masing-masing.
+cli.plan.comparison_stale = Belum ada perbandingan inventaris terbaru antara {source} dan {target}, jadi gerbang tetap tertutup. Jalankan `infra compare --save --source-node {source} --target-node {target}`.
+cli.plan.unknown = Tidak ada rencana bernama {name}. Lihat `infra plan list`.
+cli.plan.list_empty = Belum ada rencana. Buat draf dengan `infra plan draft`.
+cli.plan.list_head = nama | status | sumber -> tujuan | dibuat
+cli.plan.list_line = {name} | {status} | {source} -> {target} | {created}
+cli.plan.show_head = Rencana {name}: status {status}, dari {source} ke {target}, dibuat {created}.
+cli.plan.gates_head = Gerbang rencana {name} (status {status}).
+cli.plan.gates_cutover = Cutover diizinkan: {state}
+cli.plan.gates_complete = Bukti lengkap: {state}
+cli.plan.gates_shutdown = Mematikan server lama diizinkan: {state}
+cli.plan.gates_open = Temuan kritis yang masih terbuka: {count}
+cli.plan.gates_accepted = Temuan kritis yang diterima seseorang: {count}
+cli.plan.gates_finding = - {rule}: {kind} {key}
+cli.plan.gates_counts = Temuan penting: {important}; informasi: {info}.
+cli.plan.err_same_node = Sumber dan tujuan harus dua node yang berbeda.
+cli.plan.err_transport_required = Tidak ada transport yang disebut dan tidak ada tepat satu transport terverifikasi. Berikan --transport NAMA; lihat `infra transport list`.
+cli.plan.err_transport_missing = Tidak ada transport bernama {name}. Lihat `infra transport list`.
+cli.plan.err_transport_unverified = Transport {name} belum lolos pemeriksaan. Jalankan dulu `infra transport check {name} --run`.
+cli.plan.err_name = Nama rencana kosong atau terlalu panjang.
+cli.plan.err_rejected = Rencana tidak bisa dibuat dari masukan ini, jadi tidak ada yang disimpan.
+cli.plan.err_name_taken = Sudah ada rencana bernama {name}. Pilih nama lain dengan --name.
+cli.plan.err_too_many = Organisasi sudah memegang jumlah maksimum draf rencana. Tinjau atau hapus sebagian sebelum membuat draf baru.
+cli.transport.added = Transport {name} ({kind}) ditambahkan.
+cli.transport.exists = Sudah ada transport bernama {name}.
+cli.transport.unknown = Tidak ada transport bernama {name}. Lihat `infra transport list`.
+cli.transport.removed = Transport {name} dan kredensialnya yang tersegel dihapus.
+cli.transport.invalid = Pengaturan transport tidak valid ({reason}). Nama, jalur, dan opsi tidak boleh memuat karakter khusus.
+cli.transport.managed = Penyimpanan terkelola belum bisa ditambahkan.
+cli.transport.no_credentials = Transport {kind} tidak menyimpan kredensial: ia memakai agen dan kunci SSH di mesin ini. Hapus --credentials-stdin.
+cli.transport.bad_credentials = Kredensial tidak valid ({reason}). Kirim satu nama=nilai per baris lewat stdin; nama harus berupa opsi dari backend yang dipilih.
+cli.transport.bad_credential_line = Baris {line} kredensial di stdin bukan nama=nilai (atau masukannya terlalu besar atau bukan teks). Tidak ada yang disimpan.
+cli.transport.vault_mismatch = Kunci utama tidak cocok dengan yang dipakai menyegel kredensial transport. Setel NODIVARA_MASTER_KEY ke nilai aslinya, atau hapus transport lalu tambahkan lagi.
+cli.transport.list_empty = Belum ada transport. Tambahkan dengan `infra transport add`.
+cli.transport.list_head = nama | jenis | terverifikasi
+cli.transport.list_line = {name} | {kind} | {verified}
+cli.transport.show_name = Nama: {value}
+cli.transport.show_kind = Jenis: {value}
+cli.transport.show_verified = Terverifikasi pada: {value}
+cli.transport.show_check = Pemeriksaan terakhir: {value}
+cli.transport.never = belum pernah
+cli.transport.none_yet = belum ada pemeriksaan
+cli.transport.check_dry = Uji coba pemeriksaan untuk {name}: tidak ada yang dijalankan. Inilah perintah yang akan dijalankan `infra transport check {name} --run` di mesin ini; nilai rahasia ditampilkan sebagai ***.
+cli.transport.check_running = Menjalankan pemeriksaan untuk {name} di mesin ini.
+cli.transport.dry_step = {step}
+cli.transport.dry_needs_token = Remote ini butuh token masuk yang belum tersimpan, jadi pemeriksaan sungguhan akan berhenti di sini dan memintanya.
+cli.transport.dry_done = Uji coba selesai; tidak ada yang dijalankan dan tidak ada yang disimpan. Tambahkan --run untuk menjalankan perintah ini.
+cli.transport.step_ok = [ok] {step}
+cli.transport.step_probe = Programnya terpasang
+cli.transport.step_verify = Tujuan menjawab
+cli.transport.needs_token = Transport {name} butuh token masuk. Hapus lalu tambahkan lagi dengan baris token=... di stdin (--credentials-stdin).
+cli.transport.detail = Pesan dari alat (teks tak tepercaya, dipersingkat): {detail}
+cli.transport.offer_install = Nodivara bisa membantu memasangnya, tetapi hanya bila Anda meminta dan menyetujui, dan perintah ini tidak pernah memasang apa pun. Pasang rclone dengan pengelola paket sistem Anda, lalu jalankan pemeriksaan lagi.
+cli.transport.passed = Pemeriksaan lolos dan dicatat untuk {name}.
+cli.transport.speed_leftover = Berkas uji kecepatan tidak bisa dihapus dan mungkin masih ada di remote.
+cli.transport.unknown_value = tidak diketahui
+cli.transport.corrupt = Pengaturan tersimpan transport ini tidak lagi lolos validasi ({reason}).
+cli.transport.report = Ruang kosong di remote: {free}; kecepatan unggah dalam byte per detik: {speed}.

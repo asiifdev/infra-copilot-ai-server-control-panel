@@ -20,6 +20,7 @@ mod exec;
 mod memory;
 mod memory_tools;
 mod persist;
+mod plan_flow;
 mod plan_tools;
 mod plans;
 mod proposals;
@@ -40,6 +41,10 @@ pub use memory::{
     MemoryNote, MemorySink, NoMemory,
 };
 pub use persist::{persist_comparison, persist_inventory};
+pub use plan_flow::{
+    DraftContext, DraftError, DraftRequest, Drafted, Evidence, collect_evidence,
+    draft_migration_plan, gates_for_stored,
+};
 pub use plans::{
     ComparisonView, DbPlanSink, DbPlanStore, MAX_DRAFT_PLANS, NoPlans, PlanSink, PlanSinkError,
     PlanStore, PlanSummary, ResolvedTransport, StoredPlan, TransportInfo,

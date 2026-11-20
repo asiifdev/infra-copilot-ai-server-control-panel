@@ -333,3 +333,67 @@ assistant.plan.err_transport_unverified = This transport has not passed a verifi
 assistant.plan.err_name_taken = A plan with this name already exists. Choose another name.
 assistant.plan.err_too_many = The organization already holds the maximum number of draft plans. A person must review or remove some before another is drafted.
 assistant.plan.err_rejected = The plan could not be built from these inputs, so nothing was saved.
+
+# Command line: plans and transports (decision 0028)
+cli.usage.plan = Usage: infra plan draft --source NODE --target NODE [--transport NAME] [--backup-location source|local|intermediary] [--cutover tunnel|dns] [--name NAME] | list | show NAME | gates NAME   [--lang en|id] [--db PATH] [--org SLUG]   (a plan made here is only a draft; gates exits with code 1 while the cutover is blocked)
+cli.usage.transport = Usage: infra transport add --name NAME --kind rclone|rsync|scp|ssh_pipe [--credentials-stdin] with, for rclone, --remote-kind s3|b2|drive|sftp|dropbox|onedrive|webdav --remote NAME [--path PATH] [--options key=value,key=value] and, for rsync, scp and ssh_pipe, --host HOST --user USER [--port N] --path PATH | list | show NAME | remove NAME | check NAME [--run]   (credentials are read from stdin as name=value lines, never from an argument; check only prints the commands unless you add --run)
+cli.plan.drafted = Saved draft plan {name} (id {id}).
+cli.plan.draft_note = Status: draft. Nothing was approved, scheduled or run on any server. Read it with `infra plan show "{name}"`; approval is a separate step that only a person can take, and it is not part of this command line yet.
+cli.plan.comparison_current = The gates use the latest comparison of {source} and {target}, which covers the newest inventory of each.
+cli.plan.comparison_stale = There is no comparison of the newest inventories of {source} and {target}, so the gates stay closed. Run `infra compare --save --source-node {source} --target-node {target}`.
+cli.plan.unknown = There is no plan named {name}. See `infra plan list`.
+cli.plan.list_empty = No plans yet. Draft one with `infra plan draft`.
+cli.plan.list_head = name | status | source -> target | created
+cli.plan.list_line = {name} | {status} | {source} -> {target} | {created}
+cli.plan.show_head = Plan {name}: status {status}, from {source} to {target}, created {created}.
+cli.plan.gates_head = Gates of plan {name} (status {status}).
+cli.plan.gates_cutover = Cutover allowed: {state}
+cli.plan.gates_complete = Evidence complete: {state}
+cli.plan.gates_shutdown = Shutdown of the old server allowed: {state}
+cli.plan.gates_open = Open critical findings: {count}
+cli.plan.gates_accepted = Critical findings accepted by a person: {count}
+cli.plan.gates_finding = - {rule}: {kind} {key}
+cli.plan.gates_counts = Important findings: {important}; informational: {info}.
+cli.plan.err_same_node = The source and the target must be two different nodes.
+cli.plan.err_transport_required = No transport was named and there is not exactly one verified transport. Pass --transport NAME; see `infra transport list`.
+cli.plan.err_transport_missing = There is no transport named {name}. See `infra transport list`.
+cli.plan.err_transport_unverified = Transport {name} has not passed a check yet. Run `infra transport check {name} --run` first.
+cli.plan.err_name = The plan name is empty or too long.
+cli.plan.err_rejected = The plan could not be built from these inputs, so nothing was saved.
+cli.plan.err_name_taken = A plan named {name} already exists. Choose another name with --name.
+cli.plan.err_too_many = The organization already holds the maximum number of draft plans. Review or remove some before drafting another.
+cli.transport.added = Added transport {name} ({kind}).
+cli.transport.exists = A transport named {name} already exists.
+cli.transport.unknown = There is no transport named {name}. See `infra transport list`.
+cli.transport.removed = Removed transport {name} and its sealed credentials.
+cli.transport.invalid = The transport settings are not valid ({reason}). Names, paths and options must avoid special characters.
+cli.transport.managed = Managed storage cannot be added yet.
+cli.transport.no_credentials = A {kind} transport takes no stored credentials: it uses the SSH agent and keys of this machine. Remove --credentials-stdin.
+cli.transport.bad_credentials = The credentials are not valid ({reason}). Send one name=value per line on stdin; the names must be options of the chosen backend.
+cli.transport.bad_credential_line = Line {line} of the credentials on stdin is not name=value (or the input is too large or not text). Nothing was stored.
+cli.transport.vault_mismatch = The master key does not match the one the transport credentials were sealed with. Set NODIVARA_MASTER_KEY to the original value, or remove the transport and add it again.
+cli.transport.list_empty = No transports yet. Add one with `infra transport add`.
+cli.transport.list_head = name | kind | verified
+cli.transport.list_line = {name} | {kind} | {verified}
+cli.transport.show_name = Name: {value}
+cli.transport.show_kind = Kind: {value}
+cli.transport.show_verified = Verified at: {value}
+cli.transport.show_check = Last check: {value}
+cli.transport.never = never
+cli.transport.none_yet = no check yet
+cli.transport.check_dry = Dry run of the checks for {name}: nothing is executed. These are the commands `infra transport check {name} --run` would run on this machine; secret values are shown as ***.
+cli.transport.check_running = Running the checks for {name} on this machine.
+cli.transport.dry_step = {step}
+cli.transport.dry_needs_token = This remote needs a sign-in token that is not stored, so a real check would stop here and ask for it.
+cli.transport.dry_done = Dry run finished; nothing was executed and nothing was stored. Add --run to run these commands.
+cli.transport.step_ok = [ok] {step}
+cli.transport.step_probe = The program is installed
+cli.transport.step_verify = The destination answers
+cli.transport.needs_token = Transport {name} needs a sign-in token. Remove it and add it again with a token=... line on stdin (--credentials-stdin).
+cli.transport.detail = Message from the tool (untrusted text, shortened): {detail}
+cli.transport.offer_install = Nodivara can help with installing it, but only when you ask and approve, and this command never installs anything. Install rclone with your system's package manager, then run the check again.
+cli.transport.passed = The checks passed and were recorded for {name}.
+cli.transport.speed_leftover = The speed-test file could not be deleted and may remain on the remote.
+cli.transport.unknown_value = unknown
+cli.transport.corrupt = The stored settings of this transport no longer pass validation ({reason}).
+cli.transport.report = Free space on the remote: {free}; upload speed in bytes per second: {speed}.

@@ -192,8 +192,10 @@ dependencies = [
  "i18n",
  "inventory",
  "parity",
+ "plan",
  "serde_json",
  "tokio",
+ "transport",
  "vault",
 ]
 

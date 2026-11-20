@@ -4,6 +4,8 @@
 //!   (`--save --node N` also stores it in the local database).
 //! * `infra compare SOURCE TARGET` compares two inventories and prints the parity report
 //!   (`--save --source-node A --target-node B` compares the stored ones and stores the result).
+//! * `infra plan draft|list|show|gates` and `infra transport add|list|show|remove|check` (decision
+//!   0028): plans are only ever drafts, and `transport check` is a dry run unless `--run` is given.
 //! * `infra init`, `node add`, `provider add|list|remove`, `ask` and `memory ...` work on the
 //!   local database (`--db PATH`, `NODIVARA_DB`, or a per-user data directory; see `local`).
 //!
@@ -16,10 +18,12 @@ mod ask;
 mod env;
 mod local;
 mod memory;
+mod plans;
 mod provider;
 mod saved;
 mod setup;
 mod time;
+mod transports;
 
 pub use env::Env;
 
@@ -40,6 +44,8 @@ pub(crate) const USAGE_NODE: MessageKey = MessageKey::new("cli.usage.node");
 pub(crate) const USAGE_PROVIDER: MessageKey = MessageKey::new("cli.usage.provider");
 pub(crate) const USAGE_ASK: MessageKey = MessageKey::new("cli.usage.ask");
 pub(crate) const USAGE_MEMORY: MessageKey = MessageKey::new("cli.usage.memory");
+pub(crate) const USAGE_PLAN: MessageKey = MessageKey::new("cli.usage.plan");
+pub(crate) const USAGE_TRANSPORT: MessageKey = MessageKey::new("cli.usage.transport");
 const USAGE_COLLECT: MessageKey = MessageKey::new("cli.usage.collect");
 const USAGE_COMPARE: MessageKey = MessageKey::new("cli.usage.compare");
 const ERR_USAGE: MessageKey = MessageKey::new("cli.error.usage");
@@ -235,6 +241,8 @@ impl Ui<'_> {
                 USAGE_PROVIDER,
                 USAGE_ASK,
                 USAGE_MEMORY,
+                USAGE_PLAN,
+                USAGE_TRANSPORT,
             ],
         };
         for key in usages {
@@ -265,6 +273,8 @@ impl Ui<'_> {
             "provider" => self.provider_command(&globals, rest),
             "ask" => self.ask(&globals, rest),
             "memory" => self.memory_command(&globals, rest),
+            "plan" => self.plan_command(&globals, rest),
+            "transport" => self.transport_command(&globals, rest),
             other => self.usage(other, None),
         }
     }

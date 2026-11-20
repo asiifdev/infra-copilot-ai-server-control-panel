@@ -1,6 +1,6 @@
 [package]
 name = "cli"
-description = "The infra command line: inventory collection, parity comparison, providers, memories and the assistant."
+description = "The infra command line: inventory collection, parity comparison, providers, memories, the assistant, plans and transports."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -19,6 +19,8 @@ db = { path = "../db" }
 i18n = { path = "../i18n" }
 inventory = { path = "../inventory" }
 parity = { path = "../parity" }
+plan = { path = "../plan" }
+transport = { path = "../transport" }
 vault = { path = "../vault" }
 # A current-thread runtime to drive the async assistant turn; `rt` only (ADR 0026). The timer and
 # I/O drivers come from the features `net` already enables.

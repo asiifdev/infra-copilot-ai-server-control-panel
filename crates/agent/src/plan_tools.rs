@@ -10,22 +10,19 @@
 //! machine text. Strings that came from a server (process names, keys) appear only inside the
 //! executor's untrusted-data fence, like every tool result.
 
-use crate::plans::{PlanSinkError, StoredPlan};
+use crate::plan_flow::{
+    DraftContext, DraftRequest, Drafted, Evidence, NAME_MAX, draft_migration_plan, gates_for_stored,
+};
+use crate::plans::StoredPlan;
 use crate::registry::{RegisterError, Registry};
 use crate::schema::{ArgSchema, Args, Field, Kind};
 use crate::store::StoreError;
 use crate::tool::{AiTool, ToolContext, ToolError, ToolOutput, ToolSpec};
-use crate::tools::clean_text;
 use core_domain::tier::Tier;
 use i18n::MessageKey;
-use inventory::Finding;
-use plan::{
-    AcceptedFinding, BackupLocation, CutoverMethod, DraftOptions, GateReport, draft_plan,
-    gate_report, render_draft, render_plan,
-};
+use plan::{BackupLocation, CutoverMethod, GateReport, render_draft, render_plan};
 use std::fmt::Write as _;
 
-const NAME_MAX: usize = 100;
 const LOOKUP_MAX: usize = 200;
 
 const SOURCE_FIELD: Field = Field {
@@ -58,13 +55,6 @@ const PLAN_NAME_FIELD: Field = Field {
     description: "Plan name, as returned by list_plans.",
 };
 
-fn explained(ctx: &ToolContext<'_>, code: &'static str, key: &'static str) -> ToolError {
-    ToolError::Explained {
-        code,
-        text: ctx.catalog.get(ctx.locale, MessageKey::new(key), &[]).text,
-    }
-}
-
 fn map_store(error: StoreError) -> ToolError {
     match error {
         StoreError::NotFound => ToolError::NotFound,
@@ -72,75 +62,12 @@ fn map_store(error: StoreError) -> ToolError {
     }
 }
 
-/// What the latest comparison between two nodes lets a gate say.
-struct Evidence {
-    findings: Vec<Finding>,
-    accepted: Vec<AcceptedFinding>,
-    /// The comparison exists and covers the newest inventories of both nodes. Without it an empty
-    /// finding list proves nothing, so the report is marked incomplete.
-    current: bool,
-    partial: bool,
-}
-
-impl Evidence {
-    fn gates(&self, mut report: GateReport) -> GateReport {
-        report.inventory_incomplete |= !self.current || self.partial;
-        report
-    }
-
-    fn word(&self) -> &'static str {
-        if self.current {
-            "current"
-        } else {
-            "missing_or_stale"
-        }
-    }
-}
-
-fn evidence(ctx: &ToolContext<'_>, source: &str, target: &str) -> Result<Evidence, ToolError> {
-    let view = match ctx.plans.comparison(ctx.org, source, target) {
-        Ok(view) if view.fresh => view,
-        Ok(_) | Err(StoreError::NotFound) => {
-            return Ok(Evidence {
-                findings: Vec::new(),
-                accepted: Vec::new(),
-                current: false,
-                partial: false,
-            });
-        }
-        Err(StoreError::Unavailable) => return Err(ToolError::Unavailable("plans".to_owned())),
-    };
-    let reason = ctx
-        .catalog
-        .get(
-            ctx.locale,
-            MessageKey::new("assistant.plan.accepted_reason"),
-            &[],
-        )
-        .text;
-    // A person's acceptance only; an acceptance that no longer matches a finding is ignored by
-    // `gate_report`, and one that cannot be built leaves the finding open.
-    let accepted = view
-        .accepted
-        .iter()
-        .filter_map(|key| AcceptedFinding::new(&key.rule_id, key.subject.clone(), &reason).ok())
-        .collect();
-    Ok(Evidence {
-        findings: view.findings,
-        accepted,
-        current: true,
-        partial: view.inventory_partial,
-    })
-}
-
 fn gates_of(
     ctx: &ToolContext<'_>,
     stored: &StoredPlan,
 ) -> Result<(GateReport, Evidence), ToolError> {
-    let (source, target) = (&stored.summary.source_node, &stored.summary.target_node);
-    let evidence = evidence(ctx, source, target)?;
-    let report = evidence.gates(gate_report(&evidence.findings, &evidence.accepted));
-    Ok((report, evidence))
+    gates_for_stored(ctx.plans, ctx.catalog, ctx.locale, ctx.org, stored)
+        .map_err(|_| ToolError::Unavailable("plans".to_owned()))
 }
 
 fn yes(flag: bool) -> &'static str {
@@ -227,47 +154,6 @@ fn parse_method(text: &str) -> Option<CutoverMethod> {
     }
 }
 
-impl DraftMigrationPlan {
-    /// The transport to use: the named one, or the only verified one. Unverified is refused.
-    fn transport(
-        ctx: &ToolContext<'_>,
-        requested: Option<&str>,
-    ) -> Result<(String, String), ToolError> {
-        let name = if let Some(name) = requested {
-            name.to_owned()
-        } else {
-            let all = ctx.plans.transports(ctx.org).map_err(map_store)?;
-            let mut verified = all.iter().filter(|t| t.verified_at.is_some());
-            match (verified.next(), verified.next()) {
-                (Some(only), None) => only.name.clone(),
-                _ => {
-                    return Err(explained(
-                        ctx,
-                        "transport_required",
-                        "assistant.plan.err_transport_required",
-                    ));
-                }
-            }
-        };
-        let resolved = ctx.plans.transport(ctx.org, &name).map_err(|e| match e {
-            StoreError::NotFound => explained(
-                ctx,
-                "transport_not_found",
-                "assistant.plan.err_transport_missing",
-            ),
-            StoreError::Unavailable => ToolError::Unavailable("store".to_owned()),
-        })?;
-        if !resolved.verified {
-            return Err(explained(
-                ctx,
-                "transport_not_verified",
-                "assistant.plan.err_transport_unverified",
-            ));
-        }
-        Ok((resolved.id, name))
-    }
-}
-
 impl AiTool for DraftMigrationPlan {
     fn spec(&self) -> &ToolSpec {
         &DRAFT_SPEC
@@ -278,85 +164,30 @@ impl AiTool for DraftMigrationPlan {
         else {
             return Err(ToolError::Invalid("missing_node"));
         };
-        if source == target {
-            return Err(explained(ctx, "same_node", "assistant.plan.err_same_node"));
-        }
-        let node = |name: &str, code, key| {
-            ctx.plans.node_id(ctx.org, name).map_err(|e| match e {
-                StoreError::NotFound => explained(ctx, code, key),
-                StoreError::Unavailable => ToolError::Unavailable("store".to_owned()),
-            })
+        let draft_ctx = DraftContext {
+            org: ctx.org,
+            store: ctx.store,
+            plans: ctx.plans,
+            sink: ctx.plan_sink,
+            catalog: ctx.catalog,
+            locale: ctx.locale,
         };
-        let source_id = node(
+        let request = DraftRequest {
             source,
-            "source_node_not_found",
-            "assistant.plan.err_source_missing",
-        )?;
-        let target_id = node(
             target,
-            "target_node_not_found",
-            "assistant.plan.err_target_missing",
-        )?;
-        let inventory = |name: &str, key| {
-            ctx.store
-                .latest_inventory(ctx.org, name)
-                .map_err(|e| match e {
-                    StoreError::NotFound => explained(ctx, "no_inventory", key),
-                    StoreError::Unavailable => ToolError::Unavailable("store".to_owned()),
-                })
+            transport: args.text("transport"),
+            backup_location: args.text("backup_location").and_then(parse_location),
+            cutover_method: args.text("cutover_method").and_then(parse_method),
+            name: args.text("name"),
         };
-        let source_inventory = inventory(source, "assistant.plan.err_source_no_inventory")?;
-        let target_inventory = inventory(target, "assistant.plan.err_target_no_inventory")?;
-
-        let (transport_id, transport_name) = Self::transport(ctx, args.text("transport"))?;
-
-        // Redacted, control characters stripped, length checked after redaction. The default name
-        // is built from the two node names and goes through the same path.
-        let name = match args.text("name") {
-            Some(raw) => clean_text(raw, NAME_MAX)?,
-            None => clean_text(&format!("{source} -> {target}"), NAME_MAX)?,
-        };
-        if name.trim().is_empty() {
-            return Err(ToolError::Invalid("empty_text"));
-        }
-
-        let evidence = evidence(ctx, source, target)?;
-        let mut options = DraftOptions::new(&name, &source_id, &target_id, &transport_id);
-        if let Some(location) = args.text("backup_location").and_then(parse_location) {
-            options.backup_location = location;
-        }
-        if let Some(method) = args.text("cutover_method").and_then(parse_method) {
-            options.cutover_method = method;
-        }
-        options.accepted.clone_from(&evidence.accepted);
-
-        let mut draft = draft_plan(
-            &source_inventory,
-            Some(&target_inventory),
-            &evidence.findings,
-            &options,
-        )
-        .map_err(|_| explained(ctx, "plan_rejected", "assistant.plan.err_rejected"))?;
-        // The gate can only be passed with a comparison of the newest inventories behind it.
-        draft.gates = evidence.gates(draft.gates);
-
-        let id = ctx
-            .plan_sink
-            .create_draft(ctx.org, &draft.plan)
-            .map_err(|e| match e {
-                PlanSinkError::NameTaken => {
-                    explained(ctx, "plan_name_taken", "assistant.plan.err_name_taken")
-                }
-                PlanSinkError::TooManyDrafts => {
-                    explained(ctx, "too_many_draft_plans", "assistant.plan.err_too_many")
-                }
-                PlanSinkError::NodeMissing => explained(
-                    ctx,
-                    "source_node_not_found",
-                    "assistant.plan.err_source_missing",
-                ),
-                PlanSinkError::Unavailable => ToolError::Unavailable("plans".to_owned()),
-            })?;
+        let Drafted {
+            id,
+            name,
+            transport_name,
+            evidence,
+            draft,
+        } = draft_migration_plan(&draft_ctx, &request)
+            .map_err(|e| e.into_tool_error(ctx.catalog, ctx.locale))?;
 
         let saved = ctx
             .catalog
