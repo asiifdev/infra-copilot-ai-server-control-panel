@@ -1425,3 +1425,55 @@ fn another_organization_sees_neither_plans_nor_transports() -> TestResult {
     assert_eq!(r.code, 0, "{}", r.stderr);
     Ok(())
 }
+
+/// `--options` is for plain settings only. A credential name there would end up on the command line
+/// (visible in process lists) and in the stored configuration in plaintext, so it is refused
+/// for every backend and nothing is stored.
+#[test]
+fn credential_names_are_refused_as_plain_options_and_never_echoed() -> TestResult {
+    let (_dir, ctx) = world("transport-options")?;
+    let secret = access_secret();
+    for (remote_kind, option) in [
+        ("s3", "secret_access_key"),
+        ("s3", "access_key_id"),
+        ("s3", "session_token"),
+        ("b2", "key"),
+        ("drive", "token"),
+        ("drive", "client_secret"),
+        ("sftp", "pass"),
+        ("sftp", "key_pem"),
+        ("webdav", "bearer_token"),
+    ] {
+        let options = format!("{option}={secret}");
+        let r = ctx.run(
+            &[
+                "transport",
+                "add",
+                "--name",
+                "leaky",
+                "--kind",
+                "rclone",
+                "--remote-kind",
+                remote_kind,
+                "--remote",
+                "offsite",
+                "--options",
+                &options,
+            ],
+            "",
+        );
+        assert_eq!(r.code, 2, "{remote_kind} {option}: {}", r.stderr);
+        assert_clean(&r.all(), &[secret.as_str()], "refusal output");
+    }
+    let conn = db::open(Path::new(&ctx.db))?;
+    let org = db::list_orgs(&conn, 5)?.remove(0).id;
+    assert!(
+        db::list_transports(&conn, &org)?.is_empty(),
+        "nothing may be stored"
+    );
+    assert!(
+        !contains(&raw_db_bytes(&ctx.db), &secret),
+        "the value must not be in the database"
+    );
+    Ok(())
+}

@@ -190,14 +190,11 @@ fn credentials_are_refused_for_ssh_kinds_and_clashes_are_refused() -> TestResult
             Some(PlanError::CredentialsNotAccepted(spec.kind()))
         );
     }
-    // The same option as plain setting and as credential: refuse, do not let one shadow the other.
+    // A credential name can no longer be a plain option at all, so it can never be stored in a
+    // spec or shadow the sealed one.
     let mut options = BTreeMap::new();
     options.insert("secret_access_key".to_owned(), "plain".to_owned());
-    let spec = TransportSpec::Rclone(RcloneSpec::new(RemoteKind::S3, "r", "", options)?);
-    assert_eq!(
-        plan(&spec, Some(&c), &Operation::Verify).err(),
-        Some(PlanError::DuplicateOption)
-    );
+    assert!(RcloneSpec::new(RemoteKind::S3, "r", "", options).is_err());
     // Duplicate credential names and the reserved `type` option are refused at construction.
     assert!(
         Credentials::new(vec![
@@ -387,4 +384,46 @@ fn stored_config_is_revalidated_when_read_back() {
         TransportSpec::from_config_json("managed", "{}"),
         Ok(TransportSpec::Managed)
     );
+}
+
+/// Credentials and plain settings are two disjoint sets per backend: a credential name is refused
+/// as a stored plain option (it would sit in plaintext and could reach a command line), and a
+/// plain name is refused as a sealed credential.
+#[test]
+fn credential_options_and_plain_options_never_mix() -> TestResult {
+    for kind in RemoteKind::ALL {
+        assert!(
+            !kind.credential_options().is_empty(),
+            "{kind:?} has credentials"
+        );
+        for name in kind.credential_options() {
+            assert!(
+                !kind.plain_options().contains(name),
+                "{kind:?}: {name} is in both sets"
+            );
+            let mut options = BTreeMap::new();
+            options.insert((*name).to_owned(), "value-of-some-length".to_owned());
+            let refused = RcloneSpec::new(kind, "r", "", options).err();
+            assert!(
+                refused.is_some(),
+                "{kind:?}: credential option {name} was accepted as a plain option"
+            );
+            assert!(
+                !format!("{refused:?}").contains("value-of-some-length"),
+                "the value must never be echoed"
+            );
+        }
+        for name in kind.plain_options() {
+            let mut options = BTreeMap::new();
+            options.insert((*name).to_owned(), "plain-value".to_owned());
+            assert!(
+                RcloneSpec::new(kind, "r", "", options).is_ok(),
+                "{kind:?}: plain option {name} was refused"
+            );
+        }
+    }
+    // The other direction: a sealed credential must be a credential name of some backend.
+    assert!(Credentials::new(vec![("region".to_owned(), Secret::new("x"))]).is_err());
+    assert!(Credentials::new(vec![("secret_access_key".to_owned(), Secret::new("x"))]).is_ok());
+    Ok(())
 }

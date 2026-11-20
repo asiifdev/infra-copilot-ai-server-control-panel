@@ -89,12 +89,14 @@ impl RemoteKind {
         Self::Webdav,
     ];
 
-    /// The rclone options this backend may carry, plain or secret. A closed allow-list of
-    /// settings that only describe a service or hold a credential value. Options that run a
-    /// program (`ssh`, `*_command`), read a local file (`key_file`, `known_hosts_file`,
-    /// `pubkey_file`) or pull ambient credentials (`env_auth`) are deliberately absent.
+    /// The plain (non-secret) rclone options this backend may carry in a stored spec. A closed
+    /// allow-list of settings that only describe a service. Options that run a program (`ssh`,
+    /// `*_command`), read a local file (`key_file`, `known_hosts_file`, `pubkey_file`) or pull
+    /// ambient credentials (`env_auth`) are deliberately absent, and so is everything in
+    /// [`RemoteKind::credential_options`]: a credential in a spec would be stored in plaintext and
+    /// could reach a command line.
     #[must_use]
-    pub const fn allowed_options(self) -> &'static [&'static str] {
+    pub const fn plain_options(self) -> &'static [&'static str] {
         match self {
             Self::S3 => &[
                 "provider",
@@ -103,30 +105,26 @@ impl RemoteKind {
                 "location_constraint",
                 "acl",
                 "storage_class",
-                "access_key_id",
-                "secret_access_key",
-                "session_token",
             ],
-            Self::B2 => &["account", "key", "endpoint"],
-            Self::Drive => &[
-                "client_id",
-                "client_secret",
-                "token",
-                "scope",
-                "root_folder_id",
-                "team_drive",
-            ],
-            Self::Sftp => &["host", "user", "port", "pass", "key_pem", "key_file_pass"],
-            Self::Dropbox => &["client_id", "client_secret", "token"],
-            Self::Onedrive => &[
-                "client_id",
-                "client_secret",
-                "token",
-                "drive_id",
-                "drive_type",
-                "region",
-            ],
-            Self::Webdav => &["url", "vendor", "user", "pass", "bearer_token"],
+            Self::B2 => &["endpoint"],
+            Self::Drive => &["client_id", "scope", "root_folder_id", "team_drive"],
+            Self::Sftp => &["host", "user", "port"],
+            Self::Dropbox => &["client_id"],
+            Self::Onedrive => &["client_id", "drive_id", "drive_type", "region"],
+            Self::Webdav => &["url", "vendor", "user"],
+        }
+    }
+
+    /// The rclone options that hold a credential. They are accepted only as [`crate::Credentials`]
+    /// (sealed in the vault, passed in the environment), never as plain spec options.
+    #[must_use]
+    pub const fn credential_options(self) -> &'static [&'static str] {
+        match self {
+            Self::S3 => &["access_key_id", "secret_access_key", "session_token"],
+            Self::B2 => &["account", "key"],
+            Self::Drive | Self::Dropbox | Self::Onedrive => &["client_secret", "token"],
+            Self::Sftp => &["pass", "key_pem", "key_file_pass"],
+            Self::Webdav => &["pass", "bearer_token"],
         }
     }
 
@@ -232,7 +230,7 @@ impl RcloneSpec {
         }
         for (name, value) in &options {
             validate::option_name(name)?;
-            validate::option_allowed(kind, name)?;
+            validate::plain_option_allowed(kind, name)?;
             validate::option_value(value)?;
         }
         Ok(Self {

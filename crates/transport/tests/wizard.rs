@@ -369,19 +369,19 @@ fn text_from_the_tool_cannot_steer_the_classification_beyond_fixed_phrases() {
 
 #[test]
 fn invalid_credentials_fail_before_anything_runs() -> TestResult {
-    // A plain option that clashes with a credential is caught while creating the remote.
-    let mut options = BTreeMap::new();
-    options.insert("secret_access_key".to_owned(), "plain".to_owned());
-    let spec = RcloneSpec::new(RemoteKind::S3, "offsite", "", options)?;
-    let w = Wizard::new(
-        spec,
-        creds(&[("secret_access_key", KEY)])?,
-        WizardParams::default(),
-    );
+    // A credential name that does not belong to this backend (`token` is an OAuth credential, not
+    // an S3 one) is caught while creating the remote, before any program is started.
+    let spec = RcloneSpec::new(RemoteKind::S3, "offsite", "", BTreeMap::new())?;
+    let w = Wizard::new(spec, creds(&[("token", KEY)])?, WizardParams::default());
     let runner = FakeRunner::new();
     let advice = first_failure(&runner, w).ok_or("no failure")?;
     assert_eq!(advice.problem, ProblemKind::InvalidConfig);
     assert!(runner.calls().is_empty());
+
+    // A credential can no longer be smuggled in as a plain option either.
+    let mut options = BTreeMap::new();
+    options.insert("secret_access_key".to_owned(), "plain".to_owned());
+    assert!(RcloneSpec::new(RemoteKind::S3, "offsite", "", options).is_err());
     Ok(())
 }
 

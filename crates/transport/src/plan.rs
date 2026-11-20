@@ -132,7 +132,7 @@ impl Credentials {
             validate::option_name(&name)?;
             if !RemoteKind::ALL
                 .iter()
-                .any(|k| k.allowed_options().contains(&name.as_str()))
+                .any(|k| k.credential_options().contains(&name.as_str()))
             {
                 return Err(ValidationError {
                     field: validate::Field::OptionName,
@@ -375,7 +375,7 @@ fn rclone_env(
     }
     if let Some(credentials) = credentials {
         for (name, value) in credentials.pairs() {
-            validate::option_allowed(spec.kind(), name)?;
+            validate::credential_option_allowed(spec.kind(), name)?;
             env.push((
                 format!("{prefix}{}", name.to_ascii_uppercase()),
                 EnvValue::Secret(Secret::new(value.expose_secret())),

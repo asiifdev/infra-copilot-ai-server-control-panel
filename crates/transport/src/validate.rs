@@ -80,6 +80,8 @@ pub enum Problem {
     OutOfRange,
     /// Reserved for the product (for example the rclone option `type`).
     Reserved,
+    /// A credential given where only plain options are allowed; supply it as a sealed credential.
+    Credential,
 }
 
 impl Problem {
@@ -96,6 +98,7 @@ impl Problem {
             Self::BadShape => "bad_shape",
             Self::OutOfRange => "out_of_range",
             Self::Reserved => "reserved",
+            Self::Credential => "credential",
         }
     }
 }
@@ -322,12 +325,29 @@ pub fn option_name(s: &str) -> Check {
     Ok(())
 }
 
-/// The option must be on the backend's allow-list ([`RemoteKind::allowed_options`]).
+/// A plain (non-secret) spec option must be on the backend's allow-list
+/// ([`RemoteKind::plain_options`]).
 ///
 /// # Errors
-/// [`Problem::Reserved`] for any name that is not listed (it may run a program or read a file).
-pub fn option_allowed(kind: RemoteKind, name: &str) -> Check {
-    if kind.allowed_options().contains(&name) {
+/// [`Problem::Credential`] for a name that holds a credential (it belongs in the sealed
+/// credentials, not in the stored spec or on a command line); [`Problem::Reserved`] for any other
+/// name that is not listed (it may run a program or read a file).
+pub fn plain_option_allowed(kind: RemoteKind, name: &str) -> Check {
+    if kind.plain_options().contains(&name) {
+        Ok(())
+    } else if kind.credential_options().contains(&name) {
+        Err(err(Field::OptionName, Problem::Credential))
+    } else {
+        Err(err(Field::OptionName, Problem::Reserved))
+    }
+}
+
+/// A credential name must be one of the backend's [`RemoteKind::credential_options`].
+///
+/// # Errors
+/// [`Problem::Reserved`] for any other name.
+pub fn credential_option_allowed(kind: RemoteKind, name: &str) -> Check {
+    if kind.credential_options().contains(&name) {
         Ok(())
     } else {
         Err(err(Field::OptionName, Problem::Reserved))
