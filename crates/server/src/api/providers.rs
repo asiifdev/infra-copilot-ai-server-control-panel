@@ -20,12 +20,10 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use serde_json::{Value, json};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Longest key accepted (as in the command line).
 const MAX_KEY_BYTES: usize = 1024;
-/// The longest a connection test waits for the provider.
-const TEST_TIMEOUT: Duration = Duration::from_secs(30);
 /// Tokens a connection test may ask the model for.
 const TEST_MAX_TOKENS: u32 = 16;
 
@@ -209,7 +207,7 @@ fn run_test(conn: &db::Connection, app: &App, name: &str) -> Result<Tested, ApiE
         .map_err(|_| INTERNAL)?;
     let started = Instant::now();
     let outcome = runtime.block_on(tokio::time::timeout(
-        TEST_TIMEOUT,
+        app.provider_test_timeout,
         provider.chat(&request, &mut NoSink),
     ));
     Ok(match outcome {

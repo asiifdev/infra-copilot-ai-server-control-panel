@@ -573,6 +573,30 @@ fn server_text_in_findings_cannot_leave_the_fence() -> TestResult {
 }
 
 #[test]
+fn drafted_and_shown_plans_name_the_nodes_not_their_ids() -> TestResult {
+    let w = world()?;
+    let drafted = draft(&w, "p")?;
+    let shown = ask(&w, "show_plan", r#"{"name":"p"}"#)?;
+    let ids: Vec<String> = db::list_nodes(&w.conn, &w.org)?
+        .iter()
+        .map(|n| n.id.as_str().to_owned())
+        .collect();
+    for out in [&drafted, &shown] {
+        assert!(
+            out.content
+                .contains("Data moves from node old to node new."),
+            "{}",
+            out.content
+        );
+        assert!(out.content.contains("Transport: main;"), "{}", out.content);
+        for id in &ids {
+            assert!(!out.content.contains(id.as_str()), "{}", out.content);
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn list_transports_never_shows_config_or_secret_references() -> TestResult {
     let w = world()?;
     let out = ask(&w, "list_transports", "{}")?;

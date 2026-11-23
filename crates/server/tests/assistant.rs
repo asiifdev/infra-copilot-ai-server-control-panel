@@ -591,6 +591,60 @@ fn a_secret_in_the_models_text_never_reaches_the_stream() -> TestResult {
 }
 
 #[test]
+fn a_secret_split_across_stream_pieces_is_hidden_and_the_deltas_match_the_stored_answer()
+-> TestResult {
+    let token = format!("{}{}", "sk-", "Ab3Cd5Ef7Gh9Ij2Kl4Mn6Op8Qr0St");
+    let (t1, t2) = token.split_at(11);
+    let pieces = [
+        "Here is the key:\n-----BEGIN RSA PRIV",
+        "ATE KEY-----\nQUJDREVGR0hJ\nS0xN",
+        "TlBR\n-----END RSA PRIVATE KEY-----\nand a token ",
+        t1,
+        t2,
+        " plus ",
+        "more words\n",
+    ];
+    let s = setup(vec![text_reply(&pieces)], false, false)?;
+    let id = new_conversation(&s)?;
+    let body = turn(&s, &id, "hello").text();
+    let events = sse_events(&body);
+    assert_eq!(kinds(&events).last(), Some(&"done"), "{body}");
+    let streamed: String = events
+        .iter()
+        .filter(|(e, _)| e == "delta")
+        .filter_map(|(_, d)| d["text"].as_str())
+        .collect();
+    for needle in [
+        "QUJDREVG",
+        "S0xN",
+        "TlBR",
+        "BEGIN RSA",
+        &token[3..],
+        &t2[..8],
+    ] {
+        assert!(
+            !body.contains(needle),
+            "{needle} reached the browser: {body}"
+        );
+    }
+    let messages = s
+        .session
+        .get(&format!("/api/conversations/{id}/messages"))
+        .json();
+    let stored = messages
+        .as_array()
+        .ok_or("m")?
+        .iter()
+        .rev()
+        .find(|m| m["role"] == "assistant")
+        .and_then(|m| m["content"].as_str())
+        .ok_or("no assistant message")?
+        .to_owned();
+    assert_eq!(streamed, stored);
+    Ok(())
+}
+
+#[test]
 fn a_provider_failure_is_an_error_event_and_no_invented_reply() -> TestResult {
     let s = setup(vec![Reply::Status(401, "{}", vec![])], false, false)?;
     let id = new_conversation(&s)?;
@@ -826,5 +880,39 @@ fn another_persons_conversation_cannot_be_continued() -> TestResult {
     }
     assert!(s.fake.requests().is_empty());
     let _ = &s.server;
+    Ok(())
+}
+
+#[test]
+fn a_provider_that_never_answers_ends_the_test_with_advice_before_the_request_limit() -> TestResult
+{
+    let world = World::new()?;
+    // The fake accepts the request and then stays silent for far longer than the test lasts.
+    let fake = Fake::start(vec![Reply::After(120_000, Box::new(Reply::Garbage))])?;
+    add_provider(&world, &fake, None, true)?;
+    let server = TestServer::start_with(
+        &world,
+        Opts {
+            provider_test_timeout: Some(Duration::from_secs(1)),
+            ..Opts::default()
+        },
+    )?;
+    let session = server.sign_in()?;
+    let started = Instant::now();
+    let r = session.req(
+        Req::post("/api/providers/main/test")
+            .same_origin(session.addr)
+            .header("Accept-Language", "id"),
+    );
+    assert_eq!(r.status, 200, "{}", r.text());
+    let body = r.json();
+    assert_eq!(body["ok"], false, "{body}");
+    assert_eq!(body["code"], "provider_timeout");
+    assert_eq!(body["message"], "Penyedia tidak menjawab tepat waktu.");
+    assert!(started.elapsed() < Duration::from_secs(10));
+    // A timeout configured at or above the request limit is clamped below it.
+    assert!(
+        server::DEFAULT_PROVIDER_TEST_TIMEOUT + Duration::from_secs(1) < Duration::from_secs(30)
+    );
     Ok(())
 }

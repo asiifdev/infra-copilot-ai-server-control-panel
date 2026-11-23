@@ -140,6 +140,7 @@ pub struct Opts {
     pub vault: Option<Arc<Vault>>,
     pub tokens: usize,
     pub catalog: Option<i18n::Catalog>,
+    pub provider_test_timeout: Option<Duration>,
 }
 
 impl Default for Opts {
@@ -148,6 +149,7 @@ impl Default for Opts {
             vault: None,
             tokens: 1,
             catalog: None,
+            provider_test_timeout: None,
         }
     }
 }
@@ -179,6 +181,9 @@ pub fn config(
             Some(catalog) => catalog.clone(),
             None => i18n::Catalog::builtin()?,
         },
+        provider_test_timeout: opts
+            .provider_test_timeout
+            .unwrap_or(server::DEFAULT_PROVIDER_TEST_TIMEOUT),
     })
 }
 

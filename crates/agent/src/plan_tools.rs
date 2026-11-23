@@ -199,7 +199,9 @@ impl AiTool for DraftMigrationPlan {
             evidence.word(),
             yes(draft.gates.cutover_allowed()),
         );
-        out.push_str(&render_draft(&draft, ctx.catalog, ctx.locale));
+        let nodes = plan::PlanNames::of_plan(&draft.plan, source, target)
+            .with(&draft.plan.spec().transport.transport_id, &transport_name);
+        out.push_str(&render_draft(&draft, &nodes, ctx.catalog, ctx.locale));
         Ok(ToolOutput::new(out))
     }
 }
@@ -237,7 +239,13 @@ impl AiTool for ShowPlan {
             stored.summary.created_at,
             evidence.word(),
         );
-        out.push_str(&render_plan(&stored.plan, &gates, ctx.catalog, ctx.locale));
+        out.push_str(&render_plan(
+            &stored.plan,
+            &gates,
+            &stored.plan_names(),
+            ctx.catalog,
+            ctx.locale,
+        ));
         Ok(ToolOutput::new(out))
     }
 }

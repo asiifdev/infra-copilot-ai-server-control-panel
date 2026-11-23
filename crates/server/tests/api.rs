@@ -545,6 +545,22 @@ fn a_plan_is_shown_with_its_gates_and_its_text() -> TestResult {
             .as_str()
             .is_some_and(|t| t.contains("acme plan"))
     );
+    // The route names the nodes, not their row ids.
+    let rendered = body["rendered"].as_str().unwrap_or_default();
+    assert!(
+        rendered.contains("Data moves from node old to node new."),
+        "{rendered}"
+    );
+    assert!(!rendered.contains(body["spec"]["source"]["node_id"].as_str().unwrap_or("-")));
+    // The transport is named too.
+    assert!(rendered.contains("Transport: main;"), "{rendered}");
+    assert!(
+        !rendered.contains(
+            body["spec"]["transport"]["transport_id"]
+                .as_str()
+                .unwrap_or("-")
+        )
+    );
     let gates = &body["gates"];
     assert_eq!(gates["cutover_allowed"], false);
     assert_eq!(gates["shutdown_allowed"], false);

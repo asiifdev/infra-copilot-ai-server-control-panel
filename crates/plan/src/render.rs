@@ -6,6 +6,7 @@
 
 use core_domain::tier::Tier;
 use i18n::{Catalog, Locale, MessageKey};
+use std::collections::BTreeMap;
 
 use crate::capacity::{CapacityAdvice, CapacityIssueKind, CapacityVerdict};
 use crate::draft::{Draft, DraftWarning};
@@ -36,6 +37,46 @@ fn clean(value: &str) -> String {
         out.push('\u{2026}');
     }
     out
+}
+
+/// Names of nodes and transports by id, so the plan can say "web-old" instead of a row id. Ids
+/// are unique across both kinds. Ids with no entry are shown as they are.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PlanNames(BTreeMap<String, String>);
+
+impl PlanNames {
+    /// An empty lookup: every node is shown by its id.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Adds the name of the node with `id`.
+    #[must_use]
+    pub fn with(mut self, id: &str, name: &str) -> Self {
+        self.0.insert(id.to_owned(), name.to_owned());
+        self
+    }
+
+    /// The names of the source and the target of `plan`, given by name by the caller. Add the
+    /// transport with [`PlanNames::with`] and the id in `plan.spec().transport.transport_id`.
+    #[must_use]
+    pub fn of_plan(plan: &Plan, source_name: &str, target_name: &str) -> Self {
+        let spec = plan.spec();
+        Self::new()
+            .with(&spec.source.node_id, source_name)
+            .with(&spec.target.node_id, target_name)
+    }
+
+    /// The text to show for a node or transport: its name, or the id when the name is unknown or
+    /// empty.
+    fn label<'a>(&'a self, id: &'a str) -> &'a str {
+        self.0
+            .get(id)
+            .map(String::as_str)
+            .filter(|name| !name.trim().is_empty())
+            .unwrap_or(id)
+    }
 }
 
 struct Text<'a> {
@@ -154,10 +195,18 @@ fn step_lines(x: &Text<'_>, step: &Step) -> Vec<String> {
 
 /// Renders the written plan.
 ///
+/// `nodes` gives the names of the source and the target (the plan itself only holds ids).
+///
 /// The exclusion list and the conditions before the old server may be shut down are always
 /// printed, even when the list is empty or no shutdown step is planned.
 #[must_use]
-pub fn render_plan(plan: &Plan, gates: &GateReport, catalog: &Catalog, locale: Locale) -> String {
+pub fn render_plan(
+    plan: &Plan,
+    gates: &GateReport,
+    nodes: &PlanNames,
+    catalog: &Catalog,
+    locale: Locale,
+) -> String {
     let x = Text { catalog, locale };
     let spec = plan.spec();
     let mut out: Vec<String> = Vec::new();
@@ -179,8 +228,8 @@ pub fn render_plan(plan: &Plan, gates: &GateReport, catalog: &Catalog, locale: L
     out.push(x.t(
         MessageKey::new("plan.overview.route"),
         &[
-            ("source", &clean(&spec.source.node_id)),
-            ("target", &clean(&spec.target.node_id)),
+            ("source", &clean(nodes.label(&spec.source.node_id))),
+            ("target", &clean(nodes.label(&spec.target.node_id))),
         ],
     ));
     let location_key = match spec.backup.location {
@@ -199,7 +248,10 @@ pub fn render_plan(plan: &Plan, gates: &GateReport, catalog: &Catalog, locale: L
     out.push(x.t(
         MessageKey::new("plan.overview.transport"),
         &[
-            ("transport", &clean(&spec.transport.transport_id)),
+            (
+                "transport",
+                &clean(nodes.label(&spec.transport.transport_id)),
+            ),
             ("encryption", &x.t(encryption_key, &[])),
         ],
     ));
@@ -425,8 +477,8 @@ fn warning_key(warning: DraftWarning) -> MessageKey {
 
 /// Renders a draft: the written plan followed by the warnings that go with it.
 #[must_use]
-pub fn render_draft(draft: &Draft, catalog: &Catalog, locale: Locale) -> String {
-    let mut text = render_plan(&draft.plan, &draft.gates, catalog, locale);
+pub fn render_draft(draft: &Draft, nodes: &PlanNames, catalog: &Catalog, locale: Locale) -> String {
+    let mut text = render_plan(&draft.plan, &draft.gates, nodes, catalog, locale);
     if !draft.warnings.is_empty() {
         let x = Text { catalog, locale };
         text.push_str("\n\n");

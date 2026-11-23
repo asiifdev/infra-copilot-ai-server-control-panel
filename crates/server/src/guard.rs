@@ -30,7 +30,7 @@ use std::time::Duration;
 /// Largest request body.
 pub(crate) const MAX_BODY_BYTES: usize = 64 * 1024;
 /// The longest a request may take to produce its response (a stream goes on after that).
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+pub(crate) const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// The Content-Security-Policy of every response (decision 0029).
 pub(crate) const CSP: &str = "default-src 'none'; script-src 'self'; style-src 'self'; \

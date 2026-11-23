@@ -223,7 +223,13 @@ pub(crate) async fn plan_detail(
         let stored = plans.plan(org, &name).map_err(store_error)?;
         let (gates, evidence) =
             gates_for_stored(&plans, &app.catalog, lang.0, org, &stored).map_err(store_error)?;
-        let rendered = plan::render_plan(&stored.plan, &gates, &app.catalog, lang.0);
+        let rendered = plan::render_plan(
+            &stored.plan,
+            &gates,
+            &stored.plan_names(),
+            &app.catalog,
+            lang.0,
+        );
         let summary = &stored.summary;
         let mut gate_map = Map::new();
         gate_map.insert("cutover_allowed".to_owned(), json!(gates.cutover_allowed()));

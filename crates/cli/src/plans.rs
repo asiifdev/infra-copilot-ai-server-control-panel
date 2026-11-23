@@ -175,7 +175,16 @@ impl Ui<'_> {
             &[("source", source), ("target", target)],
         ));
         text.push_str("\n\n");
-        text.push_str(&render_draft(&drafted.draft, &self.catalog, self.locale));
+        let nodes = plan::PlanNames::of_plan(&drafted.draft.plan, source, target).with(
+            &drafted.draft.plan.spec().transport.transport_id,
+            &drafted.transport_name,
+        );
+        text.push_str(&render_draft(
+            &drafted.draft,
+            &nodes,
+            &self.catalog,
+            self.locale,
+        ));
         self.write_out(&text)
     }
 
@@ -294,6 +303,7 @@ impl Ui<'_> {
         text.push_str(&render_plan(
             &stored.plan,
             &gates,
+            &stored.plan_names(),
             &self.catalog,
             self.locale,
         ));

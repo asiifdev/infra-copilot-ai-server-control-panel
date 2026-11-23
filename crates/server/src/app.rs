@@ -8,7 +8,16 @@ use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::Duration;
 use vault::Vault;
+
+/// How long a provider connection test waits for the provider by default. It must stay clearly
+/// below the guard's request limit, or the guard would answer with a generic timeout first and
+/// the person would never see the advice that goes with the failure.
+pub const DEFAULT_PROVIDER_TEST_TIMEOUT: Duration = Duration::from_secs(20);
+
+const _: () =
+    assert!(DEFAULT_PROVIDER_TEST_TIMEOUT.as_secs() + 5 <= crate::guard::REQUEST_TIMEOUT.as_secs());
 
 /// Default port of `infra serve`.
 pub const DEFAULT_PORT: u16 = 7878;
@@ -29,6 +38,9 @@ pub struct Config {
     pub clock: Clock,
     /// The text catalog. The embedded one unless a test supplies its own.
     pub catalog: Catalog,
+    /// How long a provider connection test waits ([`DEFAULT_PROVIDER_TEST_TIMEOUT`]). Values too
+    /// close to the request limit are lowered so the test always ends first.
+    pub provider_test_timeout: Duration,
 }
 
 impl Config {
@@ -61,6 +73,7 @@ impl Config {
             vault,
             clock: Clock::system(),
             catalog,
+            provider_test_timeout: DEFAULT_PROVIDER_TEST_TIMEOUT,
         })
     }
 }
@@ -76,6 +89,7 @@ pub(crate) struct App {
     pub(crate) vault: Option<Arc<Vault>>,
     pub(crate) catalog: Catalog,
     pub(crate) clock: Clock,
+    pub(crate) provider_test_timeout: Duration,
     pub(crate) auth: Mutex<Auth>,
     /// Conversations with a turn running in this process.
     pub(crate) turns: Mutex<HashSet<String>>,
@@ -92,6 +106,9 @@ impl App {
             vault: config.vault,
             catalog: config.catalog,
             clock: config.clock,
+            provider_test_timeout: config
+                .provider_test_timeout
+                .min(crate::guard::REQUEST_TIMEOUT.saturating_sub(Duration::from_secs(5))),
             auth: Mutex::new(Auth::default()),
             turns: Mutex::new(HashSet::new()),
         }

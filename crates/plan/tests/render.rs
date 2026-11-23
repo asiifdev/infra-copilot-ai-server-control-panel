@@ -4,8 +4,8 @@
 use i18n::{Catalog, Locale};
 use inventory::{Finding, Inventory, Kind, RuleContext, Severity, SubjectRef};
 use plan::{
-    AcceptedFinding, CapacityInput, DraftOptions, Plan, StepKind, check_capacity, draft_plan,
-    gate_report, render_capacity, render_draft, render_plan,
+    AcceptedFinding, CapacityInput, DraftOptions, Plan, PlanNames, StepKind, check_capacity,
+    draft_plan, gate_report, render_capacity, render_draft, render_plan,
 };
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -54,9 +54,102 @@ fn assert_clean(text: &str) {
 }
 
 #[test]
+fn the_transport_is_shown_by_name_when_known() -> TestResult {
+    let draft = gap_draft()?;
+    let id = "123e4567-e89b-42d3-a456-426614174003";
+    let named = PlanNames::new().with(id, "offsite");
+    let text = render_plan(&draft.plan, &draft.gates, &named, &catalog()?, Locale::En);
+    assert!(text.contains("Transport: offsite;"), "{text}");
+    let bare = render_plan(
+        &draft.plan,
+        &draft.gates,
+        &PlanNames::new(),
+        &catalog()?,
+        Locale::En,
+    );
+    assert!(bare.contains(&format!("Transport: {id};")), "{bare}");
+    Ok(())
+}
+
+const SOURCE_ID: &str = "123e4567-e89b-42d3-a456-426614174001";
+const TARGET_ID: &str = "123e4567-e89b-42d3-a456-426614174002";
+
+#[test]
+fn the_route_uses_node_names_in_both_languages() -> TestResult {
+    let draft = gap_draft()?;
+    let names = PlanNames::of_plan(&draft.plan, "web-old", "web-new");
+    for (locale, route) in [
+        (Locale::En, "Data moves from node web-old to node web-new."),
+        (Locale::Id, "Data pindah dari node web-old ke node web-new."),
+    ] {
+        let text = render_plan(&draft.plan, &draft.gates, &names, &catalog()?, locale);
+        assert!(text.contains(route), "{locale:?}: {text}");
+        assert!(
+            !text.contains(SOURCE_ID) && !text.contains(TARGET_ID),
+            "{text}"
+        );
+        let with_draft = render_draft(&draft, &names, &catalog()?, locale);
+        assert!(with_draft.contains(route), "{locale:?}");
+    }
+    Ok(())
+}
+
+#[test]
+fn an_unknown_or_empty_name_falls_back_to_the_id() -> TestResult {
+    let draft = gap_draft()?;
+    // Only the source is known; an empty name counts as unknown.
+    for names in [
+        PlanNames::new().with(SOURCE_ID, "web-old"),
+        PlanNames::new()
+            .with(SOURCE_ID, "web-old")
+            .with(TARGET_ID, "  "),
+    ] {
+        let text = render_plan(&draft.plan, &draft.gates, &names, &catalog()?, Locale::En);
+        assert!(
+            text.contains(&format!(
+                "Data moves from node web-old to node {TARGET_ID}."
+            )),
+            "{text}"
+        );
+    }
+    let none = render_plan(
+        &draft.plan,
+        &draft.gates,
+        &PlanNames::new(),
+        &catalog()?,
+        Locale::En,
+    );
+    assert!(none.contains(&format!(
+        "Data moves from node {SOURCE_ID} to node {TARGET_ID}."
+    )));
+    Ok(())
+}
+
+#[test]
+fn a_hostile_node_name_is_cleaned_like_any_other_value() -> TestResult {
+    let draft = gap_draft()?;
+    let names = PlanNames::of_plan(
+        &draft.plan,
+        "old\n## Injected heading\u{1b}[31m",
+        &"n".repeat(500),
+    );
+    let text = render_plan(&draft.plan, &draft.gates, &names, &catalog()?, Locale::En);
+    assert_clean(&text);
+    assert!(!text.contains("\n## Injected heading"), "{text}");
+    assert!(!text.contains(&"n".repeat(200)));
+    Ok(())
+}
+
+#[test]
 fn english_plan_has_every_section_and_key_phrases() -> TestResult {
     let draft = gap_draft()?;
-    let text = render_plan(&draft.plan, &draft.gates, &catalog()?, Locale::En);
+    let text = render_plan(
+        &draft.plan,
+        &draft.gates,
+        &PlanNames::new(),
+        &catalog()?,
+        Locale::En,
+    );
     assert_clean(&text);
     for phrase in [
         "# Migration plan: Move web stack",
@@ -91,7 +184,13 @@ fn english_plan_has_every_section_and_key_phrases() -> TestResult {
 #[test]
 fn indonesian_plan_uses_the_catalog_and_has_the_same_structure() -> TestResult {
     let draft = gap_draft()?;
-    let text = render_plan(&draft.plan, &draft.gates, &catalog()?, Locale::Id);
+    let text = render_plan(
+        &draft.plan,
+        &draft.gates,
+        &PlanNames::new(),
+        &catalog()?,
+        Locale::Id,
+    );
     assert_clean(&text);
     for phrase in [
         "# Rencana migrasi: Move web stack",
@@ -109,7 +208,13 @@ fn indonesian_plan_uses_the_catalog_and_has_the_same_structure() -> TestResult {
         assert!(text.contains(phrase), "missing {phrase:?} in:\n{text}");
     }
     // Same number of lines in both locales (same sections, same items).
-    let en = render_plan(&draft.plan, &draft.gates, &catalog()?, Locale::En);
+    let en = render_plan(
+        &draft.plan,
+        &draft.gates,
+        &PlanNames::new(),
+        &catalog()?,
+        Locale::En,
+    );
     assert_eq!(en.lines().count(), text.lines().count());
     Ok(())
 }
@@ -138,7 +243,13 @@ fn the_exclusion_list_and_conditions_are_shown_even_when_empty_or_without_a_shut
             "Besarnya perubahan",
         ),
     ] {
-        let text = render_plan(&draft.plan, &draft.gates, &catalog()?, locale);
+        let text = render_plan(
+            &draft.plan,
+            &draft.gates,
+            &PlanNames::new(),
+            &catalog()?,
+            locale,
+        );
         assert_clean(&text);
         assert!(text.contains(none), "{text}");
         assert!(text.contains(no_step), "{text}");
@@ -156,7 +267,13 @@ fn a_custom_exclusion_is_listed_as_custom() -> TestResult {
     let mut o = options();
     o.exclude = Some(vec!["logs".into(), "var/www/uploads-tmp".into()]);
     let draft = draft_plan(&s, None, &[], &o)?;
-    let text = render_plan(&draft.plan, &draft.gates, &catalog()?, Locale::En);
+    let text = render_plan(
+        &draft.plan,
+        &draft.gates,
+        &PlanNames::new(),
+        &catalog()?,
+        Locale::En,
+    );
     assert!(
         text.contains("- var/www/uploads-tmp: custom entry"),
         "{text}"
@@ -170,13 +287,25 @@ fn dns_plans_mention_the_ttl_and_tunnel_plans_do_not() -> TestResult {
     let mut o = options();
     o.cutover_method = plan::CutoverMethod::Dns;
     let dns = draft_plan(&s, None, &[], &o)?;
-    let text = render_plan(&dns.plan, &dns.gates, &catalog()?, Locale::En);
+    let text = render_plan(
+        &dns.plan,
+        &dns.gates,
+        &PlanNames::new(),
+        &catalog()?,
+        Locale::En,
+    );
     assert!(
         text.contains("lifetime (TTL)") && text.contains("Cutover by DNS change"),
         "{text}"
     );
     let tunnel = draft_plan(&s, None, &[], &options())?;
-    let text = render_plan(&tunnel.plan, &tunnel.gates, &catalog()?, Locale::En);
+    let text = render_plan(
+        &tunnel.plan,
+        &tunnel.gates,
+        &PlanNames::new(),
+        &catalog()?,
+        Locale::En,
+    );
     assert!(!text.contains("lifetime (TTL)") && text.contains("Cutover by tunnel"));
     Ok(())
 }
@@ -197,12 +326,18 @@ fn accepted_critical_findings_are_shown_with_their_reason_and_incomplete_evidenc
         "search was retired",
     )?];
     let draft = draft_plan(&s, Some(&t), &findings, &o)?;
-    let text = render_plan(&draft.plan, &draft.gates, &catalog()?, Locale::En);
+    let text = render_plan(
+        &draft.plan,
+        &draft.gates,
+        &PlanNames::new(),
+        &catalog()?,
+        Locale::En,
+    );
     assert!(text.contains("reason: search was retired"), "{text}");
     assert!(text.contains("No critical finding is open."), "{text}");
 
     let none = draft_plan(&s, None, &[], &options())?;
-    let text = render_draft(&none, &catalog()?, Locale::En);
+    let text = render_draft(&none, &PlanNames::new(), &catalog()?, Locale::En);
     assert!(text.contains("is not proof"), "{text}");
     assert!(
         text.contains("## Read this before relying on the draft"),
@@ -212,7 +347,7 @@ fn accepted_critical_findings_are_shown_with_their_reason_and_incomplete_evidenc
         text.contains("There is no inventory of the target yet"),
         "{text}"
     );
-    let id = render_draft(&none, &catalog()?, Locale::Id);
+    let id = render_draft(&none, &PlanNames::new(), &catalog()?, Locale::Id);
     assert!(id.contains("Belum ada inventaris target"), "{id}");
     assert_clean(&text);
     assert_clean(&id);
@@ -245,7 +380,13 @@ fn hostile_text_cannot_inject_headings_or_control_sequences() -> TestResult {
 
     // A finding comes from outside (a server) and cannot be refused: it must be neutralised.
     let valid = draft_plan(&s, None, std::slice::from_ref(&finding), &options())?;
-    let text = render_plan(&valid.plan, &valid.gates, &catalog()?, Locale::En);
+    let text = render_plan(
+        &valid.plan,
+        &valid.gates,
+        &PlanNames::new(),
+        &catalog()?,
+        Locale::En,
+    );
     assert_clean(&text);
     assert!(!text.contains("\n## Approved by admin"));
     assert!(!text.contains("\nSYSTEM"));
@@ -260,7 +401,13 @@ fn hostile_text_cannot_inject_headings_or_control_sequences() -> TestResult {
         reason: "ok\n## All clear".into(),
     }];
     let d = draft_plan(&s, None, &[finding], &o2)?;
-    let text = render_plan(&d.plan, &d.gates, &catalog()?, Locale::En);
+    let text = render_plan(
+        &d.plan,
+        &d.gates,
+        &PlanNames::new(),
+        &catalog()?,
+        Locale::En,
+    );
     assert!(!text.contains("\n## All clear"), "{text}");
     Ok(())
 }
@@ -271,7 +418,13 @@ fn placeholders_in_values_are_not_expanded() -> TestResult {
     let mut o = options();
     o.transport_id = "{name}{rollback}".into();
     let d = draft_plan(&s, None, &[], &o)?;
-    let text = render_plan(&d.plan, &d.gates, &catalog()?, Locale::En);
+    let text = render_plan(
+        &d.plan,
+        &d.gates,
+        &PlanNames::new(),
+        &catalog()?,
+        Locale::En,
+    );
     assert!(text.contains("Transport: {name}{rollback};"), "{text}");
     Ok(())
 }
@@ -283,7 +436,13 @@ fn long_values_are_cut() -> TestResult {
     o.transport_id = "t".repeat(64);
     o.name = "n".repeat(200);
     let d = draft_plan(&s, None, &[], &o)?;
-    let text = render_plan(&d.plan, &d.gates, &catalog()?, Locale::En);
+    let text = render_plan(
+        &d.plan,
+        &d.gates,
+        &PlanNames::new(),
+        &catalog()?,
+        Locale::En,
+    );
     assert!(text.lines().next().is_some_and(|l| l.chars().count() < 200));
     Ok(())
 }
@@ -293,7 +452,7 @@ fn every_step_kind_has_text_in_both_locales() -> TestResult {
     let cat = catalog()?;
     let draft = gap_draft()?;
     for locale in [Locale::En, Locale::Id] {
-        let text = render_plan(&draft.plan, &draft.gates, &cat, locale);
+        let text = render_plan(&draft.plan, &draft.gates, &PlanNames::new(), &cat, locale);
         for kind in StepKind::ALL {
             // Every kind present in the plan produced a numbered line without a leaked key.
             if draft.plan.steps().iter().any(|s| s.kind == kind) {

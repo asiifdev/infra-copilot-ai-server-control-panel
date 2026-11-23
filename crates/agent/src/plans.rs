@@ -66,6 +66,24 @@ pub struct StoredPlan {
     pub summary: PlanSummary,
     /// The validated plan with its steps.
     pub plan: Plan,
+    /// Name of the transport the plan uses, when it still exists in the org.
+    pub transport_name: Option<String>,
+}
+
+impl StoredPlan {
+    /// The names of the source and the target, by the ids the plan holds (for `render_plan`).
+    #[must_use]
+    pub fn plan_names(&self) -> plan::PlanNames {
+        let names = plan::PlanNames::of_plan(
+            &self.plan,
+            &self.summary.source_node,
+            &self.summary.target_node,
+        );
+        match &self.transport_name {
+            Some(name) => names.with(&self.plan.spec().transport.transport_id, name),
+            None => names,
+        }
+    }
 }
 
 /// The newest comparison between two named nodes.
@@ -301,9 +319,15 @@ impl PlanStore for DbPlanStore<'_> {
             &stored,
         )
         .map_err(|_| StoreError::Unavailable)?;
+        let transport_id = &plan.spec().transport.transport_id;
+        let transport_name = db::list_transports(self.conn, org)?
+            .into_iter()
+            .find(|t| t.id.as_str() == transport_id)
+            .map(|t| t.name);
         Ok(StoredPlan {
             summary: self.summarize(org, &row)?,
             plan,
+            transport_name,
         })
     }
 

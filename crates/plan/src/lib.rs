@@ -31,7 +31,7 @@ pub use error::PlanError;
 pub use exclude::{DEFAULT_EXCLUDES, default_excludes, describe_key, validate_pattern};
 pub use gates::{AcceptedFinding, FindingKey, GateReport, gate_report};
 pub use plan::{MAX_STEPS, Plan, ScheduleRefusal, StoredStep};
-pub use render::{render_capacity, render_draft, render_plan};
+pub use render::{PlanNames, render_capacity, render_draft, render_plan};
 pub use spec::{
     Backup, BackupLocation, BackupStrategy, ConflictPolicy, Cutover, CutoverMethod, Data,
     DatabaseEntry, DbMode, Encryption, Gates, MAX_DATABASES, MAX_EXCLUDES, MAX_JSON_BYTES, NodeRef,

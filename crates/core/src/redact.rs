@@ -42,24 +42,33 @@ pub fn redact(input: &str) -> Redaction {
     Redaction { text, count }
 }
 
-const BEGIN: &str = "-----BEGIN ";
-const DASHES: &str = "-----";
+/// Start of a PEM block (`-----BEGIN <label>-----`); the label ends at the next [`PEM_DASHES`].
+pub const PEM_BEGIN: &str = "-----BEGIN ";
+/// The dashes that close a PEM header or footer.
+pub const PEM_DASHES: &str = "-----";
+
+/// Whether `byte` ends an unquoted value: the redactor never lets a value run past one of these,
+/// so text can only be cut right after one without changing what a value is.
+#[must_use]
+pub fn is_value_delimiter(byte: u8) -> bool {
+    matches!(byte, b' ' | b'\t' | b'\n' | b'\r')
+}
 
 fn redact_private_keys(input: &str, count: &mut usize) -> String {
     let mut out = String::with_capacity(input.len());
     let mut rest = input;
-    while let Some(start) = rest.find(BEGIN) {
+    while let Some(start) = rest.find(PEM_BEGIN) {
         let after = &rest[start..];
-        let header_area = &after[BEGIN.len()..];
-        let Some(header_len) = header_area.find(DASHES) else {
+        let header_area = &after[PEM_BEGIN.len()..];
+        let Some(header_len) = header_area.find(PEM_DASHES) else {
             break;
         };
         let is_private_key = header_area
             .get(..header_len)
             .is_some_and(|header| header.contains("PRIVATE KEY"));
         if !is_private_key {
-            out.push_str(&rest[..start + BEGIN.len()]);
-            rest = &rest[start + BEGIN.len()..];
+            out.push_str(&rest[..start + PEM_BEGIN.len()]);
+            rest = &rest[start + PEM_BEGIN.len()..];
             continue;
         }
         out.push_str(&rest[..start]);
@@ -68,8 +77,8 @@ fn redact_private_keys(input: &str, count: &mut usize) -> String {
         rest = match after.find("-----END ") {
             Some(end) => {
                 let tail = &after[end + "-----END ".len()..];
-                match tail.find(DASHES) {
-                    Some(close) => &tail[close + DASHES.len()..],
+                match tail.find(PEM_DASHES) {
+                    Some(close) => &tail[close + PEM_DASHES.len()..],
                     None => "",
                 }
             }
@@ -118,12 +127,23 @@ fn redact_url_passwords(input: &str, count: &mut usize) -> String {
 }
 
 fn redact_bearer(input: &str, count: &mut usize) -> String {
-    const MARKER: &str = "bearer ";
+    const MARKER: &str = "bearer";
     let lower = input.to_ascii_lowercase();
     let mut out = String::with_capacity(input.len());
     let mut cursor = 0;
     while let Some(found) = lower[cursor..].find(MARKER) {
-        let token_start = cursor + found + MARKER.len();
+        let word_end = cursor + found + MARKER.len();
+        // Only the word `Bearer` followed by a space or tab (not `bearers`, not `bearer-x`).
+        if !matches!(input.as_bytes().get(word_end), Some(b' ' | b'\t')) {
+            out.push_str(&input[cursor..word_end]);
+            cursor = word_end;
+            continue;
+        }
+        let mut token_start = word_end;
+        // `Bearer   <token>`: more than one space or tab before the credential is still a header.
+        while matches!(input.as_bytes().get(token_start), Some(b' ' | b'\t')) {
+            token_start += 1;
+        }
         let token_len = input[token_start..]
             .find(|c: char| c.is_whitespace() || matches!(c, '"' | '\'' | ','))
             .unwrap_or(input.len() - token_start);
@@ -302,8 +322,12 @@ fn redact_assignments(input: &str, count: &mut usize) -> String {
             i += 3;
             continue;
         }
-        // Key: the identifier before the delimiter, allowing one closing quote (JSON style).
+        // Key: the identifier before the delimiter, allowing spaces or tabs between the two
+        // (`password = x`, `"password" : "x"`) and one closing quote (JSON style).
         let mut key_end = i;
+        while key_end > 0 && matches!(bytes[key_end - 1], b' ' | b'\t') {
+            key_end -= 1;
+        }
         if key_end > 0 && matches!(bytes[key_end - 1], b'"' | b'\'') {
             key_end -= 1;
         }
@@ -337,7 +361,7 @@ fn redact_assignments(input: &str, count: &mut usize) -> String {
         } else {
             let word_end = |from: usize| {
                 let mut end = from;
-                while end < bytes.len() && !matches!(bytes[end], b' ' | b'\t' | b'\n' | b'\r') {
+                while end < bytes.len() && !is_value_delimiter(bytes[end]) {
                     end += 1;
                 }
                 end
@@ -391,6 +415,57 @@ mod tests {
             let out = text(input);
             assert!(!out.contains("s3cret"), "{input} -> {out}");
             assert!(out.contains(REDACTED), "{input} -> {out}");
+        }
+    }
+
+    #[test]
+    fn spaces_around_the_delimiter_do_not_hide_a_secret() {
+        for input in [
+            "password = s3cret",
+            "password   : s3cret",
+            "DB_PASSWORD\t=\ts3cret",
+            "\"password\" : \"s3cret\"",
+            "api_key = 's3cret'",
+            "token  :  s3cret",
+            "secret = \"s3cret\" trailing",
+        ] {
+            let out = text(input);
+            assert!(!out.contains("s3cret"), "{input} -> {out}");
+            assert!(out.contains(REDACTED), "{input} -> {out}");
+            assert_eq!(text(&out), out, "idempotent: {input}");
+        }
+        // The surrounding words stay readable.
+        assert_eq!(
+            text("user = jane, password = s3cret ok"),
+            "user = jane, password = [REDACTED] ok"
+        );
+    }
+
+    #[test]
+    fn extra_spaces_after_bearer_do_not_hide_a_token() {
+        for input in [
+            "Bearer   abcdef123456",
+            "bearer\tabcdef123456",
+            "Authorization: Bearer    abcdef123456",
+            "Authorization:   Bearer \t abcdef123456",
+        ] {
+            let out = text(input);
+            assert!(!out.contains("abcdef123456"), "{input} -> {out}");
+            assert_eq!(text(&out), out, "idempotent: {input}");
+        }
+    }
+
+    #[test]
+    fn spaced_delimiters_after_non_sensitive_words_are_left_alone() {
+        for input in [
+            "passenger = 1",
+            "author : jane",
+            "time : 12:30",
+            "name = value",
+            "see https://example.test/a = b",
+            "ratio = 3 : 4",
+        ] {
+            assert_eq!(text(input), input);
         }
     }
 

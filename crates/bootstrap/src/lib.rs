@@ -279,7 +279,7 @@ pub struct NewProvider<'a> {
     pub model: &'a str,
     /// JSON object text of provider settings.
     pub params_json: &'a str,
-    /// Whether it becomes the org default.
+    /// Whether it becomes the org default (it always does when the org has none yet).
     pub is_default: bool,
 }
 
@@ -323,9 +323,21 @@ pub fn add_provider(
     new: &NewProvider<'_>,
     key: Option<(&Vault, &str)>,
 ) -> Result<db::AiProviderId, ProviderError> {
-    if new.is_default && db::default_ai_provider(conn, org).is_ok() {
+    let has_default = match db::default_ai_provider(conn, org) {
+        Ok(_) => true,
+        Err(db::Error::NotFound) => false,
+        Err(error) => {
+            return Err(ProviderError::Store {
+                reason: error.to_string(),
+            });
+        }
+    };
+    if new.is_default && has_default {
         return Err(ProviderError::DefaultExists);
     }
+    // The first provider of an org becomes its default whatever the flag says, so the first
+    // question never fails with "no default provider".
+    let is_default = new.is_default || !has_default;
     let secret = match key {
         Some((vault, key)) => Some(
             vault
@@ -345,7 +357,7 @@ pub fn add_provider(
             default_model: new.model,
             secret: secret.as_ref(),
             params_json: new.params_json,
-            is_default: new.is_default,
+            is_default,
         },
     );
     match created {
@@ -492,6 +504,47 @@ mod tests {
         ));
         let scope = resolve_scope(&conn, Some("beta"))?;
         assert_eq!(db::get_org(&conn, &scope.org)?.slug, "beta");
+        Ok(())
+    }
+
+    fn provider(name: &str, is_default: bool) -> NewProvider<'_> {
+        NewProvider {
+            name,
+            base_url: "http://127.0.0.1:1/v1",
+            model: "m",
+            params_json: "{}",
+            is_default,
+        }
+    }
+
+    #[test]
+    fn the_first_provider_becomes_the_default_whatever_the_flag()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let conn = db::open_in_memory()?;
+        let org = db::create_org(&conn, "acme", "acme", "free")?;
+        let other = db::create_org(&conn, "beta", "beta", "free")?;
+        add_provider(&conn, &org.id, &provider("first", false), None)
+            .map_err(|e| format!("{e:?}"))?;
+        assert_eq!(db::default_ai_provider(&conn, &org.id)?.name, "first");
+        // A second one without the flag does not take it over.
+        add_provider(&conn, &org.id, &provider("second", false), None)
+            .map_err(|e| format!("{e:?}"))?;
+        assert_eq!(db::default_ai_provider(&conn, &org.id)?.name, "first");
+        // Asking for the default while one exists is still refused.
+        assert_eq!(
+            add_provider(&conn, &org.id, &provider("third", true), None),
+            Err(ProviderError::DefaultExists)
+        );
+        // Another org is independent: it still has none.
+        assert!(db::default_ai_provider(&conn, &other.id).is_err());
+        add_provider(&conn, &other.id, &provider("solo", false), None)
+            .map_err(|e| format!("{e:?}"))?;
+        assert_eq!(db::default_ai_provider(&conn, &other.id)?.name, "solo");
+        // Removing the default and adding again makes the new one the default.
+        remove_provider(&conn, &org.id, "first").map_err(|e| format!("{e:?}"))?;
+        add_provider(&conn, &org.id, &provider("fourth", false), None)
+            .map_err(|e| format!("{e:?}"))?;
+        assert_eq!(db::default_ai_provider(&conn, &org.id)?.name, "fourth");
         Ok(())
     }
 }

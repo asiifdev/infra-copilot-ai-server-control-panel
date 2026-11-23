@@ -18,10 +18,11 @@ mod auth;
 mod clock;
 mod errors;
 mod guard;
+mod stream;
 mod turn;
 mod util;
 
-pub use app::{Config, DEFAULT_PORT};
+pub use app::{Config, DEFAULT_PORT, DEFAULT_PROVIDER_TEST_TIMEOUT};
 pub use clock::Clock;
 
 use app::App;

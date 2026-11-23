@@ -1,6 +1,6 @@
 //! `POST /api/conversations/{id}/turn`: one assistant turn, streamed as Server-Sent Events.
 //!
-//! Events, in order: any number of `delta {text}` (whole lines, redacted) and `tool {name, tier,
+//! Events, in order: any number of `delta {text}` (redacted; see `stream::DeltaRedactor`) and `tool {name, tier,
 //! status, duration_ms}` (each before the text of the next model call), then exactly one of
 //! `done {rounds, tool_calls, usage}` or `error {code, message}`. After `error` nothing follows
 //! and no reply is invented: the assistant stores no answer for a failed turn.
@@ -15,6 +15,7 @@ use crate::api::{Reply, own_conversation, with_db};
 use crate::app::App;
 use crate::errors::{ApiError, INTERNAL, INVALID_INPUT, ai_code, load_code, message, turn_code};
 use crate::guard::Lang;
+use crate::stream::DeltaRedactor;
 use crate::util::{clean_text, json_object, opt_str};
 use agent::{Assistant, DbProviderLoader, Executor, ProviderLoader, Turn, TurnConfig};
 use axum::Extension;
@@ -34,8 +35,6 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
-/// Text is sent when a line ends, or when this much has piled up without one.
-const FLUSH_BYTES: usize = 2048;
 /// Longest tool name shown (the name is whatever the model wrote).
 const MAX_TOOL_NAME_CHARS: usize = 80;
 
@@ -88,8 +87,9 @@ struct Job {
     _slot: Slot,
 }
 
-/// Sends the text of the model line by line, after redaction, and the tool calls that were
-/// stored since the last look, before the text that follows them.
+/// Sends the text of the model after redaction (held back until a cut is safe, so the pieces add
+/// up to the redaction of the whole answer) and the tool calls that were stored since the last
+/// look, before the text that follows them.
 struct Relay {
     tx: UnboundedSender<Bytes>,
     /// A second connection, only to read the tool calls the turn stores.
@@ -97,7 +97,7 @@ struct Relay {
     org: OrgId,
     conversation: ConversationId,
     seen_calls: usize,
-    pending: String,
+    redactor: DeltaRedactor,
     sent_text: bool,
 }
 
@@ -126,19 +126,15 @@ impl Relay {
 
     fn text(&mut self, piece: &str) {
         self.tools();
-        self.pending.push_str(piece);
-        while let Some(end) = self.pending.find('\n') {
-            let line: String = self.pending.drain(..=end).collect();
-            self.send_text(&line);
+        if let Some(safe) = self.redactor.push(piece) {
+            self.emit(&safe);
         }
-        if self.pending.len() >= FLUSH_BYTES {
-            let mut cut = FLUSH_BYTES;
-            while !self.pending.is_char_boundary(cut) {
-                cut -= 1;
-            }
-            let chunk: String = self.pending.drain(..cut).collect();
-            self.send_text(&chunk);
-        }
+    }
+
+    /// Sends text that is already redacted.
+    fn emit(&mut self, safe: &str) {
+        self.sent_text = true;
+        let _ = self.tx.send(frame("delta", &json!({"text": safe})));
     }
 
     fn send_text(&mut self, text: &str) {
@@ -147,13 +143,13 @@ impl Relay {
         }
         // The model's words are redacted like everything else that reaches a person's screen.
         let safe = redact(text).text;
-        self.sent_text = true;
-        let _ = self.tx.send(frame("delta", &json!({"text": safe})));
+        self.emit(&safe);
     }
 
     fn finish_text(&mut self) {
-        let rest = std::mem::take(&mut self.pending);
-        self.send_text(&rest);
+        if let Some(rest) = self.redactor.finish() {
+            self.emit(&rest);
+        }
     }
 }
 
@@ -216,7 +212,7 @@ fn run(job: Job) {
         org: org.clone(),
         conversation: conversation.clone(),
         seen_calls,
-        pending: String::new(),
+        redactor: DeltaRedactor::default(),
         sent_text: false,
     };
     let result = {

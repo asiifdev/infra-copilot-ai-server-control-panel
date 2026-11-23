@@ -283,6 +283,14 @@ fn plan_draft_list_show_and_gates_work_on_stored_fixtures() -> TestResult {
     assert_eq!(show_en.code, 0, "{}", show_en.stderr);
     assert!(show_en.stdout.contains("Migration plan: mig"));
     assert!(show_en.stdout.contains("status draft"));
+    assert!(show_en.stdout.contains("Transport: ssh1;"));
+    assert!(
+        show_en
+            .stdout
+            .contains("Data moves from node old to node new."),
+        "{}",
+        show_en.stdout
+    );
 
     // The same plan in Indonesian: different words, same facts.
     ctx.lang = Some("id".to_owned());
