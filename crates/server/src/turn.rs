@@ -11,6 +11,7 @@
 //! to its end (it is bounded by the round limit, the token budget and the provider timeouts) and
 //! then releases the conversation, so a disconnect never leaves it claimed.
 
+use crate::api::conversations::DEFAULT_TITLE;
 use crate::api::{Reply, own_conversation, with_db};
 use crate::app::App;
 use crate::errors::{ApiError, INTERNAL, INVALID_INPUT, ai_code, load_code, message, turn_code};
@@ -280,6 +281,7 @@ pub(crate) async fn turn(
         return Err(ApiError::new("message_invalid"));
     }
     let text = text.to_owned();
+    let title_source = text.clone();
     // Everything that can be refused is refused before the stream starts, with a real status.
     let conversation = with_db(&app, move |conn, app| {
         let row = own_conversation(conn, app, &id)?;
@@ -294,7 +296,20 @@ pub(crate) async fn turn(
             Ok(provider) if provider.secret_id.is_some() && app.vault.is_none() => {
                 Err(ApiError::new("master_key_missing"))
             }
-            Ok(_) => Ok(row.id),
+            Ok(_) => {
+                // The first message names a conversation that still has the default title (in
+                // whichever language it was created); a title that was set stays.
+                let en = app.catalog.get(Locale::En, DEFAULT_TITLE, &[]).text;
+                let id_title = app.catalog.get(Locale::Id, DEFAULT_TITLE, &[]).text;
+                let _ = db::retitle_conversation(
+                    conn,
+                    &app.scope.org,
+                    &row.id,
+                    &[en.as_str(), id_title.as_str()],
+                    &title_source,
+                );
+                Ok(row.id)
+            }
             Err(db::Error::NotFound) => Err(ApiError::new("no_provider")),
             Err(_) => Err(crate::errors::STORE_FAILED),
         }

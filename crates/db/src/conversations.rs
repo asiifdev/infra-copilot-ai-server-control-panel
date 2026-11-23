@@ -134,6 +134,50 @@ pub fn get_conversation(
     .ok_or(Error::NotFound)
 }
 
+/// Longest derived title, in characters (an ellipsis is added when the text was cut).
+const DERIVED_TITLE_CHARS: usize = 60;
+
+/// Names a conversation after the text of its first message, but only while the title is still one
+/// of the `placeholders` (the localized "new conversation" texts): a title a person chose, or one
+/// set before, is never replaced. The text is redacted, control characters and runs of white space
+/// become single spaces, and it is cut at [`DERIVED_TITLE_CHARS`] characters. Returns whether the
+/// title changed. The check and the change are one statement, so two concurrent first messages
+/// cannot both win.
+///
+/// # Errors
+/// [`Error::NotFound`] when the conversation is not in this org; database failure.
+pub fn retitle_conversation(
+    conn: &Connection,
+    org: &OrgId,
+    id: &ConversationId,
+    placeholders: &[&str],
+    from_text: &str,
+) -> Result<bool> {
+    let clean: String = redact(from_text)
+        .text
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
+    let words: Vec<&str> = clean.split_whitespace().collect();
+    let flat = words.join(" ");
+    let mut title: String = flat.chars().take(DERIVED_TITLE_CHARS).collect();
+    if title.is_empty() {
+        return Ok(false);
+    }
+    if flat.chars().count() > DERIVED_TITLE_CHARS {
+        title.push('\u{2026}');
+    }
+    let known = get_conversation(conn, org, id)?;
+    if !placeholders.contains(&known.title.as_str()) {
+        return Ok(false);
+    }
+    let changed = conn.execute(
+        "UPDATE conversations SET title = ?3 WHERE org_id = ?1 AND id = ?2 AND title = ?4",
+        params![org.as_str(), id.as_str(), title, known.title],
+    )?;
+    Ok(changed == 1)
+}
+
 /// The conversations of one user, newest first.
 ///
 /// # Errors

@@ -4,7 +4,7 @@
 //! server acts for.
 
 mod access;
-mod conversations;
+pub(crate) mod conversations;
 mod data;
 mod memories;
 mod providers;

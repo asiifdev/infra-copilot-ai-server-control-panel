@@ -15,7 +15,7 @@ use i18n::MessageKey;
 use serde_json::{Value, json};
 use std::sync::Arc;
 
-const DEFAULT_TITLE: MessageKey = MessageKey::new("api.conversation.new_title");
+pub(crate) const DEFAULT_TITLE: MessageKey = MessageKey::new("api.conversation.new_title");
 /// Longest title accepted, in characters (the store caps it at 200 as well).
 const MAX_TITLE_CHARS: usize = 200;
 /// Conversations returned by the list.

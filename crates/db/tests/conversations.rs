@@ -418,3 +418,98 @@ fn the_sha256_helper_matches_the_known_vector() {
         "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
     );
 }
+
+// ---- derived titles ----------------------------------------------------------------------------
+
+#[test]
+fn the_first_message_names_a_conversation_that_still_has_the_default_title() -> TestResultOf<()> {
+    let conn = open_in_memory()?;
+    let a = populate(&conn, "alpha")?;
+    let b = populate(&conn, "beta")?;
+    let c = create_conversation(&conn, &a.org, &a.user, "New conversation", None)?;
+    let defaults = ["New conversation", "Percakapan baru"];
+    let title_of = |conn: &Connection| get_conversation(conn, &a.org, &c).map(|row| row.title);
+
+    // Control characters and runs of white space become single spaces; secrets are redacted.
+    let secret = format!("{}={}", "DB_PASSWORD", "x".repeat(12));
+    let text = format!("  Why is\n\t{secret}  \u{1b}[2J so slow?  ");
+    assert!(retitle_conversation(&conn, &a.org, &c, &defaults, &text)?);
+    let title = title_of(&conn)?;
+    assert!(!title.contains("xxxx") && !title.contains('\u{1b}') && !title.contains("  "));
+    assert!(
+        title.starts_with("Why is DB_PASSWORD=[REDACTED]"),
+        "{title}"
+    );
+
+    // Once named, it stays named: a later first-looking message does not rename it.
+    assert!(!retitle_conversation(
+        &conn,
+        &a.org,
+        &c,
+        &defaults,
+        "Something else"
+    )?);
+    assert_eq!(title_of(&conn)?, title);
+
+    // The other org cannot touch it, and a missing conversation is NotFound.
+    assert!(is_not_found(&retitle_conversation(
+        &conn, &b.org, &c, &defaults, "x"
+    )));
+    // A conversation whose title a person chose is never replaced, even by the default text.
+    let own = create_conversation(&conn, &a.org, &a.user, "My own title", None)?;
+    assert!(!retitle_conversation(
+        &conn, &a.org, &own, &defaults, "hello"
+    )?);
+    assert_eq!(get_conversation(&conn, &a.org, &own)?.title, "My own title");
+    Ok(())
+}
+
+#[test]
+fn derived_titles_are_cut_blank_text_is_ignored_and_the_second_default_works() -> TestResultOf<()> {
+    let conn = open_in_memory()?;
+    let t = populate(&conn, "alpha")?;
+    let defaults = ["New conversation", "Percakapan baru"];
+    let long = create_conversation(&conn, &t.org, &t.user, "Percakapan baru", None)?;
+    assert!(retitle_conversation(
+        &conn,
+        &t.org,
+        &long,
+        &defaults,
+        &"word ".repeat(100)
+    )?);
+    let title = get_conversation(&conn, &t.org, &long)?.title;
+    assert_eq!(
+        title.chars().count(),
+        61,
+        "60 characters and an ellipsis: {title}"
+    );
+    assert!(title.ends_with('\u{2026}'));
+    let blank = create_conversation(&conn, &t.org, &t.user, "New conversation", None)?;
+    for text in ["", "   ", "\n\t\u{1b}"] {
+        assert!(
+            !retitle_conversation(&conn, &t.org, &blank, &defaults, text)?,
+            "{text:?}"
+        );
+    }
+    assert_eq!(
+        get_conversation(&conn, &t.org, &blank)?.title,
+        "New conversation"
+    );
+    // Multi-byte text is cut on a character boundary.
+    let wide = create_conversation(&conn, &t.org, &t.user, "New conversation", None)?;
+    assert!(retitle_conversation(
+        &conn,
+        &t.org,
+        &wide,
+        &defaults,
+        &"\u{e9}\u{1f600}".repeat(80)
+    )?);
+    assert!(
+        get_conversation(&conn, &t.org, &wide)?
+            .title
+            .chars()
+            .count()
+            <= 61
+    );
+    Ok(())
+}

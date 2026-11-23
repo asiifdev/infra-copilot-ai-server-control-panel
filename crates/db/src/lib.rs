@@ -41,7 +41,7 @@ pub use conversations::{
     ProposalRow, ProposalStatus, ToolCallRow, TurnClaim, append_messages, archive_conversation,
     claim_turn, count_pending_proposals, create_conversation, create_proposal, delete_conversation,
     get_conversation, get_proposal, list_conversations, list_messages, list_proposals,
-    list_tool_calls, release_turn, touch_turn,
+    list_tool_calls, release_turn, retitle_conversation, touch_turn,
 };
 pub use error::{Error, Result};
 pub use identity::{

@@ -916,3 +916,43 @@ fn a_provider_that_never_answers_ends_the_test_with_advice_before_the_request_li
     );
     Ok(())
 }
+
+#[test]
+fn the_first_message_names_the_conversation_and_a_later_one_does_not() -> TestResult {
+    let s = setup(
+        vec![
+            text_reply(&["First answer."]),
+            text_reply(&["Second answer."]),
+        ],
+        true,
+        true,
+    )?;
+    // Created the way the UI does it: no title, so it gets the default one.
+    let created = s.session.post("/api/conversations", &json!({}));
+    assert_eq!(created.status, 201, "{}", created.text());
+    let id = created.json()["id"].as_str().ok_or("id")?.to_owned();
+    let title = |s: &Setup| -> Result<String, Box<dyn std::error::Error>> {
+        let list = s.session.get("/api/conversations").json();
+        let row = list
+            .as_array()
+            .ok_or("list")?
+            .iter()
+            .find(|c| c["id"] == id.as_str())
+            .ok_or("conversation is listed")?
+            .clone();
+        Ok(row["title"].as_str().ok_or("title")?.to_owned())
+    };
+    assert_eq!(title(&s)?, "New conversation");
+    assert_eq!(
+        turn(&s, &id, "Which servers are behind on patches?").status,
+        200
+    );
+    assert_eq!(title(&s)?, "Which servers are behind on patches?");
+    assert_eq!(turn(&s, &id, "And what about the second one?").status, 200);
+    assert_eq!(
+        title(&s)?,
+        "Which servers are behind on patches?",
+        "a title that was set stays"
+    );
+    Ok(())
+}
