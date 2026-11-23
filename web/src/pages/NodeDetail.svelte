@@ -1,0 +1,89 @@
+<script lang="ts">
+  import { api } from '../lib/api';
+  import { describeData, formatDateTime } from '../lib/format';
+  import { i18n, t } from '../lib/i18n.svelte';
+  import { hrefFor } from '../lib/router.svelte';
+  import { useResource } from '../lib/resource.svelte';
+  import { inlineText } from '../lib/text';
+  import type { InventoryItem } from '../lib/types';
+  import AsyncView from '../components/AsyncView.svelte';
+  import Card from '../components/Card.svelte';
+  import DataTable, { type Column } from '../components/DataTable.svelte';
+  import PageHeader from '../components/PageHeader.svelte';
+  import Select from '../components/Select.svelte';
+  import StatusBadge from '../components/StatusBadge.svelte';
+  import TextBlock from '../components/TextBlock.svelte';
+
+  interface Props {
+    name: string;
+  }
+
+  let { name }: Props = $props();
+
+  let kind = $state('');
+  const ITEM_LIMIT = 500;
+
+  const inventory = useResource((signal) => api.inventory(name, kind || undefined, ITEM_LIMIT, signal));
+
+  const kindOptions = $derived([
+    { value: '', label: t('ui.node.kind_all') },
+    { value: 'listener', label: t('ui.node.kind_listener') },
+    { value: 'process', label: t('ui.node.kind_process') },
+    { value: 'cron', label: t('ui.node.kind_cron') },
+    { value: 'env_ref', label: t('ui.node.kind_env_ref') },
+  ]);
+
+  const columns = $derived<Column<InventoryItem>[]>([
+    { id: 'key', header: t('ui.node.item_key'), sortValue: (i) => i.key },
+    { id: 'kind', header: t('ui.node.item_kind'), sortValue: (i) => i.kind },
+    { id: 'data', header: t('ui.node.item_data') },
+  ]);
+</script>
+
+<div class="stack">
+  <PageHeader title={t('ui.node.title', { name: inlineText(name, 80) })}>
+    <a href={hrefFor({ name: 'nodes' })}>{t('ui.node.back')}</a>
+  </PageHeader>
+
+  <Select label={t('ui.node.filter')} id="inventory-kind" bind:value={kind} options={kindOptions} />
+
+  <AsyncView resource={inventory}>
+    {#snippet children(view)}
+      <Card>
+        <p>
+          <StatusBadge kind="state" value={view.status} />
+          {t('ui.node.taken_at', { time: formatDateTime(view.taken_at, i18n.locale) ?? inlineText(view.taken_at, 40) })}
+        </p>
+        {#if view.warnings.length > 0}
+          <h2>{t('ui.node.warnings')}</h2>
+          <ul>
+            {#each view.warnings as warning, index (index)}
+              <li>{inlineText(warning, 300)}</li>
+            {/each}
+          </ul>
+        {/if}
+      </Card>
+      <DataTable
+        caption={t('ui.node.caption')}
+        captionId="inventory-caption"
+        {columns}
+        rows={view.items}
+        rowKey={(i) => `${i.kind}\u0000${i.key}`}
+        empty={t('ui.node.empty')}
+      >
+        {#snippet cell(item, column)}
+          {#if column.id === 'key'}
+            <code>{inlineText(item.key, 200)}</code>
+          {:else if column.id === 'kind'}
+            {inlineText(item.kind, 40)}
+          {:else}
+            <details>
+              <summary>{t('ui.node.show_data')}</summary>
+              <TextBlock text={describeData(item.data)} mono />
+            </details>
+          {/if}
+        {/snippet}
+      </DataTable>
+    {/snippet}
+  </AsyncView>
+</div>

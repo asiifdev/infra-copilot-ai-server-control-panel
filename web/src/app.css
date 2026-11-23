@@ -1,0 +1,141 @@
+/* Global styles: scale tokens (the colour tokens come from ui/src/tokens.css through the alias),
+   the reset and the few rules shared by every page. Components use these tokens only. */
+:root {
+  --nv-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --nv-font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --nv-text-sm: 0.875rem;
+  --nv-text-md: 1rem;
+  --nv-text-lg: 1.25rem;
+  --nv-text-xl: 1.625rem;
+  --nv-leading: 1.55;
+  --nv-space-1: 0.25rem;
+  --nv-space-2: 0.5rem;
+  --nv-space-3: 0.75rem;
+  --nv-space-4: 1rem;
+  --nv-space-5: 1.5rem;
+  --nv-space-6: 2.5rem;
+  --nv-radius: 0.5rem;
+  --nv-radius-sm: 0.25rem;
+  --nv-target: 2.75rem;
+  --nv-focus-width: 3px;
+  --nv-border-width: 1px;
+  --nv-content-max: 72rem;
+  --nv-sidebar: 14rem;
+  --nv-measure: 70ch;
+  --nv-motion: 150ms;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--nv-font);
+  font-size: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--nv-bg);
+  color: var(--nv-text);
+  font-size: var(--nv-text-md);
+  line-height: var(--nv-leading);
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+  margin: 0;
+}
+
+h1 {
+  font-size: var(--nv-text-xl);
+}
+
+h2 {
+  font-size: var(--nv-text-lg);
+}
+
+h3 {
+  font-size: var(--nv-text-md);
+}
+
+p {
+  margin: 0;
+  max-width: var(--nv-measure);
+}
+
+a {
+  color: var(--nv-link);
+  text-underline-offset: 0.2em;
+}
+
+:focus-visible {
+  outline: var(--nv-focus-width) solid var(--nv-focus);
+  outline-offset: 2px;
+}
+
+[tabindex='-1']:focus {
+  outline: none;
+}
+
+code,
+pre {
+  font-family: var(--nv-font-mono);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nv-space-4);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--nv-space-3);
+}
+
+.muted {
+  color: var(--nv-text-muted);
+}
+
+.grid {
+  display: grid;
+  gap: var(--nv-space-4);
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
+  }
+}
