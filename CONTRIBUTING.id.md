@@ -33,8 +33,9 @@ Berasal dari prinsip proyek dan tidak bisa ditawar dalam pull request.
 
 ## Persiapan
 
-Anda butuh toolchain Rust stabil yang baru. Untuk UI web (saat sudah ada) Anda juga butuh Node dan
-pnpm.
+Anda butuh toolchain Rust stabil yang baru. Untuk UI web di `web/` Anda juga butuh Node 24 atau
+lebih baru dan npm (`scripts/build-web.sh` menjalankan `npm ci`, pemeriksaan tipe, tes, dan build
+produksi).
 
 ```sh
 git clone <fork Anda>
@@ -48,11 +49,12 @@ cargo test --workspace
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+./scripts/build-web.sh        # hanya bila Anda menyentuh web/ (pemeriksaan tipe, 214 tes, build produksi)
 ```
 
 - Tanpa kode `unsafe` (workspace melarangnya), tanpa `unwrap()` atau `expect()` di jalur produksi,
   tanpa `println!` di kode pustaka.
-- CI menjalankan pemeriksaan yang sama di Linux dan macOS, ditambah `cargo deny` dan `cargo audit` (advisori, lisensi, sumber), pemindaian `gitleaks` atas seluruh riwayat, dan pemeriksaan dokumentasi (`python3 scripts/check-docs.py`: setiap dokumen publik butuh versi Inggris dan Indonesia yang saling menaut, dan setiap tautan relatif harus valid). Jalankan yang terakhir secara lokal bila Anda menyentuh dokumen.
+- CI menjalankan pemeriksaan yang sama di Linux dan macOS, ditambah `cargo deny` dan `cargo audit` (advisori, lisensi, sumber), pemindaian `gitleaks` atas seluruh riwayat (`./scripts/check-secrets.sh` adalah pemindaian lokal atas pekerjaan Anda yang belum di-push), job `web` (pemeriksaan tipe, tes, build produksi, ukuran bundel, lalu biner nyata dengan UI tertanam dan uji asap), dan pemeriksaan dokumentasi (`python3 scripts/check-docs.py`: setiap dokumen publik butuh versi Inggris dan Indonesia yang saling menaut, dan setiap tautan relatif harus valid). Jalankan yang terakhir secara lokal bila Anda menyentuh dokumen.
 - Tambahkan tes bersama perubahan. Adapter baru harus lulus uji kontrak bersama. Aturan kesetaraan
   baru butuh fixture anonim yang memicunya dan satu yang tidak.
 - Jaga perubahan tetap terfokus. Beberapa pull request kecil lebih mudah ditinjau daripada satu

@@ -35,6 +35,7 @@ include real secrets, real customer data, or access to systems you do not own.
 - Weak spots in authentication, sessions, the Telegram bot's account linking and callbacks, or
   update signing.
 - Overly broad permissions in the desktop shell's capabilities.
+- Ways to reach or abuse the local web server (`infra serve`) from the network or from another website: the loopback-only bind, the one-time sign-in token, the `Host`, `Origin` and `X-Nodivara` checks, the session cookie, the Content-Security-Policy, or any response that contains a secret.
 
 ## What to expect
 

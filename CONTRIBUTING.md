@@ -32,8 +32,8 @@ These come from the project's principles and are not negotiable in a pull reques
 
 ## Setup
 
-You need a recent stable Rust toolchain. For the web UI (when it lands) you will also need Node and
-pnpm.
+You need a recent stable Rust toolchain. For the web UI in `web/` you also need Node 24 or newer
+and npm (`scripts/build-web.sh` runs `npm ci`, the type check, the tests and the production build).
 
 ```sh
 git clone <your fork>
@@ -47,11 +47,12 @@ cargo test --workspace
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+./scripts/build-web.sh        # only if you touched web/ (type check, 214 tests, production build)
 ```
 
 - No `unsafe` code (the workspace forbids it), no `unwrap()` or `expect()` on production paths, no
   `println!` in library code.
-- CI runs the same checks on Linux and macOS, plus `cargo deny` and `cargo audit` (advisories, licenses, sources), a `gitleaks` scan of the full history, and a documentation check (`python3 scripts/check-docs.py`: every public document needs an English and an Indonesian version, linked to each other, and every relative link must resolve). Run the last one locally if you touch the docs.
+- CI runs the same checks on Linux and macOS, plus `cargo deny` and `cargo audit` (advisories, licenses, sources), a `gitleaks` scan of the full history (`./scripts/check-secrets.sh` is a local pass over your unpushed work), a `web` job (type check, tests, production build, bundle sizes, then the real binary with the UI embedded and a smoke test), and a documentation check (`python3 scripts/check-docs.py`: every public document needs an English and an Indonesian version, linked to each other, and every relative link must resolve). Run the last one locally if you touch the docs.
 - Add tests with the change. New adapters need to pass the shared contract tests. New parity rules
   need an anonymous fixture that triggers them and one that does not.
 - Keep the change focused. Several small pull requests are easier to review than one large one.

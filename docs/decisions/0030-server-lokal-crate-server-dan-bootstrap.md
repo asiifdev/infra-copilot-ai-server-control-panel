@@ -39,3 +39,8 @@ Akses jarak jauh dan TLS, akun dan kata sandi (token sekali pakai berarti sesi y
 
 ## Alternatif
 Satu handler `fallback` dengan perutean sendiri (kontrol penuh, tetapi membuang perutean axum); sambungan SQLite bersama berkunci mutex (memblokir permintaan lain); membatalkan giliran saat klien putus (klaim tertinggal sampai basi 600 dtk); `tower-http` untuk statis dan header (dependensi tambahan tanpa keperluan).
+
+## Catatan 2026-11-24: koreksi fakta
+- Butir pertama di "Penyimpangan dari 0029" (`GET /api/i18n/{locale}` mensyaratkan sesi) **tidak lagi benar**: kode akhir (`crates/server/src/guard.rs`) menyajikan katalog tanpa sesi, tetap dengan pemeriksaan `Host` dan `Origin`, karena halaman masuk membutuhkannya sebelum penukaran token (sesuai usulan 0031). Butir kedua masih berlaku.
+- Granularitas `delta` pada aliran giliran: teks dilepas hanya di titik potong yang aman (`stream.rs`, batas tahan 64 KiB), bukan per potongan dari model.
+- Perubahan sesudah catatan ini ditulis: penyedia pertama otomatis menjadi bawaan, penyaring inti menutup rahasia dengan spasi di sekitar pemisah dan setelah `Bearer` dengan spasi berlebih atau tab, opsi kredensial rclone ditolak sebagai opsi transport biasa, percakapan diberi judul dari pesan pertama. Total uji: 840 lulus, 1 diabaikan.

@@ -2,7 +2,7 @@
 
 # Pertanyaan yang sering diajukan
 
-Terakhir diperbarui: 2026-11-20. Nodivara masih **pra-alfa**: fitur yang di sini disebut
+Terakhir diperbarui: 2026-11-24. Nodivara masih **pra-alfa**: fitur yang di sini disebut
 direncanakan belum tersedia.
 
 ## Apa itu Nodivara?
@@ -17,9 +17,12 @@ pra-alfa: belum ada yang bisa dipasang.
 Belum. Belum ada rilis dan belum ada pemasang. Dari kode sumber Anda bisa menjalankan inventaris
 hanya-baca, pemeriksaan kesetaraan dua inventaris, dan baris perintah lokal (`infra`) yang menyimpan
 inventaris, menyimpan draf rencana migrasi dan pengaturan transport, serta bisa berbicara dengan
-penyedia AI yang Anda atur. Monitor uptime masih berupa pustaka yang belum dijalankan oleh apa pun,
-dan belum ada yang bisa menyetujui atau menjalankan perubahan. Semua hal lain di README masih
-direncanakan.
+penyedia AI yang Anda atur. Baris perintah yang sama dapat menjalankan UI web lokal (`infra serve`,
+setelah `scripts/build-web.sh`): ia hanya mendengarkan di mesin ini, belum punya login sungguhan
+(alamat sekali pakai yang memasukkan Anda) dan belum ada TLS, dan memungkinkan Anda membaca node,
+temuan, dan rencana, mengobrol dengan asisten, dan mengatur penyedia. Monitor uptime masih berupa
+pustaka yang belum dijalankan oleh apa pun, dan belum ada yang bisa menyetujui atau menjalankan
+perubahan. Semua hal lain di README masih direncanakan.
 
 ## Apa itu agen AI pengelola server dalam proyek ini?
 

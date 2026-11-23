@@ -5,7 +5,7 @@ English | [Bahasa Indonesia](comparison.id.md)
 Last updated: 2026-11-19. Facts below were read from the vendors' own pages on that date; prices
 and features change, so check the linked sources before relying on them.
 
-**Nodivara is pre-alpha: only a read-only parity check and a local command line run today, from source, and the AI agent and approval workflow in its row are not available.** This page is not a claim
+**Nodivara is pre-alpha: only a read-only parity check, a local command line and a local web UI (loopback only, single user) run today, from source, and the AI agent and approval workflow in its row are not available.** This page is not a claim
 that it is better than any product listed. The other products ship today.
 
 ## Overview

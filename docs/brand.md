@@ -64,3 +64,5 @@ Temuan dari pengukuran ini: kotak pilihan bahasa semula memakai warna bawaan bro
 | `nodivara-social-1280x640.png` | logo, slogan, dan "AI proposes. You approve." di atas gelap | pratinjau sosial GitHub (diunggah manual di Settings, tidak lewat API) |
 
 Latar semua PNG opak (putih atau gelap), bukan transparan. Belum ada: SVG vektor dan versi transparan. Minta ke pemilik; jangan menyunting PNG yang ada untuk membuatnya.
+
+Catatan 2026-11-24: UI web memakai `web/public/favicon.svg`, tanda N vektor kecil dengan warna merek. Itu **gambar ulang sementara** yang menyerupai tanda, bukan SVG resmi dan bukan turunan berkas asli; pernyataan di atas tetap benar: SVG resmi belum ada. Token warna UI web dipakai ulang dari `ui/src/tokens.css` lewat alias Vite (tidak disalin).

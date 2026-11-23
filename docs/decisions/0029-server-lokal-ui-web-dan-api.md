@@ -56,3 +56,10 @@ Galat: status HTTP yang sesuai dan `{"error":{"code":"<kode_tetap>","message":"<
 ## Dampak
 - Dokumen README, CLAUDE.md, NEXT-STEPS, design diperbarui saat tiap bagian selesai; `check-docs.py` mewajibkan crate `server` tercantum.
 - Belum dikerjakan: akses jarak jauh dan TLS, login multi-pengguna, persetujuan dan eksekusi Usulan (M4), anggaran kinerja UI sungguhan (diukur setelah UI ada), pensiun `ui/` dan `proto-server`.
+
+## Catatan 2026-11-24: status setelah dibangun (tanpa mengubah keputusan di atas)
+- Kontrak ini sudah dilaksanakan oleh crate `server` (0030) dan UI di `web/` (0031); `infra serve` berjalan, diuji lewat soket nyata dan uji asap biner nyata di CI.
+- **`GET /api/i18n/{locale}` tidak butuh sesi** di kode (`crates/server/src/guard.rs`): halaman masuk membutuhkan teks sebelum token ditukar. Isinya hanya teks antarmuka `ui.*`, tanpa data organisasi, dan tetap melewati pemeriksaan `Host` dan `Origin`. Kontrak di atas hanya mengecualikan `/healthz`; kode mengecualikan juga rute ini.
+- **Peristiwa `delta` tidak sama dengan potongan dari model.** Teks dilepas hanya di titik potong tempat penyaring rahasia memberi hasil yang sama dengan untuk keseluruhan (batas tahan 64 KiB), sehingga potongan yang sampai ke peramban gabungannya persis jawaban yang diredaksi dan disimpan.
+- Perilaku yang ditambahkan sejak itu: penyedia pertama organisasi otomatis menjadi bawaan, teks rencana menyebut nama node dan transport, dan percakapan diberi judul dari pesan pertamanya.
+- Tetap belum ada: akses jarak jauh dan TLS, login sungguhan, persetujuan dan eksekusi (M4), uji hidup penyedia AI (tombol "Uji koneksi" hanya pernah dijalankan terhadap tiruan loopback), anggaran kinerja untuk server + UI sungguhan.

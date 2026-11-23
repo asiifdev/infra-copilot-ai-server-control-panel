@@ -262,12 +262,18 @@ AI/manusia → proposal(pending, dry_run) → [peninjau menyetujui / menolak]
 - Pemohon (termasuk AI) tidak boleh menjadi penyetuju Usulan miliknya sendiri.
 - Kegagalan aksi tingkat 3–4 tidak diulang otomatis.
 
-## 10. API (garis besar)
+## 10. API
 
-Kelompok sumber daya, semua dibatasi org: `orgs`, `nodes`, `agents`, `inventories`, `comparisons`, `findings`, `plans`, `transports`, `conversations`, `proposals`, `approvals`, `audit`, `licenses`.
-- Autentikasi: sesi (web) dan token API dengan cakupan.
-- Aksi yang mengubah: POST dengan token CSRF/Origin check.
+**Status (2026-11-24): bagian lokal sudah dibangun.** Server lokal (crate `server`, `infra serve`) menyajikan API JSON di bawah `/api` untuk satu organisasi lokal dan satu pengguna, hanya di loopback. Kontraknya ada di [keputusan 0029](decisions/0029-server-lokal-ui-web-dan-api.md) (tabel titik akhir, autentikasi, header, kode galat) dan pembangunannya di [0030](decisions/0030-server-lokal-crate-server-dan-bootstrap.md); kode ada di `crates/server/src/lib.rs` (rute) dan `crates/server/src/api/`. Ringkasan yang sudah ada: `session`, `nodes` dan `nodes/{name}/inventory`, `findings`, `plans` (hanya baca), `transports` (tanpa konfigurasi), `providers` (tambah, hapus, uji koneksi; kunci hanya masuk), `memories` (daftar, setujui, hapus), `proposals` (hanya baca), `conversations` dan satu giliran asisten sebagai aliran SSE (peristiwa `delta`, `tool`, `done`, `error`), `i18n/{locale}` dan `/healthz`.
+
+- Autentikasi lokal: token masuk sekali pakai di fragmen URL (10 menit), ditukar lewat `POST /api/auth/exchange` dengan cookie sesi `HttpOnly` `SameSite=Strict`; belum ada kata sandi, TLS, atau token API dengan cakupan.
+- Setiap permintaan: `Host` harus persis alamat ikat; aksi yang mengubah (non-GET) butuh `Origin` yang sama dan header `X-Nodivara: 1`, badan JSON paling banyak 64 KiB, satu giliran asisten per percakapan (409 `busy`).
+- `GET /api/i18n/{locale}` tanpa sesi (hanya teks antarmuka `ui.*`, tanpa data organisasi), karena halaman masuk membutuhkannya sebelum token ditukar; ia tetap melewati pemeriksaan `Host` dan `Origin`.
+- Peristiwa `delta` pada aliran giliran adalah teks yang sudah diredaksi dan dilepas hanya di titik potong yang aman, jadi potongannya tidak sama dengan potongan token dari model dan bisa tertahan hingga 64 KiB.
 - Tidak ada endpoint yang mengembalikan nilai rahasia.
+- **Belum ada** (direncanakan): `orgs`, `agents`, `approvals`, `audit`, `licenses`, akses jarak jauh dengan TLS, login sungguhan dan multi-pengguna, token API dengan cakupan, dan semua aksi yang menyetujui atau menjalankan Usulan dan rencana (M4). Bentuk aslinya di bawah ini tetap menjadi sasaran untuk bagian yang belum ada.
+
+Sasaran semula (dibatasi org): kelompok `orgs`, `nodes`, `agents`, `inventories`, `comparisons`, `findings`, `plans`, `transports`, `conversations`, `proposals`, `approvals`, `audit`, `licenses`; autentikasi sesi (web) dan token API dengan cakupan; aksi yang mengubah lewat POST dengan pemeriksaan CSRF/Origin.
 
 ## 11. Pertanyaan terbuka
 
@@ -339,6 +345,8 @@ Setiap adapter diuji dengan **uji kontrak bersama** (satu rangkaian uji dijalank
 ### 12.5 Komponen UI bersama
 
 Satu paket UI dan token desain. Komponen minimum: `DataTable`, `StatusBadge` (up/down/degraded, tingkat risiko), `Card`, `ConfirmTyped` (ketik nama target), `ProposalCard` (aksi, alasan, dampak, dry-run, setujui/tolak), `DiffView`, `LogViewer`, `EmptyState`, `Toast`, `Filters`, `Sparkline` (riwayat respons), `Timeline` (insiden). Setiap fitur baru memakainya; komponen baru ditambahkan ke paket, bukan ke halaman.
+
+Status (2026-11-24, keputusan 0031): paket ada di `web/src/components/` dengan `DataTable`, `StatusBadge`, `Card`, `EmptyState`, `Toast`, `ProposalCard` (hanya baca, tanpa tombol setujui atau jalankan), `ConfirmDialog` (konfirmasi biasa), ditambah `Button`, `TextField`, `Select`, `Checkbox`, `Spinner`, `TextBlock` (satu-satunya jalan teks dari server, model, dan alat ke layar), `ErrorNotice`, `AsyncView`, `PageHeader`, `ChatMessage`, dan `ProviderForm`. Belum ada: `ConfirmTyped`, `DiffView`, `LogViewer`, `Filters`, `Sparkline`, `Timeline`.
 
 ## 13. Tambahan: kejadian error, analisis AI, bot Telegram (2026-11-19)
 

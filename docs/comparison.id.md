@@ -5,7 +5,7 @@
 Terakhir diperbarui: 2026-11-19. Fakta di bawah dibaca dari halaman resmi vendor pada tanggal itu;
 harga dan fitur berubah, jadi periksa sumber yang ditautkan sebelum mengandalkannya.
 
-**Nodivara masih pra-alfa: hanya pemeriksaan kesetaraan hanya-baca dan baris perintah lokal yang berjalan hari ini, dari kode sumber, sedangkan agen AI dan alur persetujuan di barisnya belum tersedia.** Halaman ini
+**Nodivara masih pra-alfa: hanya pemeriksaan kesetaraan hanya-baca, baris perintah lokal, dan UI web lokal (hanya loopback, satu pengguna) yang berjalan hari ini, dari kode sumber, sedangkan agen AI dan alur persetujuan di barisnya belum tersedia.** Halaman ini
 bukan klaim bahwa ia lebih baik dari produk mana pun yang tercantum. Produk lainnya sudah berjalan
 hari ini.
 

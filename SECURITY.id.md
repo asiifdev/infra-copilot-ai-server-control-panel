@@ -37,6 +37,7 @@ menyertakan rahasia asli, data pelanggan asli, atau akses ke sistem yang bukan m
 - Titik lemah pada autentikasi, sesi, penautan akun dan callback bot Telegram, atau penandatanganan
   pembaruan.
 - Izin yang terlalu luas pada capabilities cangkang desktop.
+- Cara menjangkau atau menyalahgunakan server web lokal (`infra serve`) dari jaringan atau dari situs lain: pengikatan hanya loopback, token masuk sekali pakai, pemeriksaan `Host`, `Origin`, dan `X-Nodivara`, cookie sesi, Content-Security-Policy, atau respons mana pun yang memuat rahasia.
 
 ## Yang bisa Anda harapkan
 

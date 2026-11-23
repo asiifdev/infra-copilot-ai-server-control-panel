@@ -93,6 +93,10 @@ STALE_PHRASES = [
     "first core crate",
     "nothing in its row is available",
     "planned, not built",
+    "no agent and no panel",
+    "Kerangka UI belum diputuskan",
+    "kerangka belum diputuskan",
+    "Node dan pnpm",
 ]
 for path in markdown:
     if path.startswith("docs/decisions/"):

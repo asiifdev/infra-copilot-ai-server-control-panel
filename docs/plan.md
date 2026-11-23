@@ -1,6 +1,6 @@
 # Rencana produk: platform migrasi + kelola infrastruktur + asisten AI
 
-Status: rencana awal (2026-11-19); dokumen ini tidak ditulis ulang, status pembangunan ada di `docs/NEXT-STEPS.md` (per 2026-11-20 kode sudah ada: M0, M1-a, M2-a sampai M2-e, M3-a sampai M3-d; belum ada eksekusi, persetujuan, atau UI). Nama produk: **Nodivara** (keputusan 0019); tulisan ini memakai "Produk" sebagai sebutan umum.
+Status: rencana awal (2026-11-19); dokumen ini tidak ditulis ulang, status pembangunan ada di `docs/NEXT-STEPS.md` (per 2026-11-20 kode sudah ada: M0, M1-a, M2-a sampai M2-e, M3-a sampai M3-d; belum ada eksekusi atau persetujuan; per 2026-11-24 juga server lokal `infra serve` dan UI web di `web/`, keputusan 0029-0031). Nama produk: **Nodivara** (keputusan 0019); tulisan ini memakai "Produk" sebagai sebutan umum.
 Asal ide: sebuah migrasi VPS nyata ke laptop, dan prototipe panel internal yang dibangun saat itu.
 
 ## 1. Masalah dan klaim utama
@@ -430,5 +430,5 @@ Pertanyaan terbuka: build native (systemd/PHP-FPM/PM2) atau container sebagai ba
 - **Satu inti, satu UI:** logika dan komponen reusable ditulis sekali. Detail dan risiko di `0003`.
 - **Pengiriman bertahap:** Linux server → macOS → Windows. Arsitektur lintas OS sejak M0 (abstraksi `ServiceManager`, jalur, paket, izin).
 - Menjawab sebagian pertanyaan 14.2: pada edisi desktop tidak perlu agen macOS terpisah.
-- **Cangkang desktop: Tauri; inti, agen, dan cangkang ditulis dengan Rust** (0003, 0004). Kerangka UI belum diputuskan.
+- **Cangkang desktop: Tauri; inti, agen, dan cangkang ditulis dengan Rust** (0003, 0004). Kerangka UI: Svelte 5 + Vite + TypeScript tanpa SvelteKit (diputuskan final; dibangun di `web/`, keputusan 0029-0031).
 - Pertanyaan terbuka: seberapa jauh mode desktop menyaingi FlyEnv (mengelola biner runtime lokal) pada MVP; saya sarankan di luar MVP.

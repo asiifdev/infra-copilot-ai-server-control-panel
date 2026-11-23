@@ -78,3 +78,9 @@ Ukuran sekarang (`npm run build`): JS 130 878 B mentah, 41 159 B gzip -9; CSS 15
 ## Dampak
 - Perlu dilakukan orkestrator: README/CLAUDE.md/NEXT-STEPS/CHANGELOG (struktur `web/`, perintah, hasil), `scripts/check-docs.py` harus melewati `web/node_modules/` dan `web/dist/`, CI perlu langkah `npm ci && npm run check && npm test && npm run build` di `web/` dan (setelah anggaran diputuskan) pemeriksaan ukuran, dan server harus menyajikan `web/dist` (rust-embed) serta menyamakan butir 1-3 di atas.
 - Belum dikerjakan: persetujuan dan eksekusi Usulan (M4), pemeriksaan di browser nyata, anggaran CI untuk `web/`.
+
+## Catatan 2026-11-24: sisa pekerjaan dan status CI
+- Usulan "katalog tanpa sesi" (pembacaan kontrak butir 1) diterima oleh server: rute i18n publik, lihat 0030.
+- Job CI `web` kini ada (periksa tipe, tes, build, ukuran bundel dicetak, biner dengan UI tertanam, `scripts/smoke-serve.sh`). Ukuran bundel **belum** menjadi batas CI dan `docs/perf-budget.json` masih berasal dari probe `ui/` + `proto-server`; anggaran untuk biner `infra` dengan UI tertanam belum ditetapkan.
+- `web/public/favicon.svg` adalah gambar ulang sementara, bukan SVG merek resmi (lihat `docs/brand.md`).
+- Belum diperiksa: mode kontras tinggi Windows yang asli dan pembaca layar sungguhan (hanya emulasi di Chromium).

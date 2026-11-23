@@ -2,7 +2,7 @@ English | [Bahasa Indonesia](faq.id.md)
 
 # Frequently asked questions
 
-Last updated: 2026-11-20. Nodivara is **pre-alpha**: features described here as planned are not
+Last updated: 2026-11-24. Nodivara is **pre-alpha**: features described here as planned are not
 available yet.
 
 ## What is Nodivara?
@@ -17,8 +17,11 @@ installable yet.
 No. There is no release and no installer. From source you can run a read-only inventory, a
 parity check of two inventories and a local command line (`infra`) that stores inventories, keeps
 migration plan drafts and transport settings, and can talk to an AI provider you configure. The
-uptime monitor is a library nothing runs yet, and nothing can approve or execute a change.
-Everything else in the README is planned.
+same command line can start a local web UI (`infra serve`, after `scripts/build-web.sh`): it listens
+on this machine only, has no real login (a one-time address signs you in) and no TLS, and lets you
+read nodes, findings and plans, chat with the assistant and set up a provider. The uptime monitor is
+a library nothing runs yet, and nothing can approve or execute a change. Everything else in the
+README is planned.
 
 ## What is an AI server management agent, in this project?
 
