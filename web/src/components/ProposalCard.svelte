@@ -14,17 +14,20 @@
 </script>
 
 <!-- Read-only by design: approving or running a proposal arrives with milestone M4. -->
-<Card title={inlineText(proposal.action, 120)} level={3}>
+<Card title={inlineText(proposal.title, 120)} level={3}>
   {#snippet actions()}
     <StatusBadge kind="state" value={proposal.status} />
-    {#if proposal.tier !== undefined}<StatusBadge kind="tier" value={proposal.tier} />{/if}
+    <StatusBadge kind="tier" value={proposal.tier} />
   {/snippet}
   <dl class="facts">
     <dt>{t('ui.proposal.reason')}</dt>
-    <dd><TextBlock text={proposal.reason} /></dd>
+    <dd><TextBlock text={proposal.rationale} /></dd>
+    <dt>{t('ui.proposal.action')}</dt>
+    <dd><TextBlock text={proposal.suggested_action} /></dd>
     <dt>{t('ui.proposal.impact')}</dt>
     <dd><TextBlock text={proposal.impact} /></dd>
   </dl>
+  <p class="muted note">{t('ui.proposal.tool', { tool: inlineText(proposal.tool, 64) })}</p>
   <p class="muted note">{t('ui.proposal.readonly')}</p>
 </Card>
 

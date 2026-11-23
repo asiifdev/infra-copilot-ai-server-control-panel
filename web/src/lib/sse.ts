@@ -68,6 +68,8 @@ export class SseDecoder {
 
   /** Ends the stream; returns an event that was started but not closed by a blank line. */
   finish(): SseEvent | null {
+    // A lone \r at the very end ended the last line (it was held back waiting for a \n).
+    if (this.#buf[this.#buf.length - 1] === CR) this.#buf.pop();
     if (this.#buf.length > 0) {
       const line = this.#decode(this.#buf);
       this.#buf = [];

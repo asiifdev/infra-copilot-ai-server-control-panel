@@ -5,12 +5,14 @@
 
 import axe from 'axe-core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { hostileShort } from '../mock/fixtures';
+import { hostileShort, id } from '../mock/fixtures';
 import Shell from '../src/Shell.svelte';
 import { i18n, type Locale } from '../src/lib/i18n.svelte';
 import { router } from '../src/lib/router.svelte';
 import { theme, type Theme } from '../src/lib/theme.svelte';
 import { eventually, installMock, readyApp, render, resetSession } from './helpers';
+
+const CHAT = id(300);
 
 const ROUTES = [
   '#/',
@@ -18,7 +20,7 @@ const ROUTES = [
   '#/nodes/node-alpha',
   '#/findings',
   '#/assistant',
-  '#/assistant/c1',
+  `#/assistant/${CHAT}`,
   '#/plans',
   '#/plans/move-alpha',
   '#/transports',

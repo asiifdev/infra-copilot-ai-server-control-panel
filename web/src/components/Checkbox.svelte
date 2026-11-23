@@ -3,17 +3,27 @@
     label: string;
     id: string;
     checked: boolean;
+    disabled?: boolean;
+    /** Explains the choice (or why it is unavailable); linked to the box for assistive technology. */
+    hint?: string;
   }
 
-  let { label, id, checked = $bindable() }: Props = $props();
+  let { label, id, checked = $bindable(), disabled = false, hint }: Props = $props();
 </script>
 
-<div class="check">
-  <input {id} type="checkbox" bind:checked />
-  <label for={id}>{label}</label>
+<div class="field">
+  <div class="check">
+    <input {id} type="checkbox" bind:checked {disabled} aria-describedby={hint ? `${id}-hint` : undefined} />
+    <label for={id}>{label}</label>
+  </div>
+  {#if hint}<p class="muted hint" id="{id}-hint">{hint}</p>{/if}
 </div>
 
 <style>
+  .hint {
+    margin: 0;
+    font-size: var(--nv-text-sm);
+  }
   .check {
     display: flex;
     align-items: center;

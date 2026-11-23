@@ -20,6 +20,24 @@ export function formatNumber(value: number, locale: string): string {
   }
 }
 
+const UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+
+/** Bytes in the largest sensible unit (steps of 1024), numbers in the locale. */
+export function formatBytes(value: number, locale: string): string {
+  let size = Math.max(0, value);
+  let unit = 0;
+  while (size >= 1024 && unit < UNITS.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  try {
+    const text = new Intl.NumberFormat(locale, { maximumFractionDigits: unit === 0 ? 0 : 1 }).format(size);
+    return `${text} ${UNITS[unit]}`;
+  } catch {
+    return `${Math.round(size)} ${UNITS[unit]}`;
+  }
+}
+
 /** Pretty-prints inventory item data (untrusted JSON) as text, bounded in size. */
 export function describeData(data: unknown, max = 2000): string {
   let text: string;

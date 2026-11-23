@@ -17,21 +17,40 @@
   const FOCUSABLE =
     'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-  // Moves the focus into the dialog (to the safe choice, cancel, first) and gives it back to the
-  // element that opened the dialog when the dialog goes away.
+  // Set once the person confirmed: the action usually removes the row the dialog was opened
+  // from (a deleted note or provider), so the opener is no longer a place to return to.
+  let confirmed = false;
+
+  // Moves the focus into the dialog (to the safe choice, cancel, first) and gives it back when
+  // the dialog goes away: to the element that opened it while that still exists, otherwise to
+  // the page heading, which is always there.
   const manageFocus: Attachment<HTMLElement> = (dialog) => {
     const opener = document.activeElement;
     dialog.querySelector<HTMLElement>(FOCUSABLE)?.focus();
     return () => {
-      if (opener instanceof HTMLElement) opener.focus();
+      if (!confirmed && opener instanceof HTMLElement && opener.isConnected) {
+        opener.focus();
+        return;
+      }
+      document.getElementById('page-title')?.focus();
     };
   };
+
+  function accept() {
+    confirmed = true;
+    onconfirm();
+  }
+
+  function cancel() {
+    confirmed = false;
+    oncancel();
+  }
 
   function onkeydown(event: KeyboardEvent & { currentTarget: HTMLElement }) {
     const dialog = event.currentTarget;
     if (event.key === 'Escape') {
       event.preventDefault();
-      oncancel();
+      cancel();
       return;
     }
     if (event.key !== 'Tab') return;
@@ -66,8 +85,8 @@
     <h2 id="confirm-title">{title}</h2>
     <p id="confirm-message">{message}</p>
     <div class="row actions">
-      <Button onclick={oncancel} disabled={busy}>{cancelLabel}</Button>
-      <Button variant="danger" onclick={onconfirm} {busy}>{confirmLabel}</Button>
+      <Button onclick={cancel} disabled={busy}>{cancelLabel}</Button>
+      <Button variant="danger" onclick={accept} {busy}>{confirmLabel}</Button>
     </div>
   </div>
 </div>

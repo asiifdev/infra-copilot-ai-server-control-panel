@@ -7,8 +7,8 @@ import StatusBadge from '../src/components/StatusBadge.svelte';
 import Toast from '../src/components/Toast.svelte';
 import { i18n } from '../src/lib/i18n.svelte';
 import { toasts } from '../src/lib/toast.svelte';
-import { HOSTILE } from '../mock/fixtures';
-import { installMock, render, signIn } from './helpers';
+import { HOSTILE, id } from '../mock/fixtures';
+import { installMock, render, signIn, unmountAll } from './helpers';
 
 beforeEach(async () => {
   const mock = installMock();
@@ -186,8 +186,64 @@ describe('ConfirmDialog', () => {
   });
 });
 
+describe('ConfirmDialog focus on close', () => {
+  function setup() {
+    const heading = document.createElement('h1');
+    heading.id = 'page-title';
+    heading.tabIndex = -1;
+    document.body.appendChild(heading);
+    const opener = document.createElement('button');
+    document.body.appendChild(opener);
+    opener.focus();
+    const root = render(ConfirmDialog, { title: 'Delete?', message: 'Sure?', confirmLabel: 'Yes delete', cancelLabel: 'Keep', onconfirm: () => {}, oncancel: () => {} });
+    return { heading, opener, root };
+  }
+
+  it('returns to the opener when the person cancels and it still exists', () => {
+    const { opener, heading } = setup();
+    const dialog = document.querySelector('[role="alertdialog"]') as HTMLElement;
+    dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    unmountAll();
+    expect(document.activeElement).toBe(opener);
+    heading.remove();
+    opener.remove();
+  });
+
+  it('goes to the page heading after a confirm, because the opener is usually gone by then', () => {
+    const { opener, heading, root } = setup();
+    const confirm = [...root.querySelectorAll('button')].find((b) => b.textContent?.includes('Yes delete')) as HTMLButtonElement;
+    confirm.click();
+    opener.remove(); // the list reloaded without the deleted row
+    unmountAll();
+    expect(document.activeElement).toBe(heading);
+    heading.remove();
+  });
+
+  it('goes to the page heading when the opener was removed even without a confirm', () => {
+    const { opener, heading } = setup();
+    opener.remove();
+    unmountAll();
+    expect(document.activeElement).toBe(heading);
+    heading.remove();
+  });
+});
+
 describe('ProposalCard', () => {
-  const proposal = { id: 1, action: 'Restart the web service', reason: 'It stopped answering.', impact: 'Ten seconds of downtime.', status: 'pending', tier: 2 };
+  const proposal = {
+    id: id(1),
+    tool: 'propose_restart',
+    tier: 2,
+    title: 'Restart the web service',
+    rationale: 'It stopped answering.',
+    suggested_action: 'Restart it.',
+    impact: 'Ten seconds of downtime.',
+    rule_id: null,
+    subject_key: null,
+    status: 'pending',
+    conversation_id: null,
+    created_at: '2026-11-22T07:00:00.000Z',
+    expires_at: '2026-11-23T07:00:00.000Z',
+  };
 
   it('shows action, reason, impact and state, and has no approve or run control', () => {
     const root = render(ProposalCard, { proposal });
@@ -201,7 +257,7 @@ describe('ProposalCard', () => {
 
   it('renders every hostile string as text', () => {
     for (const text of HOSTILE.slice(0, 8)) {
-      const root = render(ProposalCard, { proposal: { ...proposal, action: text, reason: text, impact: text } });
+      const root = render(ProposalCard, { proposal: { ...proposal, title: text, rationale: text, suggested_action: text, impact: text, tool: text } });
       expect(root.querySelector('script, img, svg, iframe, a')).toBeNull();
     }
   });

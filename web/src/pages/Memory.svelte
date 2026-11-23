@@ -4,6 +4,7 @@
   import { t } from '../lib/i18n.svelte';
   import { useResource } from '../lib/resource.svelte';
   import { toasts } from '../lib/toast.svelte';
+  import { inlineText } from '../lib/text';
   import type { MemoryNote } from '../lib/types';
   import AsyncView from '../components/AsyncView.svelte';
   import Button from '../components/Button.svelte';
@@ -12,6 +13,19 @@
   import EmptyState from '../components/EmptyState.svelte';
   import PageHeader from '../components/PageHeader.svelte';
   import TextBlock from '../components/TextBlock.svelte';
+
+  // Literal keys on purpose: the key-coverage test finds them. Unknown values show as plain text.
+  const KINDS: Record<string, string> = {
+    org_fact: 'ui.memory.kind_org_fact',
+    task: 'ui.memory.kind_task',
+    preference: 'ui.memory.kind_preference',
+  };
+  const SOURCES: Record<string, string> = {
+    person: 'ui.memory.source_person',
+    assistant: 'ui.memory.source_assistant',
+  };
+  const kindLabel = (kind: string) => (KINDS[kind] ? t(KINDS[kind]) : inlineText(kind, 40));
+  const sourceLabel = (source: string) => (SOURCES[source] ? t(SOURCES[source]) : inlineText(source, 40));
 
   const pending = useResource((signal) => api.memories('pending', signal));
   const active = useResource((signal) => api.memories('active', signal));
@@ -60,6 +74,7 @@
 
 {#snippet note(item: MemoryNote, canApprove: boolean)}
   <li class="note">
+    <p class="muted meta">{kindLabel(item.kind)} · {sourceLabel(item.source)}</p>
     <TextBlock text={item.content} />
     <div class="row">
       {#if canApprove}
@@ -123,6 +138,9 @@
     display: flex;
     flex-direction: column;
     gap: var(--nv-space-3);
+  }
+  .meta {
+    font-size: var(--nv-text-sm);
   }
   .note {
     display: flex;

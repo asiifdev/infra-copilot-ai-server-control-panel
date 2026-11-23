@@ -10,6 +10,7 @@ import type {
   MemoryNote,
   NodeSummary,
   PlanDetail,
+  PlanStep,
   ProposalView,
   ProviderView,
   TransportSummary,
@@ -27,6 +28,11 @@ export const HOSTILE: string[] = [
   'line one\nline two\r\nline three',
   `${'A'.repeat(300_000)}`,
 ];
+
+/** A fake UUID: the server uses 36-character ids. */
+export function id(n: number): string {
+  return `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+}
 
 export function hostile(index: number): string {
   return HOSTILE[index % HOSTILE.length] ?? '';
@@ -125,51 +131,128 @@ export function buildFixtures(options: { hostile?: boolean } = {}): Fixtures {
     },
   ];
 
+  const step = (seq: number, kind: string, depends_on: number[], extra: Partial<PlanStep> = {}): PlanStep => ({
+    seq,
+    kind,
+    depends_on,
+    ...extra,
+  });
+  const steps: PlanStep[] = [
+    step(0, 'inventory', [], { side: 'source' }),
+    step(1, 'inventory', [], { side: 'target' }),
+    step(2, 'backup', [0, 1]),
+    step(3, 'transfer', [2]),
+    step(4, 'restore', [3], { database: text('shop_db', 6) }),
+    step(5, 'verify', [4], { database: 'shop_db' }),
+    step(6, 'delta', [5]),
+    step(7, 'cutover', [6]),
+    step(8, 'post_verify', [7]),
+    step(9, 'decommission_source', [8]),
+  ];
   const plans: PlanDetail[] = [
     {
       name: 'move-alpha',
       status: 'draft',
-      spec: { source: 'node-alpha', target: 'node-gamma' },
-      steps: [
-        { kind: 'backup', side: 'source' },
-        { kind: 'restore', side: 'target', note: text('check ports', 6) },
-      ],
-      rendered: long('Plan move-alpha (draft)\n1. Back up the source.\n2. Restore on the target.', 0),
-      gates: { open_critical: [{ kind: 'listener', key: 'tcp:8080' }], accepted_critical: [], important: 1, info: 1, inventory_incomplete: false },
+      source_node: 'node-alpha',
+      target_node: 'node-gamma',
+      created_at: '2026-11-22T10:00:00Z',
+      spec: { source: { node_id: id(1) }, target: { node_id: id(2) } },
+      steps,
+      rendered: long('# Migration plan: move-alpha\n\n## Steps, in the order they run\n1. Collect an inventory\n', 0),
+      // The keys the server sends today (crates/server/src/api/data.rs), in its order.
+      gates: {
+        cutover_allowed: false,
+        shutdown_allowed: false,
+        inventory_incomplete: true,
+        comparison_current: true,
+        open_critical: [{ rule_id: 'PAR-001', subject: { kind: 'listener', key: text('tcp:8080', 4) } }],
+        accepted_critical: [
+          { rule_id: 'PAR-004', subject: { kind: 'cron', key: 'cron:backup' }, reason: long('Replaced by a managed job.', 3) },
+        ],
+        important: 1,
+        info: 17,
+      },
     },
-    { name: 'move-beta', status: 'draft', spec: {}, steps: [], rendered: 'Plan move-beta (draft)', gates: { important: 0 } },
+    {
+      name: 'move-beta',
+      status: 'draft',
+      source_node: 'node-beta',
+      target_node: 'node-gamma',
+      created_at: '2026-11-22T11:00:00Z',
+      spec: {},
+      steps: [],
+      rendered: '# Migration plan: move-beta',
+      gates: {
+        cutover_allowed: true,
+        shutdown_allowed: false,
+        inventory_incomplete: false,
+        comparison_current: false,
+        open_critical: [],
+        accepted_critical: [],
+        important: 0,
+        info: 0,
+      },
+    },
   ];
 
   const transports: TransportSummary[] = [
-    { name: 'drive-main', kind: 'rclone', verified_at: '2026-11-18T09:00:00Z', last_check: '2026-11-22T09:00:00Z' },
-    { name: 'sftp-spare', kind: 'sftp', verified_at: null, last_check: null },
+    { name: 'drive-main', kind: 'rclone', verified_at: '2026-11-18T09:00:00Z', last_check: { ok: true } },
+    { name: 'sftp-spare', kind: 'sftp', verified_at: null, last_check: { ok: false } },
+    { name: 'rsync-new', kind: 'rsync', verified_at: null, last_check: null },
   ];
 
   const providers: ProviderView[] = [
     { name: 'primary', base_url: 'https://llm.example.test/v1', model: 'model-large', params: { temperature: 0.2 }, has_key: true, is_default: true },
   ];
 
+  const memory = (n: number, kind: string, source: string, status: string, content: string): MemoryNote => ({
+    id: id(100 + n),
+    content,
+    kind,
+    source,
+    status,
+    conversation_id: null,
+    created_at: '2026-11-22T07:00:00.000Z',
+    updated_at: '2026-11-22T07:00:00.000Z',
+  });
   const memories: MemoryNote[] = [
-    { id: 1, content: long('The production database is read-only on weekends.', 4), status: 'pending', created_at: '2026-11-22T07:00:00Z' },
-    { id: 2, content: long('Backups are kept for 30 days.', 8), status: 'pending', created_at: '2026-11-22T07:05:00Z' },
-    { id: 3, content: long('The staging server is called node-gamma.', 7), status: 'active', created_at: '2026-11-19T07:00:00Z' },
+    memory(1, 'task', 'assistant', 'pending', long('The production database is read-only on weekends.', 4)),
+    memory(2, 'org_fact', 'assistant', 'pending', long('Backups are kept for 30 days.', 8)),
+    memory(3, 'org_fact', 'person', 'active', long('The staging server is called node-gamma.', 7)),
+    memory(4, 'preference', 'person', 'active', 'Prefers short answers.'),
   ];
 
+  const proposal = (n: number, tool: string, tier: number, status: string, title: string, rationale: string, action: string, impact: string): ProposalView => ({
+    id: id(200 + n),
+    tool,
+    tier,
+    title,
+    rationale,
+    suggested_action: action,
+    impact,
+    rule_id: 'PAR-001',
+    subject_key: 'tcp:8080',
+    status,
+    conversation_id: id(300),
+    created_at: '2026-11-22T07:00:00.000Z',
+    expires_at: '2026-11-23T07:00:00.000Z',
+  });
   const proposals: ProposalView[] = [
-    { id: 1, action: text('Restart the web service', 4), reason: long('It stopped answering health checks.', 1), impact: long('About ten seconds of downtime.', 2), status: 'pending', tier: 2 },
-    { id: 2, action: 'Rotate the log files', reason: 'Disk is 92 percent full.', impact: 'None expected.', status: 'rejected', tier: 'light_change' },
+    proposal(1, 'propose_restart', 2, 'pending', text('Restart the web service', 4), long('It stopped answering health checks.', 1), long('Restart the service.', 5), long('About ten seconds of downtime.', 2)),
+    proposal(2, 'propose_rotate_logs', 1, 'rejected', 'Rotate the log files', 'Disk is 92 percent full.', 'Rotate the logs.', 'None expected.'),
   ];
 
   const conversations: Conversation[] = [
-    { id: 'c1', title: text('Why is port 8080 missing?', 5), created_at: '2026-11-22T08:00:00Z' },
-    { id: 'c2', title: '', created_at: '2026-11-22T09:00:00Z' },
+    { id: id(300), title: text('Why is port 8080 missing?', 5), archived: false, created_at: '2026-11-22T08:00:00.000Z' },
+    { id: id(301), title: 'New conversation', archived: false, created_at: '2026-11-22T09:00:00.000Z' },
   ];
   const messages: Record<string, ChatMessage[]> = {
-    c1: [
-      { role: 'user', content: 'Why is port 8080 missing?' },
-      { role: 'assistant', content: long('The web service is not running on the new server.', 4) },
+    [id(300)]: [
+      { seq: 1, role: 'user', content: 'Why is port 8080 missing?', created_at: '2026-11-22T08:00:01.000Z', tools: [] },
+      { seq: 2, role: 'assistant', content: '', created_at: '2026-11-22T08:00:02.000Z', tools: ['search_inventory'] },
+      { seq: 4, role: 'assistant', content: long('The web service is not running on the new server.', 4), created_at: '2026-11-22T08:00:03.000Z', tools: [] },
     ],
-    c2: [],
+    [id(301)]: [],
   };
 
   return { nodes, inventory, findings, plans, transports, providers, memories, proposals, conversations, messages };

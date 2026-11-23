@@ -126,8 +126,16 @@
     vertical-align: top;
     overflow-wrap: anywhere;
   }
+  td {
+    min-width: 6rem;
+  }
+  /* A header never breaks inside a word, and a column never gets narrower than a few characters:
+     on a phone the table scrolls sideways (the region is focusable) instead of squeezing text
+     into one letter per line. */
   thead th {
     background: var(--nv-surface-2);
+    white-space: nowrap;
+    overflow-wrap: normal;
   }
   tbody th {
     font-weight: 600;

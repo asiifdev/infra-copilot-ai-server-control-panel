@@ -5,7 +5,7 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { buildFixtures, HOSTILE, type Fixtures } from './fixtures.ts';
+import { buildFixtures, HOSTILE, id as fakeId, type Fixtures } from './fixtures.ts';
 import type { ChatMessage, MemoryNote, ProviderInput, ProviderView } from '../src/lib/types';
 
 export const MOCK_TOKEN = 'mock-valid-token-0001';
@@ -44,30 +44,7 @@ export interface LoggedRequest {
   body: unknown;
 }
 
-const MESSAGES: Record<string, Record<string, string>> = {
-  en: {
-    invalid_token: 'The sign-in link is invalid or has expired.',
-    unauthorized: 'You are not signed in.',
-    forbidden: 'The request was refused.',
-    not_found: 'Not found.',
-    busy: 'A reply is already being written in this conversation.',
-    master_key_missing: 'The master key is not configured on the server.',
-    bad_request: 'The request is not valid.',
-    payload_too_large: 'The request is too large.',
-  },
-  id: {
-    invalid_token: 'Tautan masuk tidak valid atau sudah kedaluwarsa.',
-    unauthorized: 'Anda belum masuk.',
-    forbidden: 'Permintaan ditolak.',
-    not_found: 'Tidak ditemukan.',
-    busy: 'Balasan sedang ditulis di percakapan ini.',
-    master_key_missing: 'Kunci utama belum diatur di server.',
-    bad_request: 'Permintaan tidak valid.',
-    payload_too_large: 'Permintaan terlalu besar.',
-  },
-};
-
-function loadCatalog(locale: 'en' | 'id'): Record<string, string> {
+function loadCatalog(locale: 'en' | 'id', prefix = 'ui.'): Record<string, string> {
   const source = readFileSync(join(import.meta.dirname, '..', '..', 'crates', 'i18n', 'locales', `${locale}.txt`), 'utf8');
   const out: Record<string, string> = {};
   for (const raw of source.split('\n')) {
@@ -76,7 +53,7 @@ function loadCatalog(locale: 'en' | 'id'): Record<string, string> {
     const eq = line.indexOf('=');
     if (eq < 0) continue;
     const key = line.slice(0, eq).trim();
-    if (key.startsWith('ui.')) out[key] = line.slice(eq + 1).trim();
+    if (key.startsWith(prefix)) out[key] = line.slice(eq + 1).trim();
   }
   return out;
 }
@@ -94,7 +71,7 @@ function turnScript(message: string, hostile: boolean): Scripted[] {
   if (message.includes('error:')) {
     return [
       { event: 'delta', data: { text: 'Let me look at that. ' } },
-      { event: 'error', data: { code: 'provider_unreachable', message: 'The provider did not answer.' } },
+      { event: 'error', data: { code: 'ai_transport', message: 'The provider could not be reached. Check the address, your network and that the service is running.' } },
     ];
   }
   if (message.includes('hostile') || hostile) {
@@ -102,6 +79,12 @@ function turnScript(message: string, hostile: boolean): Scripted[] {
       { event: 'tool', data: { name: HOSTILE[0], tier: 0, status: 'ok', duration_ms: 3 } },
       ...HOSTILE.map((text) => ({ event: 'delta', data: { text: `${text}\n` } })),
       { event: 'done', data: { rounds: 1, tool_calls: 1 } },
+    ];
+  }
+  if (message.includes('huge')) {
+    return [
+      ...Array.from({ length: 4 }, () => ({ event: 'delta', data: { text: 'a'.repeat(100_000) } })),
+      { event: 'done', data: { rounds: 1, tool_calls: 0 } },
     ];
   }
   if (message.includes('slow')) {
@@ -115,13 +98,15 @@ function turnScript(message: string, hostile: boolean): Scripted[] {
     { event: 'delta', data: { text: 'Port 8080 is listed on the old ' } },
     { event: 'delta', data: { text: 'server but not on the new one.\n' } },
     { event: 'delta', data: { text: 'Start the service, then compare again. é\u{1F600}' } },
-    { event: 'done', data: { rounds: 1, tool_calls: 1, usage: { total_tokens: 42 } } },
+    { event: 'done', data: { rounds: 1, tool_calls: 1, usage: { estimated: true, tokens: 42 } } },
   ];
 }
 
 export function createMock(options: MockOptions = {}) {
   const fixtures: Fixtures = buildFixtures({ hostile: options.hostile });
   const catalogs = { en: loadCatalog('en'), id: loadCatalog('id') };
+  // The server's own error texts, so a message in the mock is the message of the real server.
+  const errorTexts = { en: loadCatalog('en', 'api.error.'), id: loadCatalog('id', 'api.error.') };
   const state = {
     ...fixtures,
     masterKey: options.masterKey ?? true,
@@ -130,7 +115,7 @@ export function createMock(options: MockOptions = {}) {
     activeTurns: new Set<string>(),
     /** Every request the mock saw, for tests (bodies are kept so tests can prove what was sent). */
     requests: [] as LoggedRequest[],
-    nextConversation: 3,
+    nextConversation: 2,
     nextSession: 1,
   };
   const delay = options.turnDelayMs ?? 0;
@@ -150,7 +135,7 @@ export function createMock(options: MockOptions = {}) {
 
   function fail(req: MockRequest, status: number, code: string): Response {
     const locale = localeOf(req);
-    return json(status, { error: { code, message: MESSAGES[locale]?.[code] ?? code } });
+    return json(status, { error: { code, message: errorTexts[locale][`api.error.${code}`] ?? code } });
   }
 
   function sessionOf(req: MockRequest): string | null {
@@ -225,11 +210,11 @@ export function createMock(options: MockOptions = {}) {
     // CSRF: every request that changes data needs the custom header (and JSON when it has a body).
     let body: unknown;
     if (method !== 'GET') {
-      if (req.headers.get('x-nodivara') !== '1') return fail(req, 403, 'forbidden');
-      if (req.body.length > BODY_LIMIT) return fail(req, 413, 'payload_too_large');
+      if (req.headers.get('x-nodivara') !== '1') return fail(req, 403, 'csrf_header');
+      if (req.body.length > BODY_LIMIT) return fail(req, 413, 'body_too_large');
       if (req.body !== '') {
         if (!(req.headers.get('content-type') ?? '').toLowerCase().startsWith('application/json')) {
-          return fail(req, 415, 'bad_request');
+          return fail(req, 415, 'bad_content_type');
         }
         try {
           body = JSON.parse(req.body);
@@ -259,7 +244,7 @@ export function createMock(options: MockOptions = {}) {
     }
 
     const session = sessionOf(req);
-    if (!session) return fail(req, 401, 'unauthorized');
+    if (!session) return fail(req, 401, 'unauthenticated');
 
     const [head, name, action] = sub;
     const query = req.query;
@@ -306,7 +291,12 @@ export function createMock(options: MockOptions = {}) {
       }
       case 'plans': {
         if (method !== 'GET') break;
-        if (!name) return json(200, state.plans.map((p) => ({ name: p.name, status: p.status })));
+        if (!name) {
+          return json(
+            200,
+            state.plans.map(({ name: n, status, source_node, target_node, created_at }) => ({ name: n, status, source_node, target_node, created_at })),
+          );
+        }
         const plan = state.plans.find((p) => p.name === name);
         return plan ? json(200, plan) : fail(req, 404, 'not_found');
       }
@@ -324,23 +314,25 @@ export function createMock(options: MockOptions = {}) {
             typeof input.model !== 'string' ||
             input.name === ''
           ) {
-            return fail(req, 400, 'bad_request');
+            return fail(req, 400, 'invalid_input');
           }
           if (input.key !== undefined && !state.masterKey) return fail(req, 409, 'master_key_missing');
-          const existing = state.providers.find((p) => p.name === input.name);
+          // The server only adds: an existing name is refused (replace = delete, then add), and a
+          // second default is refused. The first provider becomes the default by itself.
+          if (state.providers.some((p) => p.name === input.name)) return fail(req, 409, 'already_exists');
+          if (input.is_default === true && state.providers.some((p) => p.is_default)) {
+            return fail(req, 409, 'default_exists');
+          }
           const view: ProviderView = {
             name: input.name,
             base_url: input.base_url,
             model: input.model,
             params: input.params ?? {},
-            has_key: input.key !== undefined ? true : (existing?.has_key ?? false),
+            has_key: input.key !== undefined,
             is_default: input.is_default === true || state.providers.length === 0,
           };
-          if (view.is_default) state.providers.forEach((p) => (p.is_default = false));
-          const at = state.providers.findIndex((p) => p.name === input.name);
-          if (at >= 0) state.providers[at] = view;
-          else state.providers.push(view);
-          return json(200, view); // never echoes the key
+          state.providers.push(view);
+          return json(201, view); // never echoes the key
         }
         if (method === 'DELETE' && name) {
           const at = state.providers.findIndex((p) => p.name === name);
@@ -352,7 +344,11 @@ export function createMock(options: MockOptions = {}) {
           const provider = state.providers.find((p) => p.name === name);
           if (!provider) return fail(req, 404, 'not_found');
           if (provider.base_url.includes('unreachable')) {
-            return json(200, { ok: false, code: 'provider_unreachable', message: 'Could not reach the provider. Check the base URL.' });
+            return json(200, {
+              ok: false,
+              code: 'ai_transport',
+              message: errorTexts[localeOf(req)]['api.error.ai_transport'] ?? '',
+            });
           }
           return json(200, { ok: true, latency_ms: 120, model: provider.model });
         }
@@ -385,31 +381,42 @@ export function createMock(options: MockOptions = {}) {
       case 'conversations': {
         if (method === 'GET' && !name) return json(200, state.conversations);
         if (method === 'POST' && !name) {
-          const id = `c${state.nextConversation++}`;
+          const id = fakeId(300 + state.nextConversation++);
           const title = (body as { title?: unknown } | undefined)?.title;
-          const conversation = { id, title: typeof title === 'string' ? title : '', created_at: '2026-11-23T08:00:00Z' };
-          state.conversations.push(conversation);
+          const conversation = {
+            id,
+            title: typeof title === 'string' && title !== '' ? title : 'New conversation',
+            archived: false,
+            created_at: '2026-11-23T08:00:00.000Z',
+          };
+          state.conversations.unshift(conversation);
           state.messages[id] = [];
-          return json(200, conversation);
+          return json(201, conversation);
         }
         const history = name ? state.messages[name] : undefined;
         if (!name || !history) return fail(req, 404, 'not_found');
         if (method === 'GET' && action === 'messages') return json(200, history);
         if (method === 'POST' && action === 'turn') {
           const message = (body as { message?: unknown } | undefined)?.message;
-          if (typeof message !== 'string' || message.trim() === '') return fail(req, 400, 'bad_request');
+          if (typeof message !== 'string' || message.trim() === '') return fail(req, 400, 'message_empty');
           if (state.activeTurns.has(name)) return fail(req, 409, 'busy');
           state.activeTurns.add(name);
-          history.push({ role: 'user', content: message });
+          const at = () => new Date().toISOString();
+          history.push({ seq: history.length + 1, role: 'user', content: message, created_at: at(), tools: [] });
           const script = turnScript(message, options.hostile === true);
           return stream(req, script, () => {
             state.activeTurns.delete(name);
+            // Like the server: the tool calls of a turn are stored on an assistant row of their
+            // own (empty text), then the answer.
+            const tools = script.filter((x) => x.event === 'tool').map((x) => String(x.data.name));
+            if (tools.length > 0) {
+              history.push({ seq: history.length + 1, role: 'assistant', content: '', created_at: at(), tools });
+            }
             const text = script
-              .filter((s) => s.event === 'delta')
-              .map((s) => String(s.data.text))
+              .filter((x) => x.event === 'delta')
+              .map((x) => String(x.data.text))
               .join('');
-            const reply: ChatMessage = { role: 'assistant', content: text };
-            history.push(reply);
+            history.push({ seq: history.length + 1, role: 'assistant', content: text, created_at: at(), tools: [] });
           });
         }
         break;

@@ -58,26 +58,44 @@ export interface FindingsView {
 export interface PlanSummary {
   name: string;
   status: string;
+  source_node: string;
+  target_node: string;
+  created_at: string;
 }
 
+/** One step of a plan. `seq` counts from 0; `depends_on` lists the `seq` of earlier steps. */
 export interface PlanStep {
-  [key: string]: unknown;
+  seq: number;
+  kind: string;
+  depends_on: number[];
+  /** Inventory steps only: "source" or "target". */
+  side?: string;
+  /** Restore and verify steps only: the database key from the plan. */
+  database?: string;
 }
 
-export interface PlanDetail {
-  name: string;
-  status: string;
+/** A finding a gate mentions (untrusted text). `reason` is set on accepted critical findings. */
+export interface GateFinding {
+  rule_id: string;
+  subject: { kind: string; key: string };
+  reason?: string;
+}
+
+export interface PlanDetail extends PlanSummary {
   spec: unknown;
   steps: PlanStep[];
   rendered: string;
   gates: Record<string, unknown>;
 }
 
+/** Last connection check of a transport: numbers and booleans only (the server drops strings). */
+export type TransportCheck = { ok?: boolean; [key: string]: unknown };
+
 export interface TransportSummary {
   name: string;
   kind: string;
   verified_at: string | null;
-  last_check: string | null;
+  last_check: TransportCheck | null;
 }
 
 export interface ProviderView {
@@ -103,38 +121,56 @@ export type ProviderTestResult =
   | { ok: false; code: string; message: string };
 
 export interface MemoryNote {
-  id: string | number;
+  id: string;
   content: string;
+  /** org_fact | task | preference */
+  kind: string;
+  /** person | assistant */
+  source: string;
+  /** pending | active */
   status: string;
-  created_at?: string;
+  conversation_id: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ProposalView {
-  id: string | number;
-  action: string;
-  reason: string;
+  id: string;
+  tool: string;
+  /** 1 to 4 */
+  tier: number;
+  title: string;
+  rationale: string;
+  suggested_action: string;
   impact: string;
+  rule_id: string | null;
+  subject_key: string | null;
+  /** pending | approved | rejected | executed | failed | expired */
   status: string;
-  tier?: number | string;
-  created_at?: string;
+  conversation_id: string | null;
+  created_at: string;
+  expires_at: string;
 }
 
 export interface Conversation {
-  id: string | number;
+  id: string;
   title: string;
-  created_at?: string;
+  archived: boolean;
+  created_at: string;
 }
 
 export interface ChatMessage {
-  id?: string | number;
+  seq: number;
   role: string;
   content: string;
-  created_at?: string;
+  created_at: string;
+  /** Names of the tools the assistant called in this message. */
+  tools: string[];
 }
 
 /** Events of POST /api/conversations/{id}/turn. */
 export type TurnEvent =
   | { type: 'delta'; text: string }
   | { type: 'tool'; name: string; tier: number | string; status: string; duration_ms?: number }
-  | { type: 'done'; rounds?: number; tool_calls?: number; usage?: unknown }
+  | { type: 'done'; rounds?: number; tool_calls?: number; usage?: { estimated?: boolean; tokens?: number } }
   | { type: 'error'; code: string; message: string };

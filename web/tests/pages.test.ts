@@ -1,11 +1,15 @@
 import { flushSync } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Assistant from '../src/pages/Assistant.svelte';
+import PlanDetail from '../src/pages/PlanDetail.svelte';
 import Settings from '../src/pages/Settings.svelte';
 import { i18n } from '../src/lib/i18n.svelte';
 import { toasts } from '../src/lib/toast.svelte';
 import type { Mock } from '../mock/server';
 import { byText, eventually, installMock, readyApp, render, resetSession } from './helpers';
+import { id } from '../mock/fixtures';
+
+const CHAT = id(300);
 
 function type(element: HTMLInputElement | HTMLTextAreaElement, value: string): void {
   element.value = value;
@@ -37,7 +41,7 @@ describe('Assistant page', () => {
   async function open(options?: Parameters<typeof installMock>[0]) {
     mock = installMock(options);
     await readyApp(mock);
-    const root = render(Assistant, { conversation: 'c1' });
+    const root = render(Assistant, { conversation: CHAT });
     await eventually(() => expect(root.querySelectorAll('.messages > li').length).toBe(2)); // stored history
     return root;
   }
@@ -48,11 +52,14 @@ describe('Assistant page', () => {
     flushSync();
   }
 
-  it('lists conversations, shows the stored messages and a labelled live log', async () => {
+  it('lists conversations and shows the stored messages in a labelled list that is not a live region', async () => {
     const root = await open();
     expect(root.textContent).toContain('Why is port 8080 missing?');
-    const log = root.querySelector('[role="log"]') as HTMLElement;
-    expect(log.getAttribute('aria-live')).toBe('polite');
+    const list = root.querySelector('ol.messages') as HTMLElement;
+    expect(list.getAttribute('aria-label')).toBe('Messages');
+    expect(root.querySelector('[role="log"]')).toBeNull();
+    expect(list.closest('[aria-live]')).toBeNull();
+    expect(list.querySelector('[aria-live]')).toBeNull();
     expect(root.querySelector('nav a[aria-current="page"]')?.textContent).toContain('Why is port 8080 missing?');
   });
 
@@ -61,10 +68,39 @@ describe('Assistant page', () => {
     await ask(root, 'hello');
     await eventually(() => expect(root.textContent).toContain('Start the service, then compare again.'));
     await eventually(() => expect((button(root, 'Send')).disabled).toBe(true)); // empty draft after sending
-    expect(root.querySelector('.chips')?.textContent).toContain('search_inventory');
-    expect(root.querySelector('.chips')?.textContent).toContain('Tier 0');
+    const live = [...root.querySelectorAll('.chips')].pop();
+    expect(live?.textContent).toContain('search_inventory');
+    expect(live?.textContent).toContain('Tier 0');
     expect(root.textContent).not.toContain('Stop');
     expect(root.querySelectorAll('.messages > li').length).toBe(4);
+  });
+
+  it('announces a streamed reply only when it starts and when it ends, not word by word', async () => {
+    const root = await open({ turnDelayMs: 5 });
+    const status = () => root.querySelector('p[role="status"]') as HTMLElement;
+    expect(status().textContent).toBe('');
+    const seen: string[] = [];
+    const watcher = new MutationObserver(() => {
+      const text = status().textContent ?? '';
+      if (seen[seen.length - 1] !== text) seen.push(text);
+    });
+    watcher.observe(status(), { childList: true, characterData: true, subtree: true });
+    await ask(root, 'slow please');
+    await eventually(() => expect(status().textContent).toBe('The assistant has finished its reply.'));
+    watcher.disconnect();
+    expect(seen).toEqual(['Writing a reply', 'The assistant has finished its reply.']);
+  });
+
+  it('caps a runaway reply, says so, ends the turn and keeps the composer usable', async () => {
+    const root = await open();
+    await ask(root, 'huge please');
+    await eventually(() => expect(root.textContent).toContain('The reply was very long and was cut here.'));
+    const longest = Math.max(...[...root.querySelectorAll('.messages .text, .messages p')].map((p) => p.textContent?.length ?? 0));
+    expect(longest).toBeLessThanOrEqual(200_000 + 500);
+    expect(root.textContent).not.toContain('Stopped before the reply was finished.');
+    await eventually(() => expect(mock.state.activeTurns.size).toBe(0));
+    type(root.querySelector('#composer') as HTMLTextAreaElement, 'next');
+    expect(button(root, 'Send').disabled).toBe(false);
   });
 
   it('Stop aborts the stream and the composer is usable again', async () => {
@@ -93,7 +129,7 @@ describe('Assistant page', () => {
 
   it('shows the busy advice (409) with a link to Settings', async () => {
     const root = await open();
-    mock.state.activeTurns.add('c1');
+    mock.state.activeTurns.add(CHAT);
     await ask(root, 'hello');
     await eventually(() => expect(root.querySelector('[role="alert"]')).not.toBeNull());
     const alert = root.querySelector('[role="alert"]') as HTMLElement;
@@ -116,14 +152,14 @@ describe('Assistant page', () => {
     expect(blocks.some((text) => text.includes('line one\nline two'))).toBe(true);
     // Bidi override and zero-width characters are removed, the visible text stays.
     expect(root.textContent).not.toMatch(/[\u202A-\u202E\u2066-\u2069\u200B]/);
-    // A 300 000 character string is cut and says so.
-    expect(root.textContent).toContain('This text is very long and was cut short.');
+    // A 300 000 character string is cut while it streams, and the reply says so.
+    expect(root.textContent).toContain('The reply was very long and was cut here.');
   });
 
   it('creates a conversation and navigates to it', async () => {
     const root = await open();
     button(root, 'New conversation').click();
-    await eventually(() => expect(window.location.hash).toBe('#/assistant/c3'));
+    await eventually(() => expect(window.location.hash).toBe(`#/assistant/${id(302)}`));
   });
 
   it('does not send an empty message', async () => {
@@ -160,6 +196,58 @@ describe('Settings page', () => {
     }
   }
 
+  it('says it adds providers, explains how to replace one, and locks the default box when a default exists', async () => {
+    const { root } = await open();
+    expect(root.textContent).toContain('Add a provider');
+    expect(root.textContent).not.toContain('Add or update');
+    expect(root.textContent).toContain('To replace a provider, delete it first');
+    const box = field(root, 'provider-default');
+    expect(box.disabled).toBe(true);
+    expect(box.checked).toBe(false);
+    expect(root.textContent).toContain('A default provider already exists');
+  });
+
+  it('preselects "use as the default" when there is no provider yet, and sends it', async () => {
+    const mock = installMock();
+    mock.state.providers.length = 0;
+    await readyApp(mock);
+    const root = render(Settings);
+    await eventually(() => expect(root.textContent).toContain('No provider yet.'));
+    const box = field(root, 'provider-default');
+    expect(box.checked).toBe(true);
+    expect(box.disabled).toBe(false);
+    expect(root.textContent).toContain('first provider, so it becomes the default');
+    type(field(root, 'provider-name'), 'first');
+    type(field(root, 'provider-url'), 'https://other.example.test/v1');
+    type(field(root, 'provider-model'), 'model-small');
+    button(root, 'Add provider').click();
+    await eventually(() => expect(mock.state.providers.length).toBe(1));
+    const sent = mock.state.requests.find((r) => r.method === 'POST' && r.path === '/api/providers');
+    expect(sent?.body).toMatchObject({ name: 'first', is_default: true });
+    expect(mock.state.providers[0]?.is_default).toBe(true);
+  });
+
+  it('lets the person untick the default box when it is the first provider', async () => {
+    const mock = installMock();
+    mock.state.providers.length = 0;
+    await readyApp(mock);
+    const root = render(Settings);
+    await eventually(() => expect(field(root, 'provider-default').checked).toBe(true));
+    const box = field(root, 'provider-default');
+    box.click();
+    flushSync();
+    expect(box.checked).toBe(false);
+  });
+
+  it('shows the replace advice when the server answers already_exists', async () => {
+    const { root } = await open();
+    type(field(root, 'provider-name'), 'primary');
+    type(field(root, 'provider-url'), 'https://other.example.test/v1');
+    type(field(root, 'provider-model'), 'model-small');
+    button(root, 'Add provider').click();
+    await eventually(() => expect(root.textContent).toContain('delete the old one first and then add it again'));
+  });
+
   it('lists providers with the key state but never a key; the key field is a password field with autocomplete off', async () => {
     const { root } = await open();
     expect(root.textContent).toContain('Stored (hidden)');
@@ -172,7 +260,7 @@ describe('Settings page', () => {
     const { mock, root } = await open();
     fill(root);
     expect(field(root, 'provider-key').value).toBe(secret);
-    button(root, 'Save provider').click();
+    button(root, 'Add provider').click();
     await eventually(() => expect(root.textContent).toContain('second'));
     const post = mock.state.requests.filter((r) => r.method === 'POST' && r.path === '/api/providers');
     expect(post.length).toBe(1);
@@ -180,7 +268,7 @@ describe('Settings page', () => {
     expect(field(root, 'provider-key').value).toBe(''); // ...and cleared
     nowhereVisible(root);
     expect(JSON.stringify(mock.state.providers)).not.toContain(secret); // the mock never kept it either
-    expect(toasts.items.map((x) => x.text)).toContain('The provider was saved.');
+    expect(toasts.items.map((x) => x.text)).toContain('The provider was added.');
     nowhereVisible(root);
   });
 
@@ -193,7 +281,7 @@ describe('Settings page', () => {
         : inner(input, init),
     );
     fill(root);
-    button(root, 'Save provider').click();
+    button(root, 'Add provider').click();
     await eventually(() => expect(root.textContent).toContain('Something went wrong on the server.'));
     expect(field(root, 'provider-key').value).toBe('');
     nowhereVisible(root);
@@ -205,7 +293,7 @@ describe('Settings page', () => {
     type(field(root, 'provider-name'), '!!');
     type(field(root, 'provider-url'), 'ftp://x');
     type(field(root, 'provider-params'), '{not json');
-    button(root, 'Save provider').click();
+    button(root, 'Add provider').click();
     flushSync();
     expect(root.textContent).toContain('Enter a valid JSON object, or leave this empty.');
     expect(root.textContent).toContain('Enter a full address that starts with https:// or http://.');
@@ -213,7 +301,7 @@ describe('Settings page', () => {
     expect(root.textContent).toContain('Enter a name with letters');
     expect(mock.state.requests.length).toBe(before);
     type(field(root, 'provider-params'), '[1,2]');
-    button(root, 'Save provider').click();
+    button(root, 'Add provider').click();
     flushSync();
     expect(root.textContent).toContain('Enter a valid JSON object');
   });
@@ -230,7 +318,7 @@ describe('Settings page', () => {
     const { mock, root } = await open();
     mock.state.masterKey = false; // the server lost the key after the page loaded
     fill(root);
-    button(root, 'Save provider').click();
+    button(root, 'Add provider').click();
     await eventually(() => expect(root.textContent).toContain('The server has no master key'));
     expect(root.textContent).toContain('Start the server with the NODIVARA_MASTER_KEY');
     expect(field(root, 'provider-key').value).toBe('');
@@ -244,7 +332,7 @@ describe('Settings page', () => {
     button(root, 'Test connection').click();
     await eventually(() => expect(root.textContent).toContain('The AI provider could not be reached.'));
     expect(root.textContent).toContain('Check the base URL in Settings');
-    expect(root.textContent).toContain('Could not reach the provider.'); // the server detail, as text
+    expect(root.textContent).toContain('Check the address, your network'); // the server detail, as text
   });
 
   it('asks before deleting a provider, and deletes only after confirmation', async () => {
@@ -277,5 +365,80 @@ describe('Settings page', () => {
     flushSync();
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect(Object.keys(localStorage).sort()).toEqual(['nv.locale', 'nv.theme']);
+  });
+});
+
+describe('Plan detail page', () => {
+  async function open(name: string, locale: 'en' | 'id' = 'en') {
+    const mock = installMock();
+    await readyApp(mock, locale);
+    const root = render(PlanDetail, { name });
+    await eventually(() => expect(root.querySelector('table')).not.toBeNull());
+    return { mock, root };
+  }
+
+  it('shows the steps as an ordered table with localized kinds, sides and dependencies', async () => {
+    const { root } = await open('move-alpha');
+    const rows = [...root.querySelectorAll('tbody tr')].map((row) => row.textContent?.replace(/\s+/g, ' ').trim() ?? '');
+    expect(rows.length).toBe(10);
+    expect(rows[0]).toContain('Collect an inventory');
+    expect(rows[0]).toContain('Source server');
+    expect(rows[0]).toContain('First: it waits for nothing');
+    expect(rows[1]).toContain('Target server');
+    expect(rows[2]).toContain('Take the backup');
+    expect(rows[2]).toContain('After step 1, 2');
+    expect(rows[4]).toContain('Database shop_db');
+    expect(rows[9]).toContain('Shut down the old server');
+    expect(root.textContent).not.toMatch(/depends_on|"kind"|\{|\[object/);
+  });
+
+  it('shows every gate as a localized label with Yes/No or a number, never a raw key', async () => {
+    const { root } = await open('move-alpha');
+    const facts = root.querySelector('dl.facts, dl')?.textContent?.replace(/\s+/g, ' ') ?? '';
+    for (const key of ['cutover_allowed', 'shutdown_allowed', 'inventory_incomplete', 'comparison_current', 'open_critical', 'accepted_critical']) {
+      expect(facts).not.toContain(key);
+    }
+    expect(facts).toContain('Moving traffic allowed No');
+    expect(facts).toContain('Shutting down the old server allowed No');
+    expect(facts).toContain('Inventory incomplete Yes');
+    expect(facts).toContain('Comparison is up to date Yes');
+    expect(facts).toContain('Critical findings still open 1');
+    expect(facts).toContain('PAR-001 on listener tcp:8080');
+    expect(facts).toContain('Accepted because: Replaced by a managed job.');
+    expect(facts).toContain('Informational findings 17');
+  });
+
+  it('is localized in Indonesian', async () => {
+    const { root } = await open('move-alpha', 'id');
+    expect(root.textContent).toContain('Kumpulkan inventaris');
+    expect(root.textContent).toContain('Server asal');
+    expect(root.textContent).toContain('Setelah langkah 1, 2');
+  });
+
+  it('degrades unknown step kinds, sides and gate keys to readable text', async () => {
+    const mock = installMock();
+    const plan = mock.state.plans[1]!;
+    plan.steps = [{ seq: 0, kind: 'teleport', depends_on: [], side: 'moon' }, { seq: 5, kind: 'backup', depends_on: [0, 9] }];
+    plan.gates = { future_gate: true, other_number: 3, nested: { a: 1 }, open_critical: 'oops' };
+    await readyApp(mock);
+    const root = render(PlanDetail, { name: 'move-beta' });
+    await eventually(() => expect(root.querySelector('table')).not.toBeNull());
+    const text = root.textContent?.replace(/\s+/g, ' ') ?? '';
+    expect(text).toContain('Other step: teleport');
+    expect(text).toContain('moon');
+    expect(text).toContain('After step 1, 10'); // a missing step keeps its own number plus one
+    expect(text).toContain('Other gate: future_gate Yes');
+    expect(text).toContain('Other gate: other_number 3');
+    expect(text).toContain('Other gate: nested');
+    expect(text).toContain('Critical findings still open oops');
+  });
+
+  it('renders hostile step and gate text as inert text', async () => {
+    const mock = installMock({ hostile: true });
+    await readyApp(mock);
+    const root = render(PlanDetail, { name: 'move-alpha' });
+    await eventually(() => expect(root.querySelector('table')).not.toBeNull());
+    expect(root.querySelector('script, img, svg, iframe, a[href^="javascript"]')).toBeNull();
+    expect((window as unknown as { __pwned?: unknown }).__pwned).toBeUndefined();
   });
 });

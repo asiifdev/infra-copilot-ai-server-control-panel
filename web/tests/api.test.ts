@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError, buildUrl, onUnauthorized, setApiLocale, streamTurn } from '../src/lib/api';
 import type { TurnEvent } from '../src/lib/types';
 import { installMock, signIn } from './helpers';
+import { id } from '../mock/fixtures';
+
+const CHAT = id(300);
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -14,7 +17,7 @@ describe('api client', () => {
     installMock();
     const handler = vi.fn();
     onUnauthorized(handler);
-    await expect(api.session()).rejects.toMatchObject({ status: 401, code: 'unauthorized' });
+    await expect(api.session()).rejects.toMatchObject({ status: 401, code: 'unauthenticated' });
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
@@ -39,8 +42,8 @@ describe('api client', () => {
     mock.state.requests.length = 0;
     await api.nodes();
     await api.createConversation('t');
-    await api.approveMemory(1);
-    await api.deleteMemory(2);
+    await api.approveMemory(id(101));
+    await api.deleteMemory(id(102));
     await api.logout();
     const byMethod = (m: string) => mock.state.requests.filter((r) => r.method === m);
     expect(byMethod('GET').every((r) => r.headers['x-nodivara'] === undefined)).toBe(true);
@@ -136,7 +139,7 @@ describe('streamTurn', () => {
   it('reports delta, tool and done events in order', async () => {
     const mock = installMock();
     await signIn(mock);
-    await streamTurn('c1', 'hello', (e) => events.push(e));
+    await streamTurn(CHAT, 'hello', (e) => events.push(e));
     expect(events.map((e) => e.type)).toEqual(['tool', 'delta', 'delta', 'delta', 'done']);
     const text = events.filter((e) => e.type === 'delta').map((e) => (e as { text: string }).text).join('');
     expect(text).toContain('Port 8080');
@@ -148,7 +151,7 @@ describe('streamTurn', () => {
       const mock = installMock({ eol, splitChunks: true });
       await signIn(mock);
       const seen: TurnEvent[] = [];
-      await streamTurn('c1', 'hello', (e) => seen.push(e));
+      await streamTurn(CHAT, 'hello', (e) => seen.push(e));
       expect(seen.map((e) => e.type)).toEqual(['tool', 'delta', 'delta', 'delta', 'done']);
       vi.unstubAllGlobals();
     }
@@ -157,9 +160,9 @@ describe('streamTurn', () => {
   it('refuses a second turn in the same conversation with 409 busy', async () => {
     const mock = installMock({ turnDelayMs: 5 });
     await signIn(mock);
-    const first = streamTurn('c1', 'slow please', () => {});
+    const first = streamTurn(CHAT, 'slow please', () => {});
     await new Promise((r) => setTimeout(r, 20));
-    await expect(streamTurn('c1', 'again', () => {})).rejects.toMatchObject({ status: 409, code: 'busy' });
+    await expect(streamTurn(CHAT, 'again', () => {})).rejects.toMatchObject({ status: 409, code: 'busy' });
     const controller = new AbortController();
     controller.abort();
     void first.catch(() => undefined);
@@ -170,7 +173,7 @@ describe('streamTurn', () => {
     await signIn(mock);
     const controller = new AbortController();
     const seen: TurnEvent[] = [];
-    const pending = streamTurn('c1', 'slow please', (e) => seen.push(e), controller.signal);
+    const pending = streamTurn(CHAT, 'slow please', (e) => seen.push(e), controller.signal);
     await new Promise((r) => setTimeout(r, 40));
     controller.abort();
     await expect(pending).rejects.toBeDefined();
@@ -183,14 +186,14 @@ describe('streamTurn', () => {
   it('ignores events it does not know and malformed data', async () => {
     const body = 'event: nope\ndata: {}\n\nevent: delta\ndata: not json\n\nevent: delta\ndata: {"text":"ok"}\n\nevent: done\ndata: {}\n\n';
     vi.stubGlobal('fetch', async () => new Response(body, { status: 200 }));
-    await streamTurn('c1', 'x', (e) => events.push(e));
+    await streamTurn(CHAT, 'x', (e) => events.push(e));
     expect(events).toEqual([{ type: 'delta', text: 'ok' }, { type: 'done', rounds: undefined, tool_calls: undefined, usage: undefined }]);
   });
 
   it('sanitises an error event code', async () => {
     const body = 'event: error\ndata: {"code":"<img onerror=1>","message":"m"}\n\n';
     vi.stubGlobal('fetch', async () => new Response(body, { status: 200 }));
-    await streamTurn('c1', 'x', (e) => events.push(e));
+    await streamTurn(CHAT, 'x', (e) => events.push(e));
     expect(events[0]).toMatchObject({ type: 'error', code: 'internal' });
   });
 });

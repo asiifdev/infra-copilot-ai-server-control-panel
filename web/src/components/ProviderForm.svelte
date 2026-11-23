@@ -10,10 +10,14 @@
   interface Props {
     /** False when the server has no master key: a key cannot be stored then. */
     masterKeyConfigured: boolean;
+    /** No provider exists yet: the first one becomes the default, so the box starts checked. */
+    isFirst: boolean;
+    /** A default exists already: the server refuses a second one, so the box is off and locked. */
+    hasDefault: boolean;
     onsaved: () => void;
   }
 
-  let { masterKeyConfigured, onsaved }: Props = $props();
+  let { masterKeyConfigured, isFirst, hasDefault, onsaved }: Props = $props();
 
   let name = $state('');
   let baseUrl = $state('');
@@ -22,7 +26,9 @@
   // and nothing ever reads it back from the server.
   let key = $state('');
   let params = $state('');
-  let isDefault = $state(false);
+  // null = the person has not touched the box: it follows whether this is the first provider.
+  let defaultChoice = $state<boolean | null>(null);
+  const isDefault = $derived(!hasDefault && (defaultChoice ?? isFirst));
   let saving = $state(false);
   let failure = $state.raw<{ code: string; detail: string } | null>(null);
   let errors = $state<{ name?: string; baseUrl?: string; model?: string; params?: string; key?: string }>({});
@@ -77,7 +83,7 @@
       baseUrl = '';
       model = '';
       params = '';
-      isDefault = false;
+      defaultChoice = null;
       onsaved();
     } catch (cause) {
       failure =
@@ -94,6 +100,7 @@
 </script>
 
 <form class="stack" onsubmit={submit} novalidate>
+  <p class="muted">{t('ui.settings.add_hint')}</p>
   <TextField id="provider-name" label={t('ui.settings.name')} bind:value={name} required error={errors.name} />
   <TextField
     id="provider-url"
@@ -124,7 +131,13 @@
     hint={t('ui.settings.params_hint')}
     error={errors.params}
   />
-  <Checkbox id="provider-default" label={t('ui.settings.is_default')} bind:checked={isDefault} />
+  <Checkbox
+    id="provider-default"
+    label={t('ui.settings.is_default')}
+    bind:checked={() => isDefault, (value) => (defaultChoice = value)}
+    disabled={hasDefault}
+    hint={hasDefault ? t('ui.settings.default_exists_hint') : isFirst ? t('ui.settings.default_first_hint') : undefined}
+  />
   {#if failure}<ErrorNotice code={failure.code} detail={failure.detail} />{/if}
   <div class="row">
     <Button type="submit" variant="primary" busy={saving} busyLabel={t('ui.common.saving')}>{t('ui.settings.save')}</Button>

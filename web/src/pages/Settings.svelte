@@ -162,7 +162,11 @@
   </Card>
 
   <Card title={t('ui.settings.add_provider')}>
-    <ProviderForm masterKeyConfigured={masterKey} onsaved={() => { toasts.push('success', t('ui.settings.saved')); providers.reload(); }} />
+    <ProviderForm
+      masterKeyConfigured={masterKey}
+      isFirst={providers.data?.length === 0}
+      hasDefault={providers.data?.some((p) => p.is_default) ?? false}
+      onsaved={() => { toasts.push('success', t('ui.settings.saved')); providers.reload(); }} />
   </Card>
 
   <Card title={t('ui.settings.session')}>

@@ -81,6 +81,18 @@
     }
   }
 
+  // What a screen reader hears about the answer: once when it starts, once when it is over.
+  const announcement = $derived.by(() => {
+    if (chat.streaming) return t('ui.assistant.thinking');
+    if (!chat.live) return ''; // a stored conversation that was just opened is not news
+    const last = chat.messages[chat.messages.length - 1];
+    if (!last || last.role !== 'assistant') return '';
+    if (last.error) return t(errorKey(last.error.code));
+    if (last.stopped) return t('ui.assistant.stopped');
+    if (last.truncated) return t('ui.assistant.truncated');
+    return last.text ? t('ui.assistant.reply_ready') : '';
+  });
+
   const historyFailed = $derived(history.status === 'error' ? history.error : null);
 </script>
 
@@ -122,13 +134,14 @@
         {#if historyFailed}
           <p class="muted">{t(errorKey(historyFailed.code))}</p>
         {/if}
-        <div role="log" aria-live="polite" aria-busy={chat.streaming} aria-label={t('ui.assistant.messages')}>
-          <ol class="messages" {@attach followNewest}>
-            {#each chat.messages as message, index (index)}
-              <ChatMessage {message} writing={chat.streaming && index === chat.messages.length - 1} />
-            {/each}
-          </ol>
-        </div>
+        <!-- Not a live region: announcing every streamed word would drown a screen reader. The
+             status line below speaks only when a reply starts and when it ends. -->
+        <ol class="messages" aria-label={t('ui.assistant.messages')} aria-busy={chat.streaming} {@attach followNewest}>
+          {#each chat.messages as message, index (index)}
+            <ChatMessage {message} writing={chat.streaming && index === chat.messages.length - 1} />
+          {/each}
+        </ol>
+        <p class="visually-hidden" role="status" aria-live="polite">{announcement}</p>
         {#if chat.messages.length === 0 && history.status === 'ready'}
           <p class="muted">{t('ui.assistant.empty')}</p>
         {/if}

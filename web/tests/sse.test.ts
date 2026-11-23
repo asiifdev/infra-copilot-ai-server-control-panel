@@ -14,6 +14,18 @@ function decodeAll(chunks: Uint8Array[]): SseEvent[] {
 
 const data = (events: SseEvent[]) => events.map((e) => e.data);
 
+describe('SseDecoder end of stream', () => {
+  it('drops the carriage return that ended the last line when the stream stops right after it', () => {
+    expect(data(decodeAll([enc.encode('data: one\r')]))).toEqual(['one']);
+    expect(data(decodeAll([enc.encode('event: x\rdata: two\r')]))).toEqual(['two']);
+    expect(data(decodeAll([enc.encode('data: a\r\r'), enc.encode('data: b\r')]))).toEqual(['a', 'b']);
+  });
+
+  it('keeps a carriage return inside the data of an unfinished line', () => {
+    expect(data(decodeAll([enc.encode('data: x\r\ndata: y')]))).toEqual(['x\ny']);
+  });
+});
+
 describe('SseDecoder', () => {
   it('decodes simple events with every line ending', () => {
     for (const sep of ['\n', '\r\n', '\r']) {

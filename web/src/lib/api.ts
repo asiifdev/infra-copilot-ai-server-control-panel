@@ -210,7 +210,10 @@ function parseTurnEvent(name: string | null, data: string): TurnEvent | null {
         type: 'done',
         rounds: typeof value.rounds === 'number' ? value.rounds : undefined,
         tool_calls: typeof value.tool_calls === 'number' ? value.tool_calls : undefined,
-        usage: value.usage,
+        usage:
+          typeof value.usage === 'object' && value.usage !== null
+            ? (value.usage as { estimated?: boolean; tokens?: number })
+            : undefined,
       };
     case 'error':
       return {

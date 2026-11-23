@@ -1,0 +1,855 @@
+{
+ "_about": "Real responses of `infra serve` (demo data, scripts/demo-serve.sh --fake-ai), recorded 2026-11-23 with curl-equivalent requests. Lists are shortened; shapes are exact. Used by web/tests/recorded.test.ts to keep the mock honest.",
+ "after_logout": {
+  "body": {
+   "error": {
+    "code": "unauthenticated",
+    "message": "You are not signed in, or the session has ended. Open the address printed by `infra serve` again. If that address was already used or has expired, stop the server and start it again to get a new one."
+   }
+  },
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/session",
+  "status": 401
+ },
+ "conversation_create": {
+  "body": {
+   "archived": false,
+   "created_at": "2026-11-23T18:30:20.026Z",
+   "id": "3214aadf-fc61-4679-9c06-5dccbccbc6ff",
+   "title": "New conversation"
+  },
+  "content_type": "application/json; charset=utf-8",
+  "method": "POST",
+  "path": "/api/conversations",
+  "status": 201
+ },
+ "conversation_create_title": {
+  "body": {
+   "archived": false,
+   "created_at": "2026-11-23T18:30:20.029Z",
+   "id": "514fd020-094b-44e6-ab8c-18cd92684345",
+   "title": "My title"
+  },
+  "content_type": "application/json; charset=utf-8",
+  "method": "POST",
+  "path": "/api/conversations",
+  "status": 201
+ },
+ "conversations_after": {
+  "body": [
+   {
+    "archived": false,
+    "created_at": "2026-11-23T18:30:20.029Z",
+    "id": "514fd020-094b-44e6-ab8c-18cd92684345",
+    "title": "My title"
+   },
+   {
+    "archived": false,
+    "created_at": "2026-11-23T18:30:20.026Z",
+    "id": "3214aadf-fc61-4679-9c06-5dccbccbc6ff",
+    "title": "New conversation"
+   },
+   {
+    "archived": false,
+    "created_at": "2026-11-23T18:29:44.418Z",
+    "id": "2e8d52c6-74bd-4acc-ab06-6a94849e6fd8",
+    "title": "Seeded chat"
+   }
+  ],
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/conversations",
+  "status": 200
+ },
+ "conversations_before": {
+  "body": [
+   {
+    "archived": false,
+    "created_at": "2026-11-23T18:29:44.418Z",
+    "id": "2e8d52c6-74bd-4acc-ab06-6a94849e6fd8",
+    "title": "Seeded chat"
+   }
+  ],
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/conversations",
+  "status": 200
+ },
+ "csrf_no_header": {
+  "body": {
+   "error": {
+    "code": "csrf_header",
+    "message": "The request is missing the X-Nodivara header and was refused."
+   }
+  },
+  "content_type": "application/json; charset=utf-8",
+  "method": "POST",
+  "path": "/api/conversations",
+  "status": 403
+ },
+ "exchange": {
+  "body": null,
+  "content_type": null,
+  "method": "POST",
+  "path": "/api/auth/exchange",
+  "status": 204
+ },
+ "exchange_bad": {
+  "body": {
+   "error": {
+    "code": "invalid_token",
+    "message": "The sign-in link is not valid, has expired or was already used. Stop `infra serve` and start it again to get a new one."
+   }
+  },
+  "content_type": "application/json; charset=utf-8",
+  "method": "POST",
+  "path": "/api/auth/exchange",
+  "status": 401
+ },
+ "findings": {
+  "body": {
+   "comparison": {
+    "created_at": "2026-11-23T18:29:43.248Z",
+    "source": "old-server",
+    "target": "new-server"
+   },
+   "findings": [
+    {
+     "advice": "Check whether (unknown) is meant to run on the target. If so, install and start it there and have it listen on port 22, or update every configuration that points to port 22. If it is no longer needed, record why. This tool does not fix this automatically yet.",
+     "evidence": [
+      {
+       "key": "tcp:22",
+       "kind": "listener"
+      }
+     ],
+     "explanation": "On the source, (unknown) listens on port 22 (bind address 10.0.2.15). The target has no listener on that port. If (unknown) did not move, whatever depends on it will fail after cutover; if it runs on the target on a different port, anything still configured with port 22 will break.",
+     "note": "The inventory of this server is incomplete, so this result is only a hint, not proof. Review the inventory warnings and collect again before relying on it.",
+     "rule_id": "PAR-001",
+     "severity": "info",
+     "subject": {
+      "key": "tcp:22",
+      "kind": "listener"
+     },
+     "title": "Port 22 has no counterpart on the target"
+    },
+    {
+     "advice": "Check whether (unknown) is meant to run on the target. If so, install and start it there and have it listen on port 5353, or update every configuration that points to port 5353. If it is no longer needed, record why. This tool does not fix this automatically yet.",
+     "evidence": [
+      {
+       "key": "tcp:5353",
+       "kind": "listener"
+      }
+     ],
+     "explanation": "On the source, (unknown) listens on port 5353 (bind address fe80::1). The target has no listener on that port. If (unknown) did not move, whatever depends on it will fail after cutover; if it runs on the target on a different port, anything still configured with port 5353 will break.",
+     "note": "The inventory of this server is incomplete, so this result is only a hint, not proof. Review the inventory warnings and collect again before relying on it.",
+     "rule_id": "PAR-001",
+     "severity": "info",
+     "subject": {
+      "key": "tcp:5353",
+      "kind": "listener"
+     },
+     "title": "Port 5353 has no counterpart on the target"
+    },
+    {
+     "advice": "Check whether dbserver is meant to run on the target. If so, install and start it there and have it listen on port 5432, or update every configuration that points to port 5432. If it is no longer needed, record why. This tool does not fix this automatically yet.",
+     "evidence": [
+      {
+       "key": "tcp:5432",
+       "kind": "listener"
+      }
+     ],
+     "explanation": "On the source, dbserver listens on port 5432 (bind address ::). The target has no listener on that port. If dbserver did not move, whatever depends on it will fail after cutover; if it runs on the target on a different port, anything still configured with port 5432 will break.",
+     "note": "The inventory of this server is incomplete, so this result is only a hint, not proof. Review the inventory warnings and collect again before relying on it.",
+     "rule_id": "PAR-001",
+     "severity": "info",
+     "subject": {
+      "key": "tcp:5432",
+      "kind": "listener"
+     },
+     "title": "Port 5432 has no counterpart on the target"
+    }
+   ]
+  },
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/findings",
+  "status": 200
+ },
+ "i18n_en": {
+  "body": {
+   "_count": 248,
+   "_sample": {
+    "ui.advice.busy": "Wait for the current reply to finish, or stop it, and then send your message again.",
+    "ui.advice.master_key_missing": "Start the server with the NODIVARA_MASTER_KEY environment variable set. Providers that need no key still work without it.",
+    "ui.advice.network": "Check that the server is still running, then try again."
+   }
+  },
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/i18n/en",
+  "status": 200
+ },
+ "inventory": {
+  "body": {
+   "items": [
+    {
+     "data": {
+      "command_hint": "/usr/local/bin/backup --dest=example.test",
+      "occurrences": 2,
+      "owner": "root",
+      "schedule": "0 3 * * *",
+      "source": "crontab"
+     },
+     "key": "system:root:0 3 * * *:backup",
+     "kind": "cron"
+    },
+    {
+     "data": {
+      "command_hint": "cd / && run-parts --report /etc/cron.hourly",
+      "occurrences": 1,
+      "owner": "root",
+      "schedule": "17 * * * *",
+      "source": "crontab"
+     },
+     "key": "system:root:17 * * * *:run-parts",
+     "kind": "cron"
+    },
+    {
+     "data": {
+      "command_hint": "test -x /usr/sbin/anacron || ( cd / && run-parts /etc/cron.daily )",
+      "occurrences": 1,
+      "owner": "root",
+      "schedule": "25 6 * * *",
+      "source": "crontab"
+     },
+     "key": "system:root:25 6 * * *:test",
+     "kind": "cron"
+    },
+    {
+     "data": {
+      "command_hint": "/usr/local/bin/startup.sh",
+      "occurrences": 1,
+      "owner": "root",
+      "schedule": "@reboot",
+      "source": "crontab"
+     },
+     "key": "system:root:@reboot:startup.sh",
+     "kind": "cron"
+    },
+    {
+     "data": {
+      "command_hint": "/opt/app/queue-run",
+      "occurrences": 1,
+      "owner": "www-data",
+      "schedule": "*/10 * * * *",
+      "source": "crontab"
+     },
+     "key": "system:www-data:*/10 * * * *:queue-run",
+     "kind": "cron"
+    },
+    {
+     "data": {
+      "command_hint": "curl -s https://x:[REDACTED]@example.test/ping",
+      "occurrences": 1,
+      "owner": "alice",
+      "schedule": "*/5 * * * *",
+      "source": "crontab"
+     },
+     "key": "user:alice:*/5 * * * *:curl",
+     "kind": "cron"
+    }
+   ],
+   "status": "partial",
+   "taken_at": "2026-11-23T18:29:43Z",
+   "warnings": [
+    "cron: 1 unparsable line(s) in /var/spool/cron/crontabs/alice"
+   ]
+  },
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/nodes/old-server/inventory",
+  "status": 200
+ },
+ "inventory_404": {
+  "body": {
+   "error": {
+    "code": "not_found",
+    "message": "Not found."
+   }
+  },
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/nodes/nope/inventory",
+  "status": 404
+ },
+ "logout": {
+  "body": null,
+  "content_type": null,
+  "method": "POST",
+  "path": "/api/auth/logout",
+  "status": 204
+ },
+ "memories_active": {
+  "body": [
+   {
+    "content": "The old server runs the shop on port 8080.",
+    "conversation_id": null,
+    "created_at": "2026-11-23T18:29:44.416Z",
+    "id": "3c0edd43-6833-4f5e-82f4-d7e63055b394",
+    "kind": "org_fact",
+    "source": "person",
+    "status": "active",
+    "updated_at": "2026-11-23T18:29:44.416Z"
+   },
+   {
+    "content": "Prefers short answers.",
+    "conversation_id": null,
+    "created_at": "2026-11-23T18:29:44.418Z",
+    "id": "7611a431-2022-46d5-9a0d-67a20625fa79",
+    "kind": "preference",
+    "source": "person",
+    "status": "active",
+    "updated_at": "2026-11-23T18:29:44.418Z"
+   }
+  ],
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/memories?status=active",
+  "status": 200
+ },
+ "memories_pending": {
+  "body": [
+   {
+    "content": "Backups go to the offsite demo host.",
+    "conversation_id": null,
+    "created_at": "2026-11-23T18:29:44.418Z",
+    "id": "c12f7f53-cb64-45f3-9b4b-ab3eda56dc67",
+    "kind": "org_fact",
+    "source": "assistant",
+    "status": "pending",
+    "updated_at": "2026-11-23T18:29:44.418Z"
+   },
+   {
+    "content": "Check the mail DNS records before cutover.",
+    "conversation_id": null,
+    "created_at": "2026-11-23T18:29:44.418Z",
+    "id": "ca21d54c-252b-4d97-8018-63fcd9c46a36",
+    "kind": "task",
+    "source": "assistant",
+    "status": "pending",
+    "updated_at": "2026-11-23T18:29:44.418Z"
+   }
+  ],
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/memories?status=pending",
+  "status": 200
+ },
+ "memory_approve": {
+  "body": null,
+  "content_type": null,
+  "method": "POST",
+  "path": "/api/memories/c12f7f53-cb64-45f3-9b4b-ab3eda56dc67/approve",
+  "status": 204
+ },
+ "memory_approve_404": {
+  "body": {
+   "error": {
+    "code": "not_found",
+    "message": "Not found."
+   }
+  },
+  "content_type": "application/json; charset=utf-8",
+  "method": "POST",
+  "path": "/api/memories/00000000-0000-0000-0000-000000000000/approve",
+  "status": 404
+ },
+ "memory_delete": {
+  "body": null,
+  "content_type": null,
+  "method": "DELETE",
+  "path": "/api/memories/ca21d54c-252b-4d97-8018-63fcd9c46a36",
+  "status": 204
+ },
+ "messages_after_turn": {
+  "body": [
+   {
+    "content": "Why is port 8080 missing?",
+    "created_at": "2026-11-23T18:30:20.191Z",
+    "role": "user",
+    "seq": 1,
+    "tools": []
+   },
+   {
+    "content": "",
+    "created_at": "2026-11-23T18:30:20.304Z",
+    "role": "assistant",
+    "seq": 2,
+    "tools": [
+     "list_nodes"
+    ]
+   },
+   {
+    "content": "You have 2 servers: old-server, new-server.\n<b>This is not markup</b> <script>alert(1)</script>",
+    "created_at": "2026-11-23T18:30:20.418Z",
+    "role": "assistant",
+    "seq": 4,
+    "tools": []
+   }
+  ],
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/conversations/3214aadf-fc61-4679-9c06-5dccbccbc6ff/messages",
+  "status": 200
+ },
+ "messages_empty": {
+  "body": [],
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/conversations/3214aadf-fc61-4679-9c06-5dccbccbc6ff/messages",
+  "status": 200
+ },
+ "nodes": {
+  "body": [
+   {
+    "kind": "vps",
+    "latest_inventory": {
+     "counts": {
+      "cron": 0,
+      "env_ref": 0,
+      "listener": 0,
+      "process": 0
+     },
+     "status": "partial",
+     "taken_at": "2026-11-23T18:29:43Z"
+    },
+    "name": "new-server",
+    "status": "pending"
+   },
+   {
+    "kind": "vps",
+    "latest_inventory": {
+     "counts": {
+      "cron": 8,
+      "env_ref": 0,
+      "listener": 6,
+      "process": 3
+     },
+     "status": "partial",
+     "taken_at": "2026-11-23T18:29:43Z"
+    },
+    "name": "old-server",
+    "status": "pending"
+   }
+  ],
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/nodes",
+  "status": 200
+ },
+ "plan": {
+  "body": {
+   "created_at": "2026-11-23T18:29:43.321Z",
+   "gates": {
+    "accepted_critical": [],
+    "comparison_current": true,
+    "cutover_allowed": false,
+    "important": 0,
+    "info": 17,
+    "inventory_incomplete": true,
+    "open_critical": [],
+    "shutdown_allowed": false
+   },
+   "name": "demo-plan",
+   "rendered": "# Migration plan: demo-plan\n\n## Overview\nData moves from node f4921c57-7924-43bd-b50c-709a68314471 to node 2a18da67-fe92-4774-a4e2-b8ae1cb0585b.\nThe backup is kept on the source server: a full snapshot first, then a delta shortly before cutover.\nTransport: 49dc115f-994f-42d1-b4d0-85984e62742e; encryption: encrypted on your side before upload.\nCutover by tunnel. DNS snapshot first: yes. Rollback available: yes.\nDatabases listed: 0 (0 restored, 0 copied under a suffixed name, 0 skipped).\nData that already exists on the target is never overwritten; it is kept and the incoming copy gets a suffixed name.\n\n## Steps, in the order they run\n1. Collect an inventory - source server (risk: Read)\nImpact: Reads what runs on the machine; changes nothing.\nRuns first; it depends on nothing.\n2. Collect an inventory - target server (risk: Read)\nImpact: Reads what runs on the machine; changes nothing.\nRuns first; it depends on nothing.\n3. Take the backup (risk: Light change)\nImpact: Creates a snapshot of the data; the running services keep running and use extra disk and CPU.\nRuns after step 1, 2.\n4. Move the backup to the target (risk: Light change)\nImpact: Copies the snapshot over the chosen transport; uses network bandwidth; the source is untouched.\nRuns after step 3.\n5. Restore on the target (risk: Risky change)\nImpact: Writes data on the target. Existing data there is not overwritten.\nRuns after step 4.\nIt can only be approved in the panel, not from a chat bot.\n6. Verify the target (risk: Read)\nImpact: Checks that the target runs and matches the source; changes nothing.\nRuns after step 5.\n7. Copy what changed since the snapshot (risk: Risky change)\nImpact: Brings the target up to date shortly before cutover; writes data on the target.\nRuns after step 6.\nIt can only be approved in the panel, not from a chat bot.\n8. Move traffic to the target (risk: Risky change)\nImpact: Visitors start reaching the target. This is the moment the migration becomes visible.\nRuns after step 7.\nIt can only be approved in the panel, not from a chat bot.\n9. Verify again after cutover (risk: Read)\nImpact: Checks the target under real traffic; changes nothing.\nRuns after step 8.\n10. Shut down the old server (risk: Destructive)\nImpact: Destroys the old server as a fallback. It cannot be undone.\nRuns after step 9.\nYou must type the name of the server to confirm; it can only be approved in the panel.\n\n## Where you can stop\nUntil the cutover step, the old server keeps serving and nothing visible has changed: you can stop at any step and nothing needs undoing on the source.\nAt the cutover step traffic moves. Rollback available: yes. After it, going back means using the rollback.\nShutting down the old server is the point of no return. Do not approve it before the conditions below are met.\n\n## What the time depends on\nThe amount of data to copy (this plan does not measure it).\nThe speed of the connection between the machines and the storage.\nThe number of databases to restore (0 listed).\nThe size of the changes made after the snapshot (the delta).\n\n## Before the old server may be shut down\nThe old server may be shut down only when every condition below is met:\n- No critical finding is open: met\n- The inventories behind the comparison are complete: not met\n- The target was verified again after traffic moved: checked when the plan runs\n\n## Left out of the backup\nThese are left out of the backup because they can be rebuilt. Check that nothing you need is on this list:\n- logs: log files\n- cache: cache directories\n- node_modules: node_modules (reinstalled from the lock file)\n- tmp: temporary files\n- pycache: compiled Python caches\n\n## Findings that block\nNo critical finding is open.\nAn inventory behind the findings is incomplete (or the target was not collected), so an empty list is not proof. Collect again before the cutover.",
+   "source_node": "old-server",
+   "spec": {
+    "backup": {
+     "exclude": [
+      "logs",
+      "cache",
+      "node_modules",
+      "tmp",
+      "pycache"
+     ],
+     "location": "source",
+     "strategy": "snapshot+delta"
+    },
+    "cutover": {
+     "dns_snapshot": true,
+     "method": "tunnel",
+     "rollback": true
+    },
+    "data": {
+     "conflict_policy": "never_overwrite",
+     "databases": []
+    },
+    "gates": {
+     "keep_source_until_verified": true,
+     "no_open_critical_findings": true
+    },
+    "source": {
+     "node_id": "f4921c57-7924-43bd-b50c-709a68314471"
+    },
+    "target": {
+     "node_id": "2a18da67-fe92-4774-a4e2-b8ae1cb0585b"
+    },
+    "transport": {
+     "encryption": "client_side",
+     "transport_id": "49dc115f-994f-42d1-b4d0-85984e62742e"
+    }
+   },
+   "status": "draft",
+   "steps": [
+    {
+     "depends_on": [],
+     "kind": "inventory",
+     "seq": 0,
+     "side": "source"
+    },
+    {
+     "depends_on": [],
+     "kind": "inventory",
+     "seq": 1,
+     "side": "target"
+    },
+    {
+     "depends_on": [
+      0,
+      1
+     ],
+     "kind": "backup",
+     "seq": 2
+    },
+    {
+     "depends_on": [
+      2
+     ],
+     "kind": "transfer",
+     "seq": 3
+    },
+    {
+     "depends_on": [
+      3
+     ],
+     "kind": "restore",
+     "seq": 4
+    },
+    {
+     "depends_on": [
+      4
+     ],
+     "kind": "verify",
+     "seq": 5
+    },
+    {
+     "depends_on": [
+      5
+     ],
+     "kind": "delta",
+     "seq": 6
+    },
+    {
+     "depends_on": [
+      6
+     ],
+     "kind": "cutover",
+     "seq": 7
+    },
+    {
+     "depends_on": [
+      7
+     ],
+     "kind": "post_verify",
+     "seq": 8
+    },
+    {
+     "depends_on": [
+      8
+     ],
+     "kind": "decommission_source",
+     "seq": 9
+    }
+   ],
+   "target_node": "new-server"
+  },
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/plans/demo-plan",
+  "status": 200
+ },
+ "plan_404": {
+  "body": {
+   "error": {
+    "code": "not_found",
+    "message": "Not found."
+   }
+  },
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/plans/nope",
+  "status": 404
+ },
+ "plans": {
+  "body": [
+   {
+    "created_at": "2026-11-23T18:29:43.321Z",
+    "name": "demo-plan",
+    "source_node": "old-server",
+    "status": "draft",
+    "target_node": "new-server"
+   }
+  ],
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/plans",
+  "status": 200
+ },
+ "proposals": {
+  "body": [
+   {
+    "conversation_id": "2e8d52c6-74bd-4acc-ab06-6a94849e6fd8",
+    "created_at": "2026-11-23T18:29:44.418Z",
+    "expires_at": "2026-11-24T18:29:44.418Z",
+    "id": "356417de-77d6-4bdf-9dce-c21add77b992",
+    "impact": "Short downtime.",
+    "rationale": "Because reasons.",
+    "rule_id": "P001",
+    "status": "pending",
+    "subject_key": "listener:8080",
+    "suggested_action": "Do the thing",
+    "tier": 3,
+    "title": "Proposal 0",
+    "tool": "propose_dns_change"
+   },
+   {
+    "conversation_id": "2e8d52c6-74bd-4acc-ab06-6a94849e6fd8",
+    "created_at": "2026-11-23T18:29:44.418Z",
+    "expires_at": "2026-11-24T18:29:44.418Z",
+    "id": "c5dd35c3-c177-4f2b-bcae-93a8657baeca",
+    "impact": "Short downtime.",
+    "rationale": "Because reasons.",
+    "rule_id": "P001",
+    "status": "approved",
+    "subject_key": "listener:8080",
+    "suggested_action": "Do the thing",
+    "tier": 2,
+    "title": "Proposal 1",
+    "tool": "propose_restart"
+   }
+  ],
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/proposals",
+  "status": 200
+ },
+ "proposals_pending": {
+  "body": [
+   {
+    "conversation_id": "2e8d52c6-74bd-4acc-ab06-6a94849e6fd8",
+    "created_at": "2026-11-23T18:29:44.418Z",
+    "expires_at": "2026-11-24T18:29:44.418Z",
+    "id": "356417de-77d6-4bdf-9dce-c21add77b992",
+    "impact": "Short downtime.",
+    "rationale": "Because reasons.",
+    "rule_id": "P001",
+    "status": "pending",
+    "subject_key": "listener:8080",
+    "suggested_action": "Do the thing",
+    "tier": 3,
+    "title": "Proposal 0",
+    "tool": "propose_dns_change"
+   }
+  ],
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/proposals?status=pending",
+  "status": 200
+ },
+ "provider_add": {
+  "body": {
+   "base_url": "http://127.0.0.1:58123/v1",
+   "has_key": false,
+   "is_default": false,
+   "model": "fake-1",
+   "name": "second",
+   "params": {
+    "allow_private_network": true
+   }
+  },
+  "content_type": "application/json; charset=utf-8",
+  "method": "POST",
+  "path": "/api/providers",
+  "status": 201
+ },
+ "provider_add_bad": {
+  "body": {
+   "error": {
+    "code": "invalid_input",
+    "message": "A field is missing or not valid."
+   }
+  },
+  "content_type": "application/json; charset=utf-8",
+  "method": "POST",
+  "path": "/api/providers",
+  "status": 400
+ },
+ "provider_add_dup": {
+  "body": {
+   "error": {
+    "code": "already_exists",
+    "message": "An item with this name already exists."
+   }
+  },
+  "content_type": "application/json; charset=utf-8",
+  "method": "POST",
+  "path": "/api/providers",
+  "status": 409
+ },
+ "provider_delete": {
+  "body": null,
+  "content_type": null,
+  "method": "DELETE",
+  "path": "/api/providers/second",
+  "status": 204
+ },
+ "provider_test": {
+  "body": {
+   "latency_ms": 56,
+   "model": "fake-1",
+   "ok": true
+  },
+  "content_type": "application/json; charset=utf-8",
+  "method": "POST",
+  "path": "/api/providers/fake/test",
+  "status": 200
+ },
+ "provider_test_404": {
+  "body": {
+   "error": {
+    "code": "not_found",
+    "message": "Not found."
+   }
+  },
+  "content_type": "application/json; charset=utf-8",
+  "method": "POST",
+  "path": "/api/providers/nope/test",
+  "status": 404
+ },
+ "provider_test_second": {
+  "body": {
+   "code": "ai_auth",
+   "message": "The provider refused the key (401 or 403). Check that the key is right and may use this model.",
+   "ok": false
+  },
+  "content_type": "application/json; charset=utf-8",
+  "method": "POST",
+  "path": "/api/providers/second/test",
+  "status": 200
+ },
+ "providers": {
+  "body": [
+   {
+    "base_url": "http://127.0.0.1:58123/v1",
+    "has_key": true,
+    "is_default": true,
+    "model": "fake-1",
+    "name": "fake",
+    "params": {
+     "allow_private_network": true
+    }
+   }
+  ],
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/providers",
+  "status": 200
+ },
+ "providers_after": {
+  "body": [
+   {
+    "base_url": "http://127.0.0.1:58123/v1",
+    "has_key": true,
+    "is_default": true,
+    "model": "fake-1",
+    "name": "fake",
+    "params": {
+     "allow_private_network": true
+    }
+   }
+  ],
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/providers",
+  "status": 200
+ },
+ "session": {
+  "body": {
+   "locale": "en",
+   "master_key_configured": true,
+   "org": {
+    "name": "Demo Org",
+    "slug": "demo"
+   },
+   "user": {
+    "email": "owner@example.test",
+    "name": "Owner"
+   },
+   "version": "0.0.0"
+  },
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/session",
+  "status": 200
+ },
+ "transports": {
+  "body": [
+   {
+    "kind": "rsync",
+    "last_check": {
+     "ok": true
+    },
+    "name": "offsite-demo",
+    "verified_at": "2026-11-23T18:29:43.301Z"
+   }
+  ],
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/transports",
+  "status": 200
+ },
+ "turn": {
+  "content_type": "text/event-stream; charset=utf-8",
+  "method": "POST",
+  "path": "/api/conversations/3214aadf-fc61-4679-9c06-5dccbccbc6ff/turn",
+  "raw": "event: tool\ndata: {\"duration_ms\":0,\"name\":\"list_nodes\",\"status\":\"ok\",\"tier\":0}\n\nevent: delta\ndata: {\"text\":\"You have 2 servers: old-server, new-server.\\n\"}\n\nevent: delta\ndata: {\"text\":\"<b>This is not markup</b> <script>alert(1)</script>\"}\n\nevent: done\ndata: {\"rounds\":2,\"tool_calls\":1,\"usage\":{\"estimated\":true,\"tokens\":4518}}\n\n",
+  "status": 200
+ },
+ "turn_404": {
+  "content_type": "application/json; charset=utf-8",
+  "method": "POST",
+  "path": "/api/conversations/00000000-0000-0000-0000-000000000000/turn",
+  "raw": "{\"error\":{\"code\":\"not_found\",\"message\":\"Not found.\"}}",
+  "status": 404
+ },
+ "turn_bad": {
+  "content_type": "application/json; charset=utf-8",
+  "method": "POST",
+  "path": "/api/conversations/3214aadf-fc61-4679-9c06-5dccbccbc6ff/turn",
+  "raw": "{\"error\":{\"code\":\"message_empty\",\"message\":\"The message is empty.\"}}",
+  "status": 400
+ },
+ "unauth_nodes": {
+  "body": {
+   "error": {
+    "code": "unauthenticated",
+    "message": "You are not signed in, or the session has ended. Open the address printed by `infra serve` again. If that address was already used or has expired, stop the server and start it again to get a new one."
+   }
+  },
+  "content_type": "application/json; charset=utf-8",
+  "method": "GET",
+  "path": "/api/nodes",
+  "status": 401
+ }
+}
