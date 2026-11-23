@@ -726,3 +726,41 @@ fn new_rules_are_deterministic_and_never_carry_values() -> TestResult {
     }
     Ok(())
 }
+
+/// `cleaned` passes server-supplied values through the cleaner but leaves the rules' own
+/// "unknown" marker alone, so the renderer can still turn it into the localized word.
+#[test]
+fn cleaning_keeps_the_unknown_marker_and_cleans_everything_else() {
+    use inventory::{Finding, Kind, Severity, SubjectRef};
+    use std::collections::BTreeMap;
+    let mut args = BTreeMap::new();
+    args.insert("process".to_owned(), parity::UNKNOWN_ARG.to_owned());
+    args.insert("bind".to_owned(), "10.0.0.1\u{1b}[2J".to_owned());
+    let finding = Finding {
+        rule_id: "PAR-001".to_owned(),
+        severity: Severity::Info,
+        subject: SubjectRef {
+            kind: Kind::Listener,
+            key: "tcp:22\u{7}".to_owned(),
+        },
+        evidence: Vec::new(),
+        args,
+    };
+    let clean = |t: &str| {
+        t.chars()
+            .map(|c| if c.is_control() { '\u{FFFD}' } else { c })
+            .collect()
+    };
+    let out = parity::cleaned(&finding, &clean);
+    assert_eq!(
+        out.args["process"],
+        parity::UNKNOWN_ARG,
+        "the marker survives"
+    );
+    assert_eq!(out.args["bind"], "10.0.0.1\u{FFFD}[2J");
+    assert_eq!(out.subject.key, "tcp:22\u{FFFD}");
+    assert_eq!(
+        finding.args["bind"], "10.0.0.1\u{1b}[2J",
+        "the original is untouched"
+    );
+}

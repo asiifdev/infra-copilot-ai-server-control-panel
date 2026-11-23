@@ -435,6 +435,29 @@ fn an_inventory_is_listed_with_redacted_and_cleaned_values() -> TestResult {
 
 // ---- findings ------------------------------------------------------------------------------------
 
+/// The rules mark "the collector could not tell which process" with an internal marker that the
+/// renderer turns into the localized word. Cleaning control characters must not destroy the marker
+/// (it once turned into a replacement character followed by the word "unknown").
+#[test]
+fn an_unknown_process_is_shown_as_the_localized_word() -> TestResult {
+    let f = fixture()?;
+    f.world.conn()?.execute(
+        "UPDATE findings SET args = ?1 WHERE rule_id = 'PAR-001'",
+        [r#"{"port":"22","process":"\u0000unknown","bind":"10.0.2.15"}"#],
+    )?;
+    let catalog = Catalog::builtin()?;
+    for (lang, locale) in [("en", Locale::En), ("id", Locale::Id)] {
+        let body = f.session.get(&format!("/api/findings?lang={lang}")).text();
+        let word = catalog
+            .raw(locale, "parity.arg.unknown")
+            .ok_or("catalog word")?;
+        assert!(body.contains(word), "{lang}: {body}");
+        assert!(!body.contains('\u{FFFD}'), "{lang}: replacement character");
+        assert!(!body.contains("\\u0000"), "{lang}: raw marker");
+    }
+    Ok(())
+}
+
 #[test]
 fn findings_are_rendered_in_the_language_of_the_request() -> TestResult {
     let f = fixture()?;

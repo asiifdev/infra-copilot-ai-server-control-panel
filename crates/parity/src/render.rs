@@ -85,6 +85,22 @@ fn keys_for(rule_id: &str) -> RuleKeys {
     }
 }
 
+/// A copy of `finding` whose values are passed through `clean`, for text that comes from the
+/// (untrusted) inventories of a server. The rules' own "unknown" marker is left alone: it is not
+/// server text, and cleaning it would stop [`render`] from recognising it and showing the localized
+/// word instead.
+#[must_use]
+pub fn cleaned(finding: &Finding, clean: &dyn Fn(&str) -> String) -> Finding {
+    let mut copy = finding.clone();
+    for value in copy.args.values_mut() {
+        if value.as_str() != UNKNOWN_ARG {
+            *value = clean(value);
+        }
+    }
+    copy.subject.key = clean(&copy.subject.key);
+    copy
+}
+
 /// Renders `finding` in `locale`. Missing keys fall back to English, then to the key itself
 /// (see [`Catalog::get`]).
 #[must_use]

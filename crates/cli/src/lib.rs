@@ -425,12 +425,7 @@ impl Ui<'_> {
             text.push_str(&self.tr(REPORT_COUNT, &[("count", &count), ("rules", &rules)]));
             for original in &report.findings {
                 // Values in a finding come from the (untrusted) inventories.
-                let mut finding = original.clone();
-                for value in finding.args.values_mut() {
-                    *value = sanitize(value);
-                }
-                finding.subject.key = sanitize(&finding.subject.key);
-                let finding = &finding;
+                let finding = &parity::cleaned(original, &sanitize);
                 let rendered = render(finding, &self.catalog, self.locale);
                 let kind = self.tr(kind_key(finding.subject.kind), &[]);
                 let head = self.tr(

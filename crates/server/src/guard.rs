@@ -92,7 +92,10 @@ async fn check(app: &App, request: Request) -> Result<Request, ApiError> {
     }
     let path = request.uri().path().to_owned();
     let exchange = method == Method::POST && path == "/api/auth/exchange";
-    if is_api_path(&path) && !exchange {
+    // The message catalog holds UI text only and no data of the organization. The sign-in page
+    // needs it before there is a session; it still passes the Host and Origin checks above.
+    let catalog = method == Method::GET && path.starts_with("/api/i18n/");
+    if is_api_path(&path) && !exchange && !catalog {
         let cookie = single(&request, &COOKIE).map_err(|()| ApiError::new("unauthenticated"))?;
         let live = cookie
             .and_then(session_cookie)

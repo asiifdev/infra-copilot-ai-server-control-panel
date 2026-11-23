@@ -132,11 +132,7 @@ fn severity_of(text: &str) -> Option<Severity> {
 /// A finding as the UI shows it: the text rendered in `locale`, values from the inventories
 /// cleaned first (they are untrusted).
 fn finding_json(original: &Finding, catalog: &i18n::Catalog, locale: i18n::Locale) -> Value {
-    let mut finding = original.clone();
-    for value in finding.args.values_mut() {
-        *value = clean_text(value);
-    }
-    finding.subject.key = clean_text(&finding.subject.key);
+    let finding = parity::cleaned(original, &clean_text);
     let rendered = parity::render(&finding, catalog, locale);
     json!({
         "rule_id": finding.rule_id,

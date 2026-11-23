@@ -277,6 +277,9 @@ fn every_api_route_needs_a_session() -> TestResult {
     let world = World::new()?;
     let server = TestServer::start(&world)?;
     for (method, path) in ROUTES {
+        if path.starts_with("/api/i18n/") {
+            continue; // the one public API route, see `the_catalog_is_public_but_not_unguarded`
+        }
         let r = request_for(method, path)
             .same_origin(server.addr)
             .json(&json!({}))
@@ -657,12 +660,32 @@ fn the_single_page_app_fallback_is_only_for_html_navigations() -> TestResult {
 
 #[test]
 fn the_placeholder_page_is_localized_and_has_no_inline_script_or_style() -> TestResult {
+    // The page served at `/` depends on whether `web/dist` existed when the server was compiled:
+    // without it a localized placeholder, with it the real UI (whose own index must also carry
+    // no inline script or style, the CSP forbids them).
+    let ui_built = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../web/dist/index.html")
+        .exists();
     let world = World::new()?;
     let server = TestServer::start(&world)?;
     let en = Req::get("/")
         .header("Accept", "text/html")
         .send(server.addr)
         .text();
+    if ui_built {
+        assert!(en.contains("<div id=\"app\""), "{en}");
+        assert!(!en.contains("scripts/build-web.sh"));
+        assert!(
+            !en.contains("style="),
+            "inline style attribute in the UI index"
+        );
+        // Every script in the index is an external file of this origin.
+        for part in en.split("<script").skip(1) {
+            let tag = part.split('>').next().unwrap_or_default();
+            assert!(tag.contains("src=\"/"), "inline script: <script{tag}>");
+        }
+        return Ok(());
+    }
     assert!(en.contains("scripts/build-web.sh") && en.contains("lang=\"en\""));
     let id = Req::get("/?lang=id")
         .header("Accept", "text/html")
@@ -728,5 +751,47 @@ fn the_server_stops_when_told_to() -> TestResult {
     assert_eq!(Req::get("/healthz").send(addr).status, 200);
     server.stop()?;
     assert_eq!(Req::get("/healthz").send(addr).status, 0);
+    Ok(())
+}
+
+/// The sign-in page needs its text before any session exists, so the message catalog is the one
+/// public API route. It must not become a way around the other checks, and it must hold no data
+/// of the organization.
+#[test]
+fn the_catalog_is_public_but_not_unguarded() -> TestResult {
+    let world = World::new()?;
+    let server = TestServer::start(&world)?;
+    let ok = Req::get("/api/i18n/en").send(server.addr);
+    assert_eq!(ok.status, 200);
+    assert!(ok.header("content-security-policy").is_some());
+    assert_eq!(ok.header("cache-control"), Some("no-store"));
+    // Still refused for a foreign Host (DNS rebinding) and a foreign Origin.
+    assert_eq!(
+        Req::get("/api/i18n/en")
+            .host("evil.example.test")
+            .send(server.addr)
+            .status,
+        403
+    );
+    assert_eq!(
+        Req::get("/api/i18n/en")
+            .header("Origin", "http://evil.example.test")
+            .send(server.addr)
+            .status,
+        403
+    );
+    // Only UI text: no key from outside the `ui.` area, and nothing from the database.
+    let map = ok.json();
+    let object = map.as_object().ok_or("an object")?;
+    assert!(
+        object.keys().all(|k| k.starts_with("ui.")),
+        "{:?}",
+        object.keys().next()
+    );
+    let text = ok.text();
+    assert!(!text.contains(&api_key()) && !text.contains(&master_key()));
+    // Other API routes and unknown API paths still need a session.
+    assert_eq!(Req::get("/api/nodes").send(server.addr).status, 401);
+    assert_eq!(Req::get("/api/i18n").send(server.addr).status, 401);
     Ok(())
 }
