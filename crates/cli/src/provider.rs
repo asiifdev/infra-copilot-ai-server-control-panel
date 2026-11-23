@@ -6,8 +6,6 @@
 
 use crate::Ui;
 use crate::args::{Globals, Parsed, parse};
-use ai::ProviderConfig;
-use db::NewAiProvider;
 use i18n::MessageKey;
 use std::io::Read;
 use vault::Vault;
@@ -28,34 +26,16 @@ const WORD_YES: MessageKey = MessageKey::new("cli.word.yes");
 const WORD_NO: MessageKey = MessageKey::new("cli.word.no");
 const WORD_KEY_SET: MessageKey = MessageKey::new("cli.provider.key_set");
 const WORD_KEY_NONE: MessageKey = MessageKey::new("cli.provider.key_none");
-const VAULT_NO_KEY: MessageKey = MessageKey::new("cli.vault.no_key");
-const VAULT_BAD_KEY: MessageKey = MessageKey::new("cli.vault.bad_key");
 
 /// Name of the variable that may hold the provider key.
 const ENV_PROVIDER_KEY: &str = "NODIVARA_PROVIDER_KEY";
-/// Purpose label the key is sealed under (bound into the ciphertext).
-const KEY_PURPOSE: &str = "ai_provider_key";
 /// Longest key accepted.
 const MAX_KEY_BYTES: usize = 1024;
 
 impl Ui<'_> {
     /// The vault from `NODIVARA_MASTER_KEY` (and retired keys), or a localized failure.
     pub(crate) fn vault_from_env(&mut self) -> Result<Vault, u8> {
-        let Some(current) = self
-            .env
-            .get(vault::ENV_KEY)
-            .filter(|k| !k.trim().is_empty())
-        else {
-            return Err(self.fail(VAULT_NO_KEY, &[]));
-        };
-        let retired = self.env.get(vault::ENV_RETIRED_KEYS).unwrap_or_default();
-        let specs: Vec<&str> = retired
-            .split(',')
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .collect();
-        // The error never carries key material: only the fixed advice is shown.
-        Vault::new(current.trim(), &specs).map_err(|_| self.fail(VAULT_BAD_KEY, &[]))
+        bootstrap::vault_from_env(self.env).map_err(|error| self.setup_failure(&error))
     }
 
     pub(crate) fn provider_command(&mut self, globals: &Globals, rest: &[String]) -> u8 {
@@ -128,8 +108,8 @@ impl Ui<'_> {
         }
         let params = parsed.option("--params").unwrap_or("{}");
         // Refuse unusable settings now rather than at the first question.
-        if let Err(error) = ProviderConfig::from_params(base_url, model, params) {
-            return self.fail(BAD_CONFIG, &[("why", &error.to_string())]);
+        if let Err(why) = bootstrap::validate_provider_config(base_url, model, params) {
+            return self.fail(BAD_CONFIG, &[("why", &why)]);
         }
         let key = match self.read_provider_key(parsed.flag("--key-stdin")) {
             Ok(key) => key,
@@ -152,32 +132,17 @@ impl Ui<'_> {
             Ok(scope) => scope,
             Err(code) => return code,
         };
-        let is_default = parsed.flag("--default");
-        if is_default && db::default_ai_provider(&conn, &scope.org).is_ok() {
-            return self.fail(DEFAULT_EXISTS, &[]);
-        }
-        let secret = match (&vault, &key) {
-            (Some(vault), Some(key)) => {
-                match vault.store(&conn, &scope.org, KEY_PURPOSE, key.as_bytes()) {
-                    Ok(id) => Some(id),
-                    Err(error) => {
-                        return self.store_reason(error.code());
-                    }
-                }
-            }
-            _ => None,
-        };
-        let created = db::create_ai_provider(
+        let created = bootstrap::add_provider(
             &conn,
             &scope.org,
-            &NewAiProvider {
+            &bootstrap::NewProvider {
                 name,
                 base_url,
-                default_model: model,
-                secret: secret.as_ref(),
+                model,
                 params_json: params,
-                is_default,
+                is_default: parsed.flag("--default"),
             },
+            vault.as_ref().zip(key.as_deref()),
         );
         match created {
             Ok(_) => {
@@ -188,17 +153,9 @@ impl Ui<'_> {
                 }
                 self.say_out(ADDED, &[("name", name)])
             }
-            Err(error) => {
-                // Do not leave a sealed key behind for a provider that was not created.
-                if let Some(id) = &secret {
-                    let _ = db::delete_secret(&conn, &scope.org, id);
-                }
-                if error.is_constraint_violation() {
-                    self.fail(EXISTS, &[("name", name)])
-                } else {
-                    self.store_error(&error)
-                }
-            }
+            Err(bootstrap::ProviderError::DefaultExists) => self.fail(DEFAULT_EXISTS, &[]),
+            Err(bootstrap::ProviderError::Exists) => self.fail(EXISTS, &[("name", name)]),
+            Err(bootstrap::ProviderError::Store { reason }) => self.store_reason(&reason),
         }
     }
 
@@ -260,24 +217,11 @@ impl Ui<'_> {
             Ok(scope) => scope,
             Err(code) => return code,
         };
-        let rows = match db::list_ai_providers(&conn, &scope.org) {
-            Ok(rows) => rows,
-            Err(error) => return self.store_error(&error),
-        };
-        let Some(row) = rows.iter().find(|r| &r.name == name) else {
-            return self.fail(UNKNOWN, &[("name", name)]);
-        };
-        match db::delete_ai_provider(&conn, &scope.org, &row.id) {
-            Ok(()) => {}
-            Err(error) if error.is_constraint_violation() => {
-                return self.fail(IN_USE, &[("name", name)]);
-            }
-            Err(error) => return self.store_error(&error),
+        match bootstrap::remove_provider(&conn, &scope.org, name) {
+            Ok(()) => self.say_out(REMOVED, &[("name", name)]),
+            Err(bootstrap::RemoveError::Unknown) => self.fail(UNKNOWN, &[("name", name)]),
+            Err(bootstrap::RemoveError::InUse) => self.fail(IN_USE, &[("name", name)]),
+            Err(bootstrap::RemoveError::Store { reason }) => self.store_reason(&reason),
         }
-        if let Some(secret) = &row.secret_id {
-            // The provider is gone, so its sealed key goes too.
-            let _ = db::delete_secret(&conn, &scope.org, secret);
-        }
-        self.say_out(REMOVED, &[("name", name)])
     }
 }

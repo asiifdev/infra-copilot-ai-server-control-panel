@@ -1,0 +1,15 @@
+[package]
+name = "bootstrap"
+description = "Shared setup of a local installation: where the database lives, opening it owner-only, finding the organization and its owner, and building the vault from the environment (ADR 0030)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+ai = { path = "../ai" }
+db = { path = "../db" }
+vault = { path = "../vault" }
+
+[lints]
+workspace = true

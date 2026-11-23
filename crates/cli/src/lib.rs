@@ -6,6 +6,7 @@
 //!   (`--save --source-node A --target-node B` compares the stored ones and stores the result).
 //! * `infra plan draft|list|show|gates` and `infra transport add|list|show|remove|check` (decision
 //!   0028): plans are only ever drafts, and `transport check` is a dry run unless `--run` is given.
+//! * `infra serve` starts the local web interface on loopback (decision 0030).
 //! * `infra init`, `node add`, `provider add|list|remove`, `ask` and `memory ...` work on the
 //!   local database (`--db PATH`, `NODIVARA_DB`, or a per-user data directory; see `local`).
 //!
@@ -21,6 +22,7 @@ mod memory;
 mod plans;
 mod provider;
 mod saved;
+mod serve;
 mod setup;
 mod time;
 mod transports;
@@ -46,6 +48,7 @@ pub(crate) const USAGE_ASK: MessageKey = MessageKey::new("cli.usage.ask");
 pub(crate) const USAGE_MEMORY: MessageKey = MessageKey::new("cli.usage.memory");
 pub(crate) const USAGE_PLAN: MessageKey = MessageKey::new("cli.usage.plan");
 pub(crate) const USAGE_TRANSPORT: MessageKey = MessageKey::new("cli.usage.transport");
+pub(crate) const USAGE_SERVE: MessageKey = MessageKey::new("cli.usage.serve");
 const USAGE_COLLECT: MessageKey = MessageKey::new("cli.usage.collect");
 const USAGE_COMPARE: MessageKey = MessageKey::new("cli.usage.compare");
 const ERR_USAGE: MessageKey = MessageKey::new("cli.error.usage");
@@ -243,6 +246,7 @@ impl Ui<'_> {
                 USAGE_MEMORY,
                 USAGE_PLAN,
                 USAGE_TRANSPORT,
+                USAGE_SERVE,
             ],
         };
         for key in usages {
@@ -275,6 +279,7 @@ impl Ui<'_> {
             "memory" => self.memory_command(&globals, rest),
             "plan" => self.plan_command(&globals, rest),
             "transport" => self.transport_command(&globals, rest),
+            "serve" => self.serve(&globals, rest),
             other => self.usage(other, None),
         }
     }

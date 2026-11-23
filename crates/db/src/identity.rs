@@ -182,6 +182,22 @@ pub fn get_user_by_email(conn: &Connection, email: &str) -> Result<User> {
     .ok_or(Error::NotFound)
 }
 
+/// The user `user`, only when they are a member of `org` (a user of another org is the same as a
+/// missing one, so a caller never learns who exists elsewhere).
+///
+/// # Errors
+/// [`Error::NotFound`] if the user is missing or not a member of this org.
+pub fn get_member_user(conn: &Connection, org: &OrgId, user: &UserId) -> Result<User> {
+    conn.query_row(
+        "SELECT u.id, u.email, u.name, u.created_at FROM users u \
+         JOIN memberships m ON m.user_id = u.id WHERE m.org_id = ?1 AND u.id = ?2",
+        params![org.as_str(), user.as_str()],
+        map_user,
+    )
+    .optional()?
+    .ok_or(Error::NotFound)
+}
+
 /// Adds a user to an org.
 ///
 /// # Errors

@@ -159,6 +159,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bootstrap"
+version = "0.0.0"
+dependencies = [
+ "ai",
+ "db",
+ "vault",
+]
+
+[[package]]
 name = "bytes"
 version = "1.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -186,6 +195,7 @@ version = "0.0.0"
 dependencies = [
  "agent",
  "ai",
+ "bootstrap",
  "collectors",
  "core-domain",
  "db",
@@ -194,6 +204,7 @@ dependencies = [
  "parity",
  "plan",
  "serde_json",
+ "server",
  "tokio",
  "transport",
  "vault",
@@ -974,6 +985,28 @@ dependencies = [
  "serde",
  "serde_core",
  "zmij",
+]
+
+[[package]]
+name = "server"
+version = "0.0.0"
+dependencies = [
+ "agent",
+ "ai",
+ "axum",
+ "bootstrap",
+ "core-domain",
+ "db",
+ "futures-core",
+ "i18n",
+ "inventory",
+ "parity",
+ "plan",
+ "ring",
+ "rust-embed",
+ "serde_json",
+ "tokio",
+ "vault",
 ]
 
 [[package]]

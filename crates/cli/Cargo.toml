@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 agent = { path = "../agent" }
 ai = { path = "../ai" }
+bootstrap = { path = "../bootstrap" }
 collectors = { path = "../collectors" }
 core-domain = { path = "../core" }
 db = { path = "../db" }
@@ -20,10 +21,11 @@ i18n = { path = "../i18n" }
 inventory = { path = "../inventory" }
 parity = { path = "../parity" }
 plan = { path = "../plan" }
+server = { path = "../server" }
 transport = { path = "../transport" }
 vault = { path = "../vault" }
-# A current-thread runtime to drive the async assistant turn; `rt` only (ADR 0026). The timer and
-# I/O drivers come from the features `net` already enables.
+# A current-thread runtime: drives the async assistant turn (ADR 0026) and `infra serve`. The timer
+# and I/O drivers come from the features `net` and `server` already enable.
 tokio = { version = "1", default-features = false, features = ["rt"] }
 
 [dev-dependencies]

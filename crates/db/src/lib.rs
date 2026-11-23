@@ -46,8 +46,8 @@ pub use conversations::{
 pub use error::{Error, Result};
 pub use identity::{
     ApiToken, Member, NewApiToken, Org, Role, User, add_member, create_api_token, create_org,
-    create_user, get_org, get_user_by_email, is_member, list_api_tokens, list_members,
-    remove_member, revoke_api_token, set_member_role,
+    create_user, get_member_user, get_org, get_user_by_email, is_member, list_api_tokens,
+    list_members, remove_member, revoke_api_token, set_member_role,
 };
 pub use ids::{
     AgentId, AiProviderId, ApiTokenId, AuditId, ComparisonId, ConversationId, InventoryId,

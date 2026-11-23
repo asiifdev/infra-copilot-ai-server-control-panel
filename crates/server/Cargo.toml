@@ -1,0 +1,37 @@
+[package]
+name = "server"
+description = "The local server: the JSON API and the embedded web UI on a loopback address, one-time-token sign-in (ADR 0029 and 0030)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+agent = { path = "../agent" }
+ai = { path = "../ai" }
+bootstrap = { path = "../bootstrap" }
+core-domain = { path = "../core" }
+db = { path = "../db" }
+i18n = { path = "../i18n" }
+inventory = { path = "../inventory" }
+parity = { path = "../parity" }
+plan = { path = "../plan" }
+vault = { path = "../vault" }
+# HTTP server glue. No JSON/query/form extractors: bodies and queries are read by hand with
+# serde_json, so no serde derive code and no extra features are pulled in (decision 0005).
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
+# `Stream` is the trait `axum::body::Body::from_stream` takes; the crate is already in the tree.
+futures-core = { version = "0.3", default-features = false }
+# Static files of `web/dist` compiled into the binary (also in debug builds, so tests are
+# reproducible); the folder may be absent (`allow_missing`).
+rust-embed = { version = "8", default-features = false, features = ["debug-embed"] }
+# The system random source for tokens; the same crate `vault` already uses.
+ring = { version = "0.17", default-features = false }
+serde_json = { version = "1", default-features = false, features = ["std"] }
+tokio = { version = "1", default-features = false, features = ["rt", "net", "time", "sync", "signal", "macros"] }
+
+[dev-dependencies]
+# The fake OpenAI-compatible provider and the HTTP client of the tests are plain std sockets.
+
+[lints]
+workspace = true

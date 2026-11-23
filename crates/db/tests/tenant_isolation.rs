@@ -19,6 +19,9 @@ fn org_a_cannot_touch_org_b_through_any_function() -> TestResult {
     // Reads with B's guessed ids, scoped as A.
     assert!(is_not_found(&get_node(&conn, &a.org, &b.node)));
     assert!(is_not_found(&get_node_secret(&conn, &a.org, &b.secret)));
+    // A user is only visible through an org they belong to.
+    assert!(is_not_found(&get_member_user(&conn, &a.org, &b.user)));
+    assert!(get_member_user(&conn, &b.org, &b.user).is_ok());
     assert!(list_agents(&conn, &a.org, &b.node)?.is_empty());
     assert!(list_node_secrets(&conn, &a.org, &b.node)?.is_empty());
 

@@ -164,7 +164,7 @@ impl Ui<'_> {
                 Err(code) => return code,
             }
         } else {
-            match Vault::new(&format!("unused:{}", "0".repeat(64)), &[]) {
+            match bootstrap::placeholder_vault() {
                 Ok(vault) => vault,
                 Err(_) => return self.fail(SETUP, &[]),
             }
