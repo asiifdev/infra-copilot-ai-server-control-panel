@@ -96,6 +96,35 @@ jobs:
       - name: Check the colour palette contrast
         run: python3 scripts/check-palette.py
 
+  web:
+    name: Web UI (check, test, build, smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Install the stable Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustc --version
+      - name: Type-check, test and build the web UI
+        run: ./scripts/build-web.sh
+      - name: Bundle sizes
+        run: |
+          echo "Production bundle (bytes, raw / gzip):"
+          for f in web/dist/assets/*; do
+            printf '%s %s / %s\n' "$(basename "$f")" "$(wc -c <"$f" | tr -d ' ')" "$(gzip -9 -c "$f" | wc -c | tr -d ' ')"
+          done
+      - name: Build the binary with the UI embedded
+        run: cargo build -p cli
+      - name: Smoke test the real binary (embedded UI, sign-in guard, headers)
+        run: ./scripts/smoke-serve.sh
+
   perf-budget:
     name: Performance budget (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

@@ -23,7 +23,10 @@ PAIRS = [
     "README", "CONTRIBUTING", "CODE_OF_CONDUCT", "SECURITY", "LICENSING", "FUNDING",
     "docs/faq", "docs/comparison",
 ]
-SKIP_DIRS = ("research_notes/", "reports/", "target/", ".git/", "ui/node_modules/")
+SKIP_DIRS = (
+    "research_notes/", "reports/", "target/", ".git/", ".claude/worktrees/", ".playwright-mcp/",
+    "ui/node_modules/", "web/node_modules/", "web/dist/",
+)
 failures = []
 
 
