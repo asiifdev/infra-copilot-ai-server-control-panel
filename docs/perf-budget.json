@@ -11,8 +11,8 @@
   "Darwin": {},
   "infra": {
     "default": {
-      "ui_gzip_bytes": 56000,
-      "ui_js_raw_bytes": 165000,
+      "ui_gzip_bytes": 64000,
+      "ui_js_raw_bytes": 180000,
       "binary_bytes": 7340032,
       "idle_rss_kib": 16384,
       "startup_ms": 150

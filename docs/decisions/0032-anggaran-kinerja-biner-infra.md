@@ -25,3 +25,6 @@ Margin sekitar 25-60%, sengaja longgar karena angka Linux belum pernah diukur; b
 
 ## Alternatif
 Mengganti blok lama: ditolak, probe masih ada sampai dipensiunkan (`ui/` dan `proto-server` dapat dihapus setelah anggaran baru stabil di CI).
+
+## Perubahan
+2026-11-24 (0035): UI gzip 56 000 → 64 000 B dan JS mentah 165 000 → 180 000 B setelah UI ops console.
