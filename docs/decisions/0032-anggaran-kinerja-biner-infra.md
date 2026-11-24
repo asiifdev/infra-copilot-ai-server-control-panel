@@ -28,3 +28,4 @@ Mengganti blok lama: ditolak, probe masih ada sampai dipensiunkan (`ui/` dan `pr
 
 ## Perubahan
 2026-11-24 (0035): UI gzip 56 000 → 64 000 B dan JS mentah 165 000 → 180 000 B setelah UI ops console.
+2026-11-24 (kalibrasi Linux dari CI): biner rilis Linux terukur 7 351 152 B (macOS 5 977 840 B; tautan statis dan simbol yang berbeda), melampaui 7 MiB bawaan. Blok `Linux` kini membatasi `binary_bytes` pada 8 388 608 B (8 MiB, margin sekitar 14%); metrik lain tetap memakai bawaan (Linux terukur: RSS 8 192 KiB, mulai 11 ms, UI sama dengan macOS). macOS tetap 7 MiB.

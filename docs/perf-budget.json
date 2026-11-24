@@ -7,6 +7,8 @@
     "idle_rss_kib": 16384,
     "startup_ms": 150
   },
-  "Linux": {},
+  "Linux": {
+    "binary_bytes": 8388608
+  },
   "Darwin": {}
 }
