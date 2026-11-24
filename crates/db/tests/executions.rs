@@ -8,7 +8,8 @@ use rusqlite::params;
 
 type TestResultOf<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-const ACTION: &str = r#"{"action":"restart_service","manager":"systemd","service":"nginx"}"#;
+const ACTION: &str =
+    r#"{"action":"restart_service","manager":"systemd","service":"nginx.service"}"#;
 
 fn new_proposal(hash: &str) -> NewProposal<'_> {
     NewProposal {

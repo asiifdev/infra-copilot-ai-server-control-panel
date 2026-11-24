@@ -29,6 +29,70 @@ fn an_action_has_one_canonical_form_a_fixed_tier_and_a_stable_hash() -> TestResu
     assert_eq!(parsed.hash(), action.hash());
     assert_eq!(action.hash().len(), 64);
     assert_ne!(action.hash(), restart("nginx-b.service")?.hash());
+    // A bare name and its full unit name are one and the same action.
+    assert_eq!(restart("nginx")?.hash(), action.hash());
+    Ok(())
+}
+
+#[test]
+fn only_service_units_can_be_addressed_and_critical_ones_are_tier_three() -> TestResult {
+    // Other unit types are refused: restarting a target can power the machine off.
+    for bad in [
+        "poweroff.target",
+        "reboot.target",
+        "halt.target",
+        "multi-user.target",
+        "ctrl-alt-del.target",
+        "dbus.socket",
+        "boot.mount",
+        "x.timer",
+        "x.SLICE",
+        "x.swap",
+    ] {
+        assert_eq!(restart(bad), Err(ActionError::BadServiceName), "{bad}");
+    }
+    // A bare name always becomes a service unit, so the command cannot address anything else.
+    let bare = restart("php8.3-fpm")?;
+    assert_eq!(
+        bare.canonical_json(),
+        r#"{"action":"restart_service","manager":"systemd","service":"php8.3-fpm.service"}"#
+    );
+    assert_eq!(bare, restart("php8.3-fpm.service")?);
+    // Units that can cut the machine off or stop it are a risky change, never run today.
+    for critical in [
+        "sshd",
+        "ssh.service",
+        "systemd-logind",
+        "systemd-networkd.service",
+        "dbus",
+        "NetworkManager",
+        "networking",
+        "getty@tty1",
+        "user@1000",
+        "reboot",
+        "poweroff",
+        "Rescue",
+    ] {
+        let action = restart(critical)?;
+        assert_eq!(action.tier(), Tier::RiskyChange, "{critical}");
+        assert!(!action.executable_now(), "{critical}");
+    }
+    for ordinary in [
+        "nginx",
+        "php8.3-fpm",
+        "redis-server",
+        "my-app.service",
+        "sshfs-helper-not",
+    ] {
+        let action = restart(ordinary)?;
+        // `sshfs-helper-not` shares the prefix `ssh` and is conservatively critical too.
+        let expected = if ordinary.starts_with("ssh") {
+            Tier::RiskyChange
+        } else {
+            Tier::LightChange
+        };
+        assert_eq!(action.tier(), expected, "{ordinary}");
+    }
     Ok(())
 }
 
@@ -47,6 +111,7 @@ fn service_names_that_could_become_options_or_shell_are_refused() {
         "a\0b",
         "ünï",
         &"x".repeat(101),
+        &"x".repeat(93),
     ] {
         assert_eq!(restart(bad), Err(ActionError::BadServiceName), "{bad:?}");
     }

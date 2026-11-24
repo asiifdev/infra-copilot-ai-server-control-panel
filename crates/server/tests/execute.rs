@@ -9,7 +9,8 @@ use db::{NewNode, NewProposal, NodeAccess, NodeKind};
 use serde_json::json;
 use std::sync::{Arc, Mutex};
 
-const ACTION: &str = r#"{"action":"restart_service","manager":"systemd","service":"nginx"}"#;
+const ACTION: &str =
+    r#"{"action":"restart_service","manager":"systemd","service":"nginx.service"}"#;
 
 /// Records what it was asked to run and answers as scripted.
 struct Recording {
@@ -156,7 +157,7 @@ fn an_approved_action_runs_once_and_the_result_is_listed() -> TestResult {
     assert_eq!(ran(&s), 1);
     // The list shows the action, the node and the execution.
     let list = session.get("/api/proposals?status=executed").json();
-    assert_eq!(list[0]["action"]["service"], "nginx");
+    assert_eq!(list[0]["action"]["service"], "nginx.service");
     assert_eq!(list[0]["node"], "this-mac");
     assert_eq!(list[0]["execution"]["status"], "succeeded");
     // The impact is a catalog key in the database and a sentence in the reader's language here.
@@ -231,6 +232,28 @@ fn nothing_runs_unless_everything_is_in_order() -> TestResult {
         true,
     )?;
     assert_eq!(run(&unknown), 409);
+    // A critical unit stored as tier 2 (a downgrade of its real tier) is refused, and so is one
+    // stored with its real tier 3: critical units are not runnable at all yet.
+    let crit = r#"{"action":"restart_service","manager":"systemd","service":"sshd.service"}"#;
+    let downgraded = proposal(
+        &s,
+        &s.local_node,
+        crit,
+        &db::sha256_hex(crit.as_bytes()),
+        true,
+    )?;
+    assert_eq!(run(&downgraded), 409);
+    // Only a unit that is not a service can never even be stored by the tool, but a hand-made row
+    // must not run either.
+    let target = r#"{"action":"restart_service","manager":"systemd","service":"poweroff.target"}"#;
+    let powered = proposal(
+        &s,
+        &s.local_node,
+        target,
+        &db::sha256_hex(target.as_bytes()),
+        true,
+    )?;
+    assert_eq!(run(&powered), 409);
     // A target that is not this machine.
     let far = proposal(&s, &s.remote_node, ACTION, &good_hash(), true)?;
     assert_eq!(run(&far), 409);

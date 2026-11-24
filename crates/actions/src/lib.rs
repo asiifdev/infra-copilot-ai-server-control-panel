@@ -28,8 +28,9 @@ pub enum ActionError {
     UnknownAction,
     /// The service manager is not on the list.
     UnknownManager,
-    /// The service name is empty, too long, starts with `-` or `.`, or has a character outside
-    /// `A-Z a-z 0-9 _ . @ -`.
+    /// The service name is empty, too long, starts with `-` or `.`, has a character outside
+    /// `A-Z a-z 0-9 _ . @ -`, or names a unit that is not a service (`.target`, `.socket`,
+    /// `.mount`, ...): restarting `poweroff.target` would power the machine off.
     BadServiceName,
 }
 
@@ -70,40 +71,113 @@ impl ServiceManagerKind {
     }
 }
 
-/// A validated service name. There is no way to build one that fails validation.
+/// Unit types systemd knows besides `service`. A name ending in one of them is refused:
+/// `systemctl restart reboot.target` is a reboot, not a service restart.
+const OTHER_UNIT_TYPES: [&str; 10] = [
+    "socket",
+    "target",
+    "mount",
+    "automount",
+    "swap",
+    "timer",
+    "path",
+    "slice",
+    "scope",
+    "device",
+];
+
+/// Units whose restart can cut the machine off, end every session or stop it: a restart of one of
+/// these is a risky change (tier 3), never a light one. Matched on the lowercase name without the
+/// `.service` suffix, as a prefix (`systemd-` covers logind, journald, udevd, networkd, ...).
+const CRITICAL_PREFIXES: [&str; 17] = [
+    "systemd-",
+    "dbus",
+    "getty",
+    "console-getty",
+    "serial-getty",
+    "user@",
+    "user-runtime-dir@",
+    "sshd",
+    "ssh",
+    "networkmanager",
+    "networking",
+    "network",
+    "polkit",
+    "rc-local",
+    "emergency",
+    "rescue",
+    "init",
+];
+
+/// Units that stop or reboot the machine, matched exactly.
+const POWER_UNITS: [&str; 7] = [
+    "poweroff",
+    "reboot",
+    "halt",
+    "kexec",
+    "shutdown",
+    "suspend",
+    "hibernate",
+];
+
+/// A validated service name, always the full unit name ending in `.service`. There is no way to
+/// build one that fails validation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServiceName(String);
 
 impl ServiceName {
-    /// Validates a service name.
+    /// Validates a service name. A name without a `.service` suffix gets it (`nginx` becomes
+    /// `nginx.service`), so the command can only ever address a service unit.
     ///
     /// # Errors
     /// [`ActionError::BadServiceName`].
     pub fn new(text: &str) -> Result<Self, ActionError> {
-        let ok = !text.is_empty()
+        let charset_ok = !text.is_empty()
             && text.len() <= MAX_SERVICE_NAME
             && !text.starts_with(['-', '.'])
             && text
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '@' | '-'));
-        if ok {
-            Ok(Self(text.to_owned()))
-        } else {
-            Err(ActionError::BadServiceName)
+        if !charset_ok {
+            return Err(ActionError::BadServiceName);
         }
+        let other_unit_type = text.rsplit_once('.').is_some_and(|(_, suffix)| {
+            OTHER_UNIT_TYPES.contains(&suffix.to_ascii_lowercase().as_str())
+        });
+        if other_unit_type {
+            return Err(ActionError::BadServiceName);
+        }
+        let full = if text.ends_with(".service") {
+            text.to_owned()
+        } else {
+            format!("{text}.service")
+        };
+        if full.len() > MAX_SERVICE_NAME || full == ".service" {
+            return Err(ActionError::BadServiceName);
+        }
+        Ok(Self(full))
     }
 
-    /// The name.
+    /// The full unit name, ending in `.service`.
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// Whether restarting this unit can cut the machine off, end every session or stop it.
+    #[must_use]
+    pub fn is_critical(&self) -> bool {
+        let lower = self.0.to_ascii_lowercase();
+        let base = lower.strip_suffix(".service").unwrap_or(&lower);
+        POWER_UNITS.contains(&base) || CRITICAL_PREFIXES.iter().any(|p| base.starts_with(p))
     }
 }
 
 /// One thing an approved proposal may do.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
-    /// Restart a service (tier 2). No undo exists: a restart cannot be reversed, only repeated.
+    /// Restart a service. Tier 2 for an ordinary service, tier 3 for a critical unit (see
+    /// [`ServiceName::is_critical`]). No undo exists: a restart cannot be reversed, only repeated.
     RestartService {
         /// How the service is managed.
         manager: ServiceManagerKind,
@@ -134,8 +208,9 @@ impl Action {
 
     /// The tier, fixed here.
     #[must_use]
-    pub const fn tier(&self) -> Tier {
+    pub fn tier(&self) -> Tier {
         match self {
+            Self::RestartService { name, .. } if name.is_critical() => Tier::RiskyChange,
             Self::RestartService { .. } => Tier::LightChange,
         }
     }
@@ -143,7 +218,7 @@ impl Action {
     /// Whether the executor can run this action today. False for tier 3 and 4 until dry-run with
     /// backup, typed confirmation and rollback exist.
     #[must_use]
-    pub const fn executable_now(&self) -> bool {
+    pub fn executable_now(&self) -> bool {
         matches!(self.tier(), Tier::LightChange)
     }
 
