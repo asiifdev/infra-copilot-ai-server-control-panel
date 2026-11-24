@@ -26,6 +26,10 @@ export interface MockOptions {
   eol?: '\n' | '\r\n' | '\r';
   /** Serve the catalog without a session (the sign-in page needs text before the exchange). */
   openCatalog?: boolean;
+  /** `infra serve --enable-execution` was given. Default false, like the real server. */
+  executionEnabled?: boolean;
+  /** A run ends as failed (command_failed) instead of succeeded. */
+  executionFails?: boolean;
 }
 
 export interface MockRequest {
@@ -110,6 +114,8 @@ export function createMock(options: MockOptions = {}) {
   const state = {
     ...fixtures,
     masterKey: options.masterKey ?? true,
+    executionEnabled: options.executionEnabled ?? false,
+    executionFails: options.executionFails ?? false,
     token: { value: MOCK_TOKEN, used: false },
     sessions: new Set<string>(),
     activeTurns: new Set<string>(),
@@ -262,6 +268,7 @@ export function createMock(options: MockOptions = {}) {
           locale: localeOf(req),
           master_key_configured: state.masterKey,
           version: '0.0.0-mock',
+          execution_enabled: state.executionEnabled,
         });
       case 'i18n':
         if (sub.length === 2) return json(200, catalogs[sub[1] === 'id' ? 'id' : 'en']);
@@ -388,6 +395,29 @@ export function createMock(options: MockOptions = {}) {
           if (proposal.status !== 'pending') return fail(req, 409, 'proposal_decided');
           proposal.status = decision === 'approve' ? 'approved' : 'rejected';
           return json(200, { id: proposal.id, status: proposal.status });
+        }
+        if (method === 'POST' && name && action === 'execute') {
+          // The same order of checks as the server: switched off, unknown, then the state.
+          if (!state.executionEnabled) return fail(req, 409, 'execution_disabled');
+          const proposal = state.proposals.find((p) => p.id === name);
+          if (!proposal) return fail(req, 404, 'not_found');
+          if (proposal.status === 'executed' || proposal.status === 'failed') return fail(req, 409, 'proposal_already_run');
+          if (proposal.status === 'approved' && new Date(proposal.expires_at).getTime() < Date.now()) proposal.status = 'expired';
+          if (proposal.status === 'expired') return fail(req, 409, 'proposal_expired');
+          if (proposal.status !== 'approved') return fail(req, 409, 'proposal_not_approved');
+          if (!proposal.action) return fail(req, 409, 'proposal_no_action');
+          const started = new Date().toISOString();
+          const ok = !state.executionFails;
+          proposal.execution = {
+            status: ok ? 'succeeded' : 'failed',
+            verified: ok,
+            reason: ok ? 'ok' : 'command_failed',
+            output: ok ? 'active' : `Failed to restart ${proposal.action.service}: Unit not found.`,
+            started_at: started,
+            finished_at: new Date().toISOString(),
+          };
+          proposal.status = ok ? 'executed' : 'failed';
+          return json(200, { id: proposal.id, status: proposal.status, execution: proposal.execution });
         }
         break;
       }

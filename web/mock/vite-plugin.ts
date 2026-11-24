@@ -27,7 +27,7 @@ export function mockApiPlugin(): Plugin {
     name: 'nodivara-mock-api',
     apply: 'serve',
     configureServer(server) {
-      const mock = createMock({ turnDelayMs: 40, splitChunks: false });
+      const mock = createMock({ turnDelayMs: 40, splitChunks: false, executionEnabled: true });
       server.httpServer?.once('listening', () => {
         const address = server.httpServer?.address();
         if (address && typeof address === 'object') {

@@ -18,6 +18,7 @@
   const findings = useResource((signal) => api.findings(undefined, undefined, signal));
   const providers = useResource((signal) => api.providers(signal));
   const proposals = useResource((signal) => api.proposals('pending', signal));
+  const approved = useResource((signal) => api.proposals('approved', signal));
 
   const SEVERITIES = ['critical', 'important', 'info'] as const;
   const num = (n: number) => formatNumber(n, i18n.locale);
@@ -41,10 +42,15 @@
 
   // What needs a person now, built only from data that has arrived. Pending approvals come first.
   const attention = $derived.by<Attention[] | null>(() => {
-    if (!nodes.data || !findings.data || !providers.data || !proposals.data) return null;
+    if (!nodes.data || !findings.data || !providers.data || !proposals.data || !approved.data) return null;
     const out: Attention[] = [];
     if (proposals.data.length > 0) {
       out.push({ id: 'pending', icon: 'proposals', text: t('ui.overview.attention_pending', { count: proposals.data.length }), href: hrefFor({ name: 'proposals' }), link: t('ui.overview.act_review') });
+    }
+    // Approved and not yet run: only an approved proposal with an action can still be run.
+    const waiting = approved.data.filter((p) => p.action !== null).length;
+    if (waiting > 0) {
+      out.push({ id: 'run', icon: 'proposals', text: t('ui.overview.attention_run', { count: waiting }), href: hrefFor({ name: 'proposals' }), link: t('ui.overview.act_review') });
     }
     const critical = findings.data.findings.filter((f) => f.severity === 'critical').length;
     if (critical > 0) {

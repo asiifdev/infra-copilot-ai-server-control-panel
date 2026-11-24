@@ -222,7 +222,17 @@ export function buildFixtures(options: { hostile?: boolean } = {}): Fixtures {
     memory(4, 'preference', 'person', 'active', 'Prefers short answers.'),
   ];
 
-  const proposal = (n: number, tool: string, tier: number, status: string, title: string, rationale: string, action: string, impact: string): ProposalView => ({
+  const proposal = (
+    n: number,
+    tool: string,
+    tier: number,
+    status: string,
+    title: string,
+    rationale: string,
+    action: string,
+    impact: string,
+    run: Pick<ProposalView, 'action' | 'node' | 'execution'> = { action: null, node: null, execution: null },
+  ): ProposalView => ({
     id: id(200 + n),
     tool,
     tier,
@@ -236,14 +246,39 @@ export function buildFixtures(options: { hostile?: boolean } = {}): Fixtures {
     conversation_id: id(300),
     created_at: '2026-11-22T07:00:00.000Z',
     // Pending proposals expire two days from now (the clock of the test run), the others are history.
-    expires_at: new Date(Date.now() + (status === 'pending' ? 2 * 86_400_000 : -86_400_000)).toISOString(),
+    expires_at: new Date(Date.now() + (status === 'pending' || status === 'approved' ? 2 * 86_400_000 : -86_400_000)).toISOString(),
+    ...run,
+  });
+  const restart = (service: string, execution: ProposalView['execution'] = null): Pick<ProposalView, 'action' | 'node' | 'execution'> => ({
+    action: { kind: 'restart_service', manager: 'systemd', service },
+    node: 'this-mac',
+    execution,
   });
   const proposals: ProposalView[] = [
     proposal(1, 'propose_restart', 2, 'pending', text('Restart the web service', 4), long('It stopped answering health checks.', 1), long('Restart the service.', 5), long('About ten seconds of downtime.', 2)),
     proposal(2, 'propose_rotate_logs', 1, 'rejected', 'Rotate the log files', 'Disk is 92 percent full.', 'Rotate the logs.', 'None expected.'),
     proposal(3, 'propose_move_traffic', 3, 'pending', 'Move traffic to the new server', 'The comparison found no blocking differences.', 'Switch the tunnel to the new server.', 'All visitors reach the new server.'),
     proposal(4, 'propose_clear_cache', 1, 'expired', 'Clear the page cache', 'The cache is stale.', 'Clear it.', 'Pages load slower for a minute.'),
+    // Approved, recommendation only: nothing to run.
     proposal(5, 'propose_add_swap', 2, 'approved', 'Add a swap file', 'Memory use is high.', 'Create a 2 GB swap file.', 'Uses 2 GB of disk.'),
+    // Approved with an action: waits for a person to run it.
+    proposal(6, 'propose_restart_service', 2, 'approved', 'Restart nginx', 'Health checks keep failing.', 'Restart the nginx service.', 'The web service is briefly unavailable. A restart cannot be undone.', restart(text('nginx.service', 3))),
+    proposal(7, 'propose_restart_service', 2, 'executed', 'Restart the queue worker', 'The queue is stuck.', 'Restart the worker.', 'The worker is briefly unavailable. A restart cannot be undone.', restart('queue-worker.service', {
+      status: 'succeeded',
+      verified: true,
+      reason: 'ok',
+      output: long('active', 7),
+      started_at: '2026-11-23T09:00:00.000Z',
+      finished_at: '2026-11-23T09:00:02.000Z',
+    })),
+    proposal(8, 'propose_restart_service', 2, 'failed', 'Restart the mail relay', 'Mail is not being delivered.', 'Restart the relay.', 'Mail is briefly delayed. A restart cannot be undone.', restart('mail-relay.service', {
+      status: 'failed',
+      verified: false,
+      reason: 'command_failed',
+      output: h ? HOSTILE.slice(0, 8).join('\n') : 'Failed to restart mail-relay.service: Unit mail-relay.service not found.',
+      started_at: '2026-11-23T10:00:00.000Z',
+      finished_at: '2026-11-23T10:00:01.000Z',
+    })),
   ];
 
   const conversations: Conversation[] = [

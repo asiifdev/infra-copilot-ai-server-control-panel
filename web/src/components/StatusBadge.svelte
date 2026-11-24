@@ -47,6 +47,7 @@
     passed: ['ui.transports.check_ok', 'success'],
     failed: ['ui.transports.check_failed', 'danger'],
     executed: ['ui.state.executed', 'success'],
+    succeeded: ['ui.state.succeeded', 'success'],
     expired: ['ui.state.expired', 'neutral'],
     ok: ['ui.state.ok', 'success'],
     running: ['ui.state.running', 'info'],

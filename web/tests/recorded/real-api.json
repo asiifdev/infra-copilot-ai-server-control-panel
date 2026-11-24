@@ -1,5 +1,5 @@
 {
- "_about": "Real responses of `infra serve` (demo data, scripts/demo-serve.sh --fake-ai), recorded 2026-11-23 with curl-equivalent requests. Lists are shortened; shapes are exact. Used by web/tests/recorded.test.ts to keep the mock honest.",
+ "_about": "Real responses of `infra serve` (demo data, scripts/demo-serve.sh --fake-ai), recorded 2026-11-23 with curl-equivalent requests. Lists are shortened; shapes are exact. Used by web/tests/recorded.test.ts to keep the mock honest. The execution fields (session.execution_enabled; proposals action, node, execution) were added by hand from the server contract of ADR 0037, not recorded: re-record them from a live `infra serve --enable-execution` when one is run.",
  "after_logout": {
   "body": {
    "error": {
@@ -609,11 +609,14 @@
  "proposals": {
   "body": [
    {
+    "action": null,
     "conversation_id": "2e8d52c6-74bd-4acc-ab06-6a94849e6fd8",
     "created_at": "2026-11-23T18:29:44.418Z",
+    "execution": null,
     "expires_at": "2026-11-24T18:29:44.418Z",
     "id": "356417de-77d6-4bdf-9dce-c21add77b992",
     "impact": "Short downtime.",
+    "node": null,
     "rationale": "Because reasons.",
     "rule_id": "P001",
     "status": "pending",
@@ -624,14 +627,28 @@
     "tool": "propose_dns_change"
    },
    {
+    "action": {
+     "kind": "restart_service",
+     "manager": "systemd",
+     "service": "demo.service"
+    },
     "conversation_id": "2e8d52c6-74bd-4acc-ab06-6a94849e6fd8",
     "created_at": "2026-11-23T18:29:44.418Z",
+    "execution": {
+     "finished_at": "2026-11-23T18:30:01.000Z",
+     "output": "Unit demo.service not found.",
+     "reason": "command_failed",
+     "started_at": "2026-11-23T18:30:00.000Z",
+     "status": "failed",
+     "verified": false
+    },
     "expires_at": "2026-11-24T18:29:44.418Z",
     "id": "c5dd35c3-c177-4f2b-bcae-93a8657baeca",
     "impact": "Short downtime.",
+    "node": "demo-local",
     "rationale": "Because reasons.",
     "rule_id": "P001",
-    "status": "approved",
+    "status": "failed",
     "subject_key": "listener:8080",
     "suggested_action": "Do the thing",
     "tier": 2,
@@ -786,6 +803,7 @@
  },
  "session": {
   "body": {
+   "execution_enabled": false,
    "locale": "en",
    "master_key_configured": true,
    "org": {

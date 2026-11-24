@@ -213,6 +213,16 @@ describe('overview dashboard', () => {
     expect(actions).toEqual(['Ask the assistant', 'Add a provider', 'Review approvals']);
   });
 
+  it('lists approved actions that wait to be run, after the pending approvals', async () => {
+    const mock = installMock();
+    await readyApp(mock);
+    const root = render(Overview);
+    await eventually(() => expect(root.querySelectorAll('.items li').length).toBeGreaterThan(1));
+    const second = root.querySelectorAll('.items li')[1];
+    expect(second?.textContent).toContain('Approved actions waiting to run: 1');
+    expect(second?.querySelector('a')?.getAttribute('href')).toBe('#/proposals');
+  });
+
   it('says that everything is calm when nothing needs attention', async () => {
     const mock = installMock();
     mock.state.proposals = [];

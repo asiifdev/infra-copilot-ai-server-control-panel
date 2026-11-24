@@ -96,6 +96,43 @@ describe('accessibility of the overlays (axe-core)', () => {
   }
 });
 
+describe('accessibility of running an approved action (axe-core)', () => {
+  for (const locale of ['en', 'id'] as const) {
+    for (const mode of ['light', 'dark'] as const) {
+      const axeRun = async () => (await axe.run(document.documentElement, { rules: { 'color-contrast': { enabled: false } } })).violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`);
+      const showApproved = async (root: HTMLElement) => {
+        const filter = [...root.querySelectorAll('[role="group"] button')].find((b) => /^(Approved|Disetujui)/.test(b.textContent?.trim() ?? '')) as HTMLButtonElement;
+        filter.click();
+        flushSync();
+        await eventually(() => expect(root.querySelectorAll('section h2').length).toBe(4));
+      };
+
+      it(`approved cards with results and the execution-off hint in ${locale}, ${mode} theme have no violations`, async () => {
+        const { root, stop } = await openRoute('#/proposals', undefined, locale, mode);
+        await showApproved(root);
+        expect(root.querySelector('[aria-describedby]')).not.toBeNull();
+        expect(await axeRun()).toEqual([]);
+        stop();
+      });
+
+      it(`the Run dialog and the result of a failed run in ${locale}, ${mode} theme have no violations`, async () => {
+        const { root, stop } = await openRoute('#/proposals', { executionEnabled: true, executionFails: true }, locale, mode);
+        await showApproved(root);
+        const run = [...root.querySelectorAll('section button')].find((b) => /^(Run|Jalankan)$/.test(b.textContent?.trim() ?? '')) as HTMLButtonElement;
+        run.click();
+        flushSync();
+        expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
+        expect(await axeRun()).toEqual([]);
+        ([...document.querySelectorAll('[role="alertdialog"] button')].pop() as HTMLButtonElement).click();
+        await eventually(() => expect(document.querySelector('[role="alertdialog"]')).toBeNull());
+        await eventually(() => expect(root.textContent).toMatch(/Failed to restart nginx\.service/));
+        expect(await axeRun()).toEqual([]);
+        stop();
+      });
+    }
+  }
+});
+
 describe('structure by construction', () => {
   it('has a skip link first, landmarks, one h1 per page and the document language', async () => {
     const { root, stop } = await openRoute('#/nodes');

@@ -4,6 +4,7 @@
   import { errorKey } from '../lib/errors';
   import { t } from '../lib/i18n.svelte';
   import { useResource } from '../lib/resource.svelte';
+  import { session } from '../lib/session.svelte';
   import { toasts } from '../lib/toast.svelte';
   import { inlineText } from '../lib/text';
   import type { ProposalView } from '../lib/types';
@@ -31,6 +32,10 @@
   let acting = $state<string | null>(null);
   // The decision waiting for a second look: every rejection, and an approval of a risky change.
   let confirming = $state.raw<{ proposal: ProposalView; decision: 'approve' | 'reject' } | null>(null);
+
+  // The approved action waiting for a second look before it runs.
+  let running = $state.raw<ProposalView | null>(null);
+  const executionEnabled = $derived(session.info?.execution_enabled === true);
 
   function inFilter(list: ProposalView[], which: Filter): ProposalView[] {
     return which === 'all' ? list : list.filter((p) => GROUPS[which].includes(p.status));
@@ -71,6 +76,26 @@
       void approvals.refresh();
     }
   }
+
+  async function run(proposal: ProposalView) {
+    acting = proposal.id;
+    try {
+      // No optimism: the card changes only when the server has answered.
+      const result = await api.executeProposal(proposal.id);
+      if (result.execution.status === 'succeeded') {
+        toasts.push(result.execution.verified ? 'success' : 'info', t(result.execution.verified ? 'ui.proposals.run_ok_toast' : 'ui.proposals.run_unverified_toast'));
+      } else {
+        toasts.push('error', t('ui.proposals.run_failed_toast'));
+      }
+    } catch (cause) {
+      toasts.push('error', t(errorKey(cause instanceof ApiError ? cause.code : 'internal')));
+    } finally {
+      acting = null;
+      running = null;
+      proposals.reload();
+      void approvals.refresh();
+    }
+  }
 </script>
 
 <div class="stack">
@@ -100,6 +125,8 @@
                 busy={acting === proposal.id}
                 onapprove={() => approve(proposal)}
                 onreject={() => (confirming = { proposal, decision: 'reject' })}
+                {executionEnabled}
+                onrun={() => (running = proposal)}
               />
             </li>
           {/each}
@@ -121,6 +148,24 @@
     busy={acting === proposal.id}
     onconfirm={() => decide(proposal, decision)}
     oncancel={() => (confirming = null)}
+  />
+{/if}
+
+{#if running}
+  {@const target = running}
+  <ConfirmDialog
+    title={t('ui.proposals.run_title')}
+    message={t('ui.proposals.run_message', {
+      service: inlineText(target.action?.service, 100),
+      manager: inlineText(target.action?.manager, 20),
+      node: inlineText(target.node, 80) || t('ui.proposal.node_unknown'),
+    })}
+    confirmLabel={t('ui.proposals.run_confirm')}
+    cancelLabel={t('ui.common.cancel')}
+    tone="primary"
+    busy={acting === target.id}
+    onconfirm={() => run(target)}
+    oncancel={() => (running = null)}
   />
 {/if}
 

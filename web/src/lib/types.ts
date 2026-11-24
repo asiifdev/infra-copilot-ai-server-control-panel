@@ -8,6 +8,8 @@ export interface SessionInfo {
   locale: string;
   master_key_configured: boolean;
   version: string;
+  /** True only when the owner started the server with `--enable-execution`. */
+  execution_enabled: boolean;
 }
 
 export interface InventoryCounts {
@@ -134,6 +136,24 @@ export interface MemoryNote {
   updated_at: string;
 }
 
+/** The closed action list: the only thing a proposal can run (ADR 0037). */
+export interface ProposalAction {
+  kind: 'restart_service';
+  manager: 'systemd';
+  service: string;
+}
+
+/** What happened when an approved proposal was run. `output` is untrusted text from the target. */
+export interface ProposalExecution {
+  status: 'running' | 'succeeded' | 'failed';
+  verified: boolean;
+  /** ok | not_installed | timeout | command_failed | not_active_after | io | action_invalid | interrupted */
+  reason: string | null;
+  output: string;
+  started_at: string;
+  finished_at: string | null;
+}
+
 export interface ProposalView {
   id: string;
   tool: string;
@@ -150,6 +170,11 @@ export interface ProposalView {
   conversation_id: string | null;
   created_at: string;
   expires_at: string;
+  /** What running would do; null for a recommendation only. */
+  action: ProposalAction | null;
+  /** Name of the target node of the action. */
+  node: string | null;
+  execution: ProposalExecution | null;
 }
 
 export interface Conversation {

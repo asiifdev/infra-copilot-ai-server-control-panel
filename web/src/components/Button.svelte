@@ -17,6 +17,8 @@
     block?: boolean;
     /** Renders a link that looks like a button (for navigation); the other state props do not apply. */
     href?: string;
+    /** Id of the element that explains the button (for example why it is disabled). */
+    describedby?: string;
     onclick?: (event: MouseEvent) => void;
     children: Snippet;
   }
@@ -31,6 +33,7 @@
     icon,
     block = false,
     href,
+    describedby,
     onclick,
     children,
   }: Props = $props();
@@ -42,7 +45,7 @@
     {@render children()}
   </a>
 {:else}
-  <button class={['btn', variant, size, block && 'block']} {type} disabled={disabled || busy} aria-busy={busy} {onclick}>
+  <button class={['btn', variant, size, block && 'block']} {type} disabled={disabled || busy} aria-busy={busy} aria-describedby={describedby} {onclick}>
     {#if busy}<Spinner label={busyLabel} small />{:else if icon}<Icon name={icon} size="sm" />{/if}
     {@render children()}
   </button>

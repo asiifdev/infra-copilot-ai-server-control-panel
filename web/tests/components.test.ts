@@ -243,6 +243,9 @@ describe('ProposalCard', () => {
     conversation_id: null,
     created_at: '2026-11-22T07:00:00.000Z',
     expires_at: '2026-11-23T07:00:00.000Z',
+    action: null,
+    node: null,
+    execution: null,
   };
 
   it('shows action, reason, impact and state, and offers no decision without handlers', () => {
@@ -277,5 +280,25 @@ describe('ProposalCard', () => {
       const root = render(ProposalCard, { proposal: { ...proposal, title: text, rationale: text, suggested_action: text, impact: text, tool: text } });
       expect(root.querySelector('script, img, svg:not([data-icon]), iframe, a')).toBeNull();
     }
+  });
+
+  it('says "unknown reason" for a reason code it does not know, and shows no Run without a handler', () => {
+    const execution = { status: 'failed' as const, verified: false, reason: 'brand_new_code', output: '', started_at: '2026-11-23T10:00:00.000Z', finished_at: null };
+    const action = { kind: 'restart_service' as const, manager: 'systemd' as const, service: 'x.service' };
+    const root = render(ProposalCard, { proposal: { ...proposal, status: 'failed', action, node: 'n1', execution } });
+    expect(root.textContent).toContain('a reason this version of the interface does not know');
+    expect(root.textContent).toContain('Started');
+    expect(root.querySelector('button')).toBeNull();
+  });
+
+  it('offers Run on an approved proposal with an action, enabled only when execution is on', () => {
+    const action = { kind: 'restart_service' as const, manager: 'systemd' as const, service: 'x.service' };
+    const approved = { ...proposal, status: 'approved', action, node: 'n1' };
+    const run = vi.fn();
+    const off = render(ProposalCard, { proposal: approved, onrun: run });
+    expect((off.querySelector('button') as HTMLButtonElement).disabled).toBe(true);
+    const on = render(ProposalCard, { proposal: approved, onrun: run, executionEnabled: true });
+    (on.querySelector('button') as HTMLButtonElement).click();
+    expect(run).toHaveBeenCalledTimes(1);
   });
 });
