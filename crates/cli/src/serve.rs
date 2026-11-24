@@ -60,6 +60,8 @@ impl Ui<'_> {
         };
         let outcome = runtime.block_on(async {
             let server = Server::bind(config).await?;
+            // Installed before the address is printed, so a signal right after it is handled.
+            let shutdown = server::shutdown_signal();
             let url = server.login_url()?;
             let address = server.local_addr().to_string();
             let text = self.tr(LISTENING, &[("address", &address)]);
@@ -74,7 +76,7 @@ impl Ui<'_> {
             self.note_out(&url);
             let text = self.tr(STOP, &[]);
             self.note_out(&text);
-            server.run(server::shutdown_signal()).await
+            server.run(shutdown).await
         });
         match outcome {
             Ok(()) => self.say_out(STOPPED, &[]),

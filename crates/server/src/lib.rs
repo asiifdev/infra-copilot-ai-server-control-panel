@@ -221,25 +221,31 @@ impl Server {
     }
 }
 
-/// Completes on Ctrl-C or, on Unix, SIGTERM.
-pub async fn shutdown_signal() {
+/// A future that completes on Ctrl-C or, on Unix, SIGTERM.
+///
+/// The signal handlers are installed when this function is **called**, not when the future is
+/// first polled: the caller prints the sign-in address in between, and a signal that arrives
+/// right after that must stop the server cleanly instead of killing the process. Call it inside
+/// the runtime, before announcing that the server is ready.
+pub fn shutdown_signal() -> impl Future<Output = ()> + Send + 'static {
     #[cfg(unix)]
-    {
+    let handlers = {
         use tokio::signal::unix::{SignalKind, signal};
-        match signal(SignalKind::terminate()) {
-            Ok(mut term) => {
+        signal(SignalKind::interrupt())
+            .and_then(|int| signal(SignalKind::terminate()).map(|term| (int, term)))
+            .ok()
+    };
+    async move {
+        #[cfg(unix)]
+        {
+            if let Some((mut int, mut term)) = handlers {
                 tokio::select! {
-                    _ = tokio::signal::ctrl_c() => {}
+                    _ = int.recv() => {}
                     _ = term.recv() => {}
                 }
-            }
-            Err(_) => {
-                let _ = tokio::signal::ctrl_c().await;
+                return;
             }
         }
-    }
-    #[cfg(not(unix))]
-    {
         let _ = tokio::signal::ctrl_c().await;
     }
 }
