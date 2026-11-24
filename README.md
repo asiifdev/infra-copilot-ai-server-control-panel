@@ -251,7 +251,7 @@ cargo fmt --all --check
 ./scripts/build-web.sh      # web UI: npm ci, type check, tests, production build (needs Node 24 or newer)
 ```
 
-Last run: 850 Rust tests pass and 1 is ignored (the live-provider test) in `cargo test --workspace`, plus 254 tests in `web/`. The production bundle is about 156 KB of JavaScript (49 KB gzip) and 40 KB of CSS (7 KB gzip). Build `web/` before `cargo build -p cli` if you want the UI inside the binary.
+Last run: 850 Rust tests pass and 1 is ignored (the live-provider test) in `cargo test --workspace`, plus 282 tests in `web/`. The production bundle is about 156 KB of JavaScript (49 KB gzip) and 40 KB of CSS (7 KB gzip). Build `web/` before `cargo build -p cli` if you want the UI inside the binary.
 
 ## Documentation
 

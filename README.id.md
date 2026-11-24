@@ -252,7 +252,7 @@ cargo fmt --all --check
 ./scripts/build-web.sh      # UI web: npm ci, pemeriksaan tipe, tes, build produksi (butuh Node 24 atau lebih baru)
 ```
 
-Terakhir dijalankan: 850 tes Rust lulus dan 1 diabaikan (uji penyedia hidup) pada `cargo test --workspace`, ditambah 254 tes di `web/`. Bundel produksi sekitar 156 KB JavaScript (49 KB gzip) dan 40 KB CSS (7 KB gzip). Bangun `web/` sebelum `cargo build -p cli` bila ingin UI ada di dalam biner.
+Terakhir dijalankan: 850 tes Rust lulus dan 1 diabaikan (uji penyedia hidup) pada `cargo test --workspace`, ditambah 282 tes di `web/`. Bundel produksi sekitar 156 KB JavaScript (49 KB gzip) dan 40 KB CSS (7 KB gzip). Bangun `web/` sebelum `cargo build -p cli` bila ingin UI ada di dalam biner.
 
 ## Dokumentasi
 
