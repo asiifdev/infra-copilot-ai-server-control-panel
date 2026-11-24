@@ -655,6 +655,10 @@ pub struct ProposalRow {
     pub created_at: String,
     /// Expiry time.
     pub expires_at: String,
+    /// The structured action (the `actions` crate's strict JSON), when the proposal has one.
+    pub action_json: Option<String>,
+    /// The node the action targets, when it has an action.
+    pub node_id: Option<crate::ids::NodeId>,
 }
 
 /// Stores a pending proposal that expires in seven days.
@@ -693,7 +697,8 @@ pub fn create_proposal(
 }
 
 const PROPOSAL_COLUMNS: &str = "id, conversation_id, tool, tier, title, rationale, \
-    suggested_action, impact, rule_id, subject_key, args_hash, status, created_at, expires_at";
+    suggested_action, impact, rule_id, subject_key, args_hash, status, created_at, expires_at, \
+    action_json, node_id";
 
 fn map_proposal(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProposalRow> {
     let status: String = row.get(11)?;
@@ -715,6 +720,10 @@ fn map_proposal(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProposalRow> {
         status: ProposalStatus::parse(&status).unwrap_or(ProposalStatus::Expired),
         created_at: row.get(12)?,
         expires_at: row.get(13)?,
+        action_json: row.get(14)?,
+        node_id: row
+            .get::<_, Option<String>>(15)?
+            .map(crate::ids::NodeId::from_db),
     })
 }
 

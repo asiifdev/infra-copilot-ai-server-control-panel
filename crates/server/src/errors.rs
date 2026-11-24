@@ -218,6 +218,36 @@ const TABLE: &[Entry] = &[
         StatusCode::CONFLICT,
         "api.error.proposal_expired"
     ),
+    entry!(
+        "execution_disabled",
+        StatusCode::CONFLICT,
+        "api.error.execution_disabled"
+    ),
+    entry!(
+        "proposal_not_approved",
+        StatusCode::CONFLICT,
+        "api.error.proposal_not_approved"
+    ),
+    entry!(
+        "proposal_no_action",
+        StatusCode::CONFLICT,
+        "api.error.proposal_no_action"
+    ),
+    entry!(
+        "proposal_already_run",
+        StatusCode::CONFLICT,
+        "api.error.proposal_already_run"
+    ),
+    entry!(
+        "action_invalid",
+        StatusCode::CONFLICT,
+        "api.error.action_invalid"
+    ),
+    entry!(
+        "unsupported_target",
+        StatusCode::CONFLICT,
+        "api.error.unsupported_target"
+    ),
     entry!("turn_busy", StatusCode::CONFLICT, "api.error.turn_busy"),
     entry!(
         "turn_claim_lost",

@@ -1,0 +1,17 @@
+[package]
+name = "actions"
+description = "The closed list of actions a person-approved proposal may run, their fixed tiers, and the executor that runs them through argv-only commands (ADR 0037)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+core-domain = { path = "../core" }
+db = { path = "../db" }
+transport = { path = "../transport" }
+# JSON is the stored form of an action. Default features off, `std` only (ADR 0005).
+serde_json = { version = "1", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

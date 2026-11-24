@@ -319,6 +319,7 @@ plan.capacity_stream.text = Suggestion: stream the backup straight to the transp
 
 # Assistant
 assistant.proposal.impact = Saves a pending proposal for a person to review. Changes nothing on any server.
+assistant.proposal.restart_impact = If a person approves and runs it, the service is restarted on the target node and is briefly unavailable. A restart cannot be undone, only repeated. Saving this proposal changes nothing.
 assistant.plan.impact = Saves a draft migration plan for a person to review. Changes nothing on any server.
 assistant.plan.accepted_reason = Accepted by a person in the panel.
 assistant.plan.saved = The plan was saved with status draft. Nothing was approved, scheduled or run. A person must review it, and approval is a separate step that only a person can take.
@@ -419,6 +420,12 @@ api.error.default_exists = A default provider already exists. Remove it first, o
 api.error.provider_in_use = Conversations still use this provider.
 api.error.proposal_decided = This proposal was already decided.
 api.error.proposal_expired = This proposal has expired and can no longer be decided.
+api.error.execution_disabled = Running approved proposals is switched off. Start `infra serve --enable-execution` to allow it on this machine.
+api.error.proposal_not_approved = Only an approved proposal can be run.
+api.error.proposal_no_action = This proposal is a recommendation only: it has no action to run.
+api.error.proposal_already_run = This proposal was already run, so it cannot run again.
+api.error.action_invalid = The action of this proposal is not valid or does not match what was approved, so it was not run.
+api.error.unsupported_target = Actions can only run on this machine for now, and this proposal targets another node.
 api.error.no_provider = No default AI provider is set. Add one in the settings first.
 api.error.conversation_archived = This conversation is archived.
 api.error.message_empty = The message is empty.
@@ -455,12 +462,13 @@ api.static.not_built = The web interface is not part of this build. Build it wit
 api.conversation.new_title = New conversation
 
 # infra serve
-cli.usage.serve = Usage: infra serve [--port N] [--db PATH] [--org SLUG]   (starts the local web interface on 127.0.0.1, default port 7878; it prints a one-time address to sign in)
+cli.usage.serve = Usage: infra serve [--port N] [--db PATH] [--org SLUG] [--enable-execution]   (starts the local web interface on 127.0.0.1, default port 7878; it prints a one-time address to sign in; --enable-execution lets a person run approved actions on THIS machine, off by default)
 cli.serve.listening = Nodivara is listening on {address}. Only this machine can reach it.
 cli.serve.open = Open this address in your browser to sign in. It works once and expires in 10 minutes:
 cli.serve.stop = Press Ctrl-C to stop.
 cli.serve.stopped = Stopped.
 cli.serve.no_key = No master key is set, so provider keys cannot be saved or used. Set NODIVARA_MASTER_KEY and start the server again to use them.
+cli.serve.execution_on = Execution is ON: a person can run approved actions (for example restarting a service) on this machine from the web interface. Stop the server and start it without --enable-execution to turn it off.
 cli.serve.port_busy = Port {port} is already in use. Choose another with --port N, or stop the program that uses it.
 cli.serve.bad_port = The port must be a number from 0 to 65535 (0 picks a free one).
 cli.serve.failed = The server stopped because of an error ({reason}).

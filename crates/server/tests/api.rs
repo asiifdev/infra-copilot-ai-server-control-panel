@@ -308,8 +308,9 @@ fn the_session_describes_the_signed_in_person_and_setup() -> TestResult {
     assert_eq!(body["org"], json!({"name": "Acme", "slug": "acme"}));
     assert_eq!(body["locale"], "en");
     assert_eq!(body["master_key_configured"], false);
+    assert_eq!(body["execution_enabled"], false);
     assert_eq!(body["version"], env!("CARGO_PKG_VERSION"));
-    assert_eq!(body.as_object().map(Map::len), Some(5));
+    assert_eq!(body.as_object().map(Map::len), Some(6));
     assert_eq!(f.session.get("/api/session?lang=id").json()["locale"], "id");
     assert_eq!(
         f.session.get_lang("/api/session", "id-ID,en;q=0.5").json()["locale"],

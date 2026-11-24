@@ -41,6 +41,9 @@ pub struct Config {
     /// How long a provider connection test waits ([`DEFAULT_PROVIDER_TEST_TIMEOUT`]). Values too
     /// close to the request limit are lowered so the test always ends first.
     pub provider_test_timeout: Duration,
+    /// Runs approved actions on this machine. `None` (the default) means execution is switched
+    /// off: approving a proposal records the decision and nothing can run it.
+    pub executor: Option<Arc<dyn actions::Executor>>,
 }
 
 impl Config {
@@ -74,6 +77,7 @@ impl Config {
             clock: Clock::system(),
             catalog,
             provider_test_timeout: DEFAULT_PROVIDER_TEST_TIMEOUT,
+            executor: None,
         })
     }
 }
@@ -90,6 +94,7 @@ pub(crate) struct App {
     pub(crate) catalog: Catalog,
     pub(crate) clock: Clock,
     pub(crate) provider_test_timeout: Duration,
+    pub(crate) executor: Option<Arc<dyn actions::Executor>>,
     pub(crate) auth: Mutex<Auth>,
     /// Conversations with a turn running in this process.
     pub(crate) turns: Mutex<HashSet<String>>,
@@ -109,6 +114,7 @@ impl App {
             provider_test_timeout: config
                 .provider_test_timeout
                 .min(crate::guard::REQUEST_TIMEOUT.saturating_sub(Duration::from_secs(5))),
+            executor: config.executor,
             auth: Mutex::new(Auth::default()),
             turns: Mutex::new(HashSet::new()),
         }

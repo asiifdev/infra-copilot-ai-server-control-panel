@@ -2,7 +2,7 @@
 //! change nothing. All wording a person might read comes from the i18n catalog (through
 //! `parity::render`); the rest is machine-oriented text for the model.
 
-use crate::proposals::{ProposalDraft, SinkError};
+use crate::proposals::{ActionDraft, ProposalDraft, SinkError};
 use crate::registry::{RegisterError, Registry};
 use crate::schema::{ArgSchema, Args, Field, Kind};
 use crate::store::StoreError;
@@ -487,14 +487,127 @@ impl AiTool for ProposeFix {
                     rule_id: rule_id.as_deref(),
                     subject_key: subject_key.as_deref(),
                     args_hash: &args_hash,
+                    action: None,
                 },
             )
             .map_err(|e| match e {
                 SinkError::TooManyPending => ToolError::Invalid("too_many_pending_proposals"),
+                SinkError::UnknownNode => ToolError::Invalid("unknown_node"),
                 SinkError::Unavailable => ToolError::Unavailable("proposals".to_owned()),
             })?;
         Ok(ToolOutput::new(format!(
             "proposal {id} saved as pending. A person must review it; nothing was changed."
+        )))
+    }
+}
+
+// ---- propose_restart_service ---------------------------------------------------------------
+
+struct ProposeRestart;
+
+const RESTART_NAME: &str = "propose_restart_service";
+
+const RESTART_FIELDS: &[Field] = &[
+    Field {
+        name: "node",
+        kind: Kind::Text {
+            max_chars: 200,
+            choices: None,
+        },
+        required: true,
+        description: "Name of the node that runs the service (as listed by list_nodes).",
+    },
+    Field {
+        name: "service",
+        kind: Kind::Text {
+            max_chars: actions::MAX_SERVICE_NAME,
+            choices: None,
+        },
+        required: true,
+        description: "Name of the systemd service to restart, such as nginx.service.",
+    },
+    Field {
+        name: "reason",
+        kind: Kind::Text {
+            max_chars: RATIONALE_MAX,
+            choices: None,
+        },
+        required: true,
+        description: "Why a restart would help, citing what the tools showed.",
+    },
+];
+
+/// Tier 1 on purpose: this tool only writes a pending proposal. The tier of the *action* (2) is
+/// fixed by the `actions` crate and stored on the proposal; nothing here can run it.
+const PROPOSE_RESTART: ToolSpec = ToolSpec {
+    name: RESTART_NAME,
+    description: "Propose restarting a service on a node for a person to approve. It only saves \
+                  a pending proposal; nothing is restarted unless a person approves it and then \
+                  runs it themselves.",
+    tier: Tier::Plan,
+    schema: ArgSchema {
+        fields: RESTART_FIELDS,
+    },
+    impact: Some("assistant.proposal.restart_impact"),
+};
+
+impl AiTool for ProposeRestart {
+    fn spec(&self) -> &ToolSpec {
+        &PROPOSE_RESTART
+    }
+
+    fn run(&self, ctx: &ToolContext<'_>, args: &Args) -> Result<ToolOutput, ToolError> {
+        let text = |name: &str, max: usize| -> Result<String, ToolError> {
+            args.text(name)
+                .map(|raw| clean_text(raw, max))
+                .transpose()?
+                .filter(|t| !t.trim().is_empty())
+                .ok_or(ToolError::Invalid("missing_text"))
+        };
+        let node = text("node", 200)?;
+        let reason = text("reason", RATIONALE_MAX)?;
+        let service = args
+            .text("service")
+            .ok_or(ToolError::Invalid("missing_text"))?;
+        let action =
+            actions::Action::restart_service(actions::ServiceManagerKind::Systemd, service)
+                .map_err(|_| ToolError::Invalid("bad_service_name"))?;
+        let canonical = action.canonical_json();
+        let (title, suggested) = (
+            format!("Restart {service} on {node}"),
+            format!("Restart the service {service} on {node}."),
+        );
+        let (title, suggested) = (
+            clean_text(&title, TITLE_MAX)?,
+            clean_text(&suggested, ACTION_MAX)?,
+        );
+        let id = ctx
+            .proposals
+            .create_pending(
+                ctx.org,
+                &ProposalDraft {
+                    tool: action.tool(),
+                    tier: action.tier(),
+                    title: &title,
+                    rationale: &reason,
+                    suggested_action: &suggested,
+                    impact: "assistant.proposal.restart_impact",
+                    rule_id: None,
+                    subject_key: Some(service),
+                    args_hash: &action.hash(),
+                    action: Some(ActionDraft {
+                        node_name: &node,
+                        action_json: &canonical,
+                    }),
+                },
+            )
+            .map_err(|e| match e {
+                SinkError::TooManyPending => ToolError::Invalid("too_many_pending_proposals"),
+                SinkError::UnknownNode => ToolError::Invalid("unknown_node"),
+                SinkError::Unavailable => ToolError::Unavailable("proposals".to_owned()),
+            })?;
+        Ok(ToolOutput::new(format!(
+            "proposal {id} saved as pending. A person must approve it and run it; nothing was restarted."
         )))
     }
 }
@@ -512,6 +625,7 @@ pub fn assistant_registry() -> Result<Registry, RegisterError> {
     registry.register(Box::new(ListFindings))?;
     registry.register(Box::new(ExplainFinding))?;
     registry.register(Box::new(ProposeFix))?;
+    registry.register(Box::new(ProposeRestart))?;
     crate::memory_tools::register(&mut registry)?;
     crate::plan_tools::register(&mut registry)?;
     Ok(registry)

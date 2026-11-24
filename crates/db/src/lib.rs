@@ -14,6 +14,7 @@ mod enums;
 mod audit;
 mod conversations;
 mod error;
+mod executions;
 mod identity;
 mod ids;
 mod memories;
@@ -45,14 +46,20 @@ pub use conversations::{
     retitle_conversation, touch_turn,
 };
 pub use error::{Error, Result};
+pub use executions::{
+    BeginOutcome, ExecutionRow, ExecutionStatus, MAX_OUTPUT_CHARS, begin_execution,
+    create_action_proposal, fail_interrupted_executions, finish_execution,
+    get_execution_for_proposal,
+};
 pub use identity::{
     ApiToken, Member, NewApiToken, Org, Role, User, add_member, create_api_token, create_org,
     create_user, get_member_user, get_org, get_user_by_email, is_member, list_api_tokens,
     list_members, remove_member, revoke_api_token, set_member_role,
 };
 pub use ids::{
-    AgentId, AiProviderId, ApiTokenId, AuditId, ComparisonId, ConversationId, InventoryId,
-    MembershipId, MemoryId, NodeId, OrgId, PlanId, ProposalId, SecretId, TransportId, UserId,
+    AgentId, AiProviderId, ApiTokenId, AuditId, ComparisonId, ConversationId, ExecutionId,
+    InventoryId, MembershipId, MemoryId, NodeId, OrgId, PlanId, ProposalId, SecretId, TransportId,
+    UserId,
 };
 pub use memories::{
     MAX_MEMORIES_PER_ORG, MAX_MEMORY_CHARS, MemoryKind, MemoryRow, MemorySource, MemoryStatus,

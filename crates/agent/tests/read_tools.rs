@@ -96,7 +96,7 @@ fn ask(
 #[test]
 fn the_registry_holds_the_read_tools_propose_fix_and_the_planning_tools() -> TestResult {
     let registry = assistant_registry()?;
-    assert_eq!(registry.len(), 14);
+    assert_eq!(registry.len(), 15);
     assert!(
         registry
             .definitions()
@@ -227,6 +227,7 @@ fn every_builtin_tool_passes_the_contract_suite() -> TestResult {
             "get_inventory_summary" | "list_inventory_items" => r#"{"node":"x"}"#,
             "explain_finding" => r#"{"rule_id":"PAR-001","subject_key":"tcp:1"}"#,
             "propose_fix" => r#"{"title":"t","rationale":"r","suggested_action":"a"}"#,
+            "propose_restart_service" => r#"{"node":"x","service":"nginx","reason":"r"}"#,
             "search_inventory" => r#"{"query":"nginx"}"#,
             "remember" => r#"{"kind":"task","content":"c"}"#,
             "draft_migration_plan" => r#"{"source_node":"x","target_node":"y"}"#,

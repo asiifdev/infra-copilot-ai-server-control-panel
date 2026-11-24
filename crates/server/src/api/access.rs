@@ -96,6 +96,10 @@ pub(crate) async fn session(
     };
     map.insert("locale".to_owned(), json!(lang.0.tag()));
     map.insert("master_key_configured".to_owned(), json!(configured));
+    map.insert(
+        "execution_enabled".to_owned(),
+        json!(app.executor.is_some()),
+    );
     map.insert("version".to_owned(), json!(env!("CARGO_PKG_VERSION")));
     Ok(json_ok(&Value::Object(map)))
 }

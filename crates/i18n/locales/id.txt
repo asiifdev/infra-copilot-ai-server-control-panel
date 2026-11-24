@@ -319,6 +319,7 @@ plan.capacity_stream.text = Saran: alirkan cadangan langsung ke transport, janga
 
 # Asisten
 assistant.proposal.impact = Menyimpan usulan yang menunggu ditinjau seseorang. Tidak mengubah apa pun di server mana pun.
+assistant.proposal.restart_impact = Bila seseorang menyetujui dan menjalankannya, layanan dimulai ulang di node tujuan dan sebentar tidak tersedia. Memulai ulang tidak bisa dibatalkan, hanya diulang. Menyimpan usulan ini tidak mengubah apa pun.
 assistant.plan.impact = Menyimpan draf rencana migrasi untuk ditinjau seseorang. Tidak mengubah apa pun di server mana pun.
 assistant.plan.accepted_reason = Diterima oleh seseorang di panel.
 assistant.plan.saved = Rencana disimpan dengan status draf. Tidak ada yang disetujui, dijadwalkan, atau dijalankan. Seseorang harus meninjaunya, dan persetujuan adalah langkah terpisah yang hanya bisa diambil oleh seseorang.
@@ -419,6 +420,12 @@ api.error.default_exists = Penyedia bawaan sudah ada. Hapus dulu, atau simpan ya
 api.error.provider_in_use = Masih ada percakapan yang memakai penyedia ini.
 api.error.proposal_decided = Usulan ini sudah diputuskan.
 api.error.proposal_expired = Usulan ini sudah kedaluwarsa dan tidak bisa diputuskan lagi.
+api.error.execution_disabled = Menjalankan usulan yang disetujui sedang dimatikan. Jalankan `infra serve --enable-execution` untuk mengizinkannya di mesin ini.
+api.error.proposal_not_approved = Hanya usulan yang sudah disetujui yang bisa dijalankan.
+api.error.proposal_no_action = Usulan ini hanya rekomendasi: tidak ada aksi yang bisa dijalankan.
+api.error.proposal_already_run = Usulan ini sudah dijalankan, jadi tidak bisa dijalankan lagi.
+api.error.action_invalid = Aksi usulan ini tidak valid atau tidak sama dengan yang disetujui, jadi tidak dijalankan.
+api.error.unsupported_target = Untuk sekarang aksi hanya bisa dijalankan di mesin ini, sedangkan usulan ini menargetkan node lain.
 api.error.no_provider = Belum ada penyedia AI bawaan. Tambahkan dulu di pengaturan.
 api.error.conversation_archived = Percakapan ini diarsipkan.
 api.error.message_empty = Pesan kosong.
@@ -455,12 +462,13 @@ api.static.not_built = Antarmuka web tidak termasuk dalam build ini. Bangun deng
 api.conversation.new_title = Percakapan baru
 
 # infra serve
-cli.usage.serve = Penggunaan: infra serve [--port N] [--db PATH] [--org SLUG]   (menjalankan antarmuka web lokal di 127.0.0.1, port bawaan 7878; mencetak alamat sekali pakai untuk masuk)
+cli.usage.serve = Penggunaan: infra serve [--port N] [--db PATH] [--org SLUG] [--enable-execution]   (menjalankan antarmuka web lokal di 127.0.0.1, port bawaan 7878; mencetak alamat sekali pakai untuk masuk; --enable-execution mengizinkan orang menjalankan aksi yang sudah disetujui di mesin INI, mati secara bawaan)
 cli.serve.listening = Nodivara mendengarkan di {address}. Hanya komputer ini yang bisa menjangkaunya.
 cli.serve.open = Buka alamat ini di peramban untuk masuk. Berlaku sekali dan kedaluwarsa dalam 10 menit:
 cli.serve.stop = Tekan Ctrl-C untuk berhenti.
 cli.serve.stopped = Berhenti.
 cli.serve.no_key = Kunci utama belum diatur, jadi kunci penyedia tidak bisa disimpan atau dipakai. Atur NODIVARA_MASTER_KEY lalu jalankan server lagi untuk memakainya.
+cli.serve.execution_on = Eksekusi AKTIF: orang dapat menjalankan aksi yang sudah disetujui (misalnya memulai ulang layanan) di mesin ini dari antarmuka web. Hentikan server dan mulai tanpa --enable-execution untuk mematikannya.
 cli.serve.port_busy = Port {port} sudah dipakai. Pilih yang lain dengan --port N, atau hentikan program yang memakainya.
 cli.serve.bad_port = Port harus berupa angka dari 0 sampai 65535 (0 memilih yang bebas).
 cli.serve.failed = Server berhenti karena galat ({reason}).

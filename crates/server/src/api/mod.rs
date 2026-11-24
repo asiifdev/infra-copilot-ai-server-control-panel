@@ -6,6 +6,7 @@
 mod access;
 pub(crate) mod conversations;
 mod data;
+mod execute;
 mod memories;
 mod providers;
 
@@ -14,6 +15,7 @@ pub(crate) use conversations::{
     conversation_messages, conversations_create, conversations_list, own_conversation,
 };
 pub(crate) use data::{findings, inventory, nodes, plan_detail, plans, transports};
+pub(crate) use execute::proposal_execute;
 pub(crate) use memories::{
     memories_list, memory_approve, memory_delete, proposal_decide, proposals_list,
 };

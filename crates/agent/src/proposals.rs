@@ -33,6 +33,17 @@ pub struct ProposalDraft<'a> {
     pub subject_key: Option<&'a str>,
     /// SHA-256 hex of the canonical arguments.
     pub args_hash: &'a str,
+    /// The structured action a person may later run, when the proposal has one.
+    pub action: Option<ActionDraft<'a>>,
+}
+
+/// The action part of a proposal: its target node (by name) and its canonical JSON.
+#[derive(Debug)]
+pub struct ActionDraft<'a> {
+    /// Name of the target node; the store resolves it inside the org.
+    pub node_name: &'a str,
+    /// Canonical JSON of the action (`actions::Action::canonical_json`).
+    pub action_json: &'a str,
 }
 
 /// Why a proposal was not recorded.
@@ -40,6 +51,8 @@ pub struct ProposalDraft<'a> {
 pub enum SinkError {
     /// The conversation already holds the maximum number of pending proposals.
     TooManyPending,
+    /// The named node does not exist in this organization.
+    UnknownNode,
     /// This context cannot record proposals, or the store failed.
     Unavailable,
 }
@@ -48,6 +61,7 @@ impl fmt::Display for SinkError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::TooManyPending => "too_many_pending_proposals",
+            Self::UnknownNode => "unknown_node",
             Self::Unavailable => "proposals_unavailable",
         })
     }
@@ -102,22 +116,29 @@ impl ProposalSink for DbProposalSink<'_> {
                 return Err(SinkError::TooManyPending);
             }
         }
-        let id = db::create_proposal(
-            self.conn,
-            org,
-            &db::NewProposal {
-                conversation: self.conversation.as_ref(),
-                tool: draft.tool,
-                tier: draft.tier.level(),
-                title: draft.title,
-                rationale: draft.rationale,
-                suggested_action: draft.suggested_action,
-                impact: draft.impact,
-                rule_id: draft.rule_id,
-                subject_key: draft.subject_key,
-                args_hash: draft.args_hash,
-            },
-        )
+        let new = db::NewProposal {
+            conversation: self.conversation.as_ref(),
+            tool: draft.tool,
+            tier: draft.tier.level(),
+            title: draft.title,
+            rationale: draft.rationale,
+            suggested_action: draft.suggested_action,
+            impact: draft.impact,
+            rule_id: draft.rule_id,
+            subject_key: draft.subject_key,
+            args_hash: draft.args_hash,
+        };
+        let id = match &draft.action {
+            None => db::create_proposal(self.conn, org, &new),
+            Some(action) => {
+                let node = db::list_nodes(self.conn, org)
+                    .map_err(|_| SinkError::Unavailable)?
+                    .into_iter()
+                    .find(|n| n.name == action.node_name)
+                    .ok_or(SinkError::UnknownNode)?;
+                db::create_action_proposal(self.conn, org, &new, &node.id, action.action_json)
+            }
+        }
         .map_err(|_| SinkError::Unavailable)?;
         Ok(id.as_str().to_owned())
     }

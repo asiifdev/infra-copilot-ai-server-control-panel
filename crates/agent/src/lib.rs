@@ -50,8 +50,8 @@ pub use plans::{
     PlanStore, PlanSummary, ResolvedTransport, StoredPlan, TransportInfo,
 };
 pub use proposals::{
-    DbProposalSink, MAX_PENDING_PER_CONVERSATION, NoProposals, ProposalDraft, ProposalSink,
-    SinkError,
+    ActionDraft, DbProposalSink, MAX_PENDING_PER_CONVERSATION, NoProposals, ProposalDraft,
+    ProposalSink, SinkError,
 };
 pub use registry::{RegisterError, Registry, ToolDefinition};
 pub use schema::{ArgError, ArgSchema, Args, FORBIDDEN_FIELD_NAMES, Field, Kind};

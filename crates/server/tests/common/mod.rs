@@ -141,6 +141,7 @@ pub struct Opts {
     pub tokens: usize,
     pub catalog: Option<i18n::Catalog>,
     pub provider_test_timeout: Option<Duration>,
+    pub executor: Option<Arc<dyn actions::Executor>>,
 }
 
 impl Default for Opts {
@@ -150,6 +151,7 @@ impl Default for Opts {
             tokens: 1,
             catalog: None,
             provider_test_timeout: None,
+            executor: None,
         }
     }
 }
@@ -184,6 +186,7 @@ pub fn config(
         provider_test_timeout: opts
             .provider_test_timeout
             .unwrap_or(server::DEFAULT_PROVIDER_TEST_TIMEOUT),
+        executor: opts.executor.clone(),
     })
 }
 

@@ -117,6 +117,7 @@ fn router(app: &Arc<App>) -> Router {
         .route("/api/memories/{id}", delete(api::memory_delete))
         .route("/api/proposals", get(api::proposals_list))
         .route("/api/proposals/{id}/decision", post(api::proposal_decide))
+        .route("/api/proposals/{id}/execute", post(api::proposal_execute))
         .route(
             "/api/conversations",
             get(api::conversations_list).post(api::conversations_create),
@@ -153,6 +154,11 @@ impl Server {
         let local = listener
             .local_addr()
             .map_err(|error| ServeError::Io(error.to_string()))?;
+        // An execution still `running` belongs to a process that stopped: fail it, so its
+        // proposal does not stay approved and stuck (it is never repeated by itself).
+        if let Ok(conn) = db::open(&config.db_path) {
+            let _ = db::fail_interrupted_executions(&conn, &config.scope.org);
+        }
         Ok(Self {
             listener,
             app: Arc::new(App::new(config, local)),

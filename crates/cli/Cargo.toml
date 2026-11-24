@@ -11,6 +11,7 @@ name = "infra"
 path = "src/main.rs"
 
 [dependencies]
+actions = { path = "../actions" }
 agent = { path = "../agent" }
 ai = { path = "../ai" }
 bootstrap = { path = "../bootstrap" }

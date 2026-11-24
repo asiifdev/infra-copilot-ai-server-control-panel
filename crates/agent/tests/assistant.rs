@@ -570,6 +570,59 @@ async fn propose_fix_creates_a_pending_org_scoped_proposal_and_nothing_else() ->
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn a_restart_proposal_carries_a_fixed_action_at_tier_two_and_nothing_runs() -> TestResult {
+    let w = world()?;
+    let args = r#"{"node":"old","service":"nginx.service","reason":"It stopped answering."}"#;
+    let provider = ScriptedProvider::new(vec![
+        calls(vec![call("c1", "propose_restart_service", args)]),
+        say("Recorded."),
+    ]);
+    run(&w, &provider, TurnConfig::default(), "restart it").await?;
+    let rows = db::list_proposals(&w.conn, &w.org, None, 10)?;
+    assert_eq!(rows.len(), 1);
+    let row = &rows[0];
+    // Pending, tier 2 (the action's tier, fixed by code), bound to its own hash, on the node.
+    assert_eq!(row.status, ProposalStatus::Pending);
+    assert_eq!(
+        (row.tool.as_str(), row.tier),
+        ("propose_restart_service", 2)
+    );
+    let json = row.action_json.as_deref().ok_or("no action")?;
+    assert_eq!(
+        json,
+        r#"{"action":"restart_service","manager":"systemd","service":"nginx.service"}"#
+    );
+    assert_eq!(row.args_hash, db::sha256_hex(json.as_bytes()));
+    assert!(row.node_id.is_some());
+    assert!(db::get_execution_for_proposal(&w.conn, &w.org, &row.id)?.is_none());
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_restart_proposal_with_a_bad_service_or_an_unknown_node_is_refused() -> TestResult {
+    let w = world()?;
+    let bad = [
+        r#"{"node":"old","service":"-rf","reason":"r"}"#,
+        r#"{"node":"old","service":"a;reboot","reason":"r"}"#,
+        r#"{"node":"old","service":"$(id)","reason":"r"}"#,
+        r#"{"node":"nowhere","service":"nginx","reason":"r"}"#,
+        r#"{"node":"old","service":"nginx","reason":"  "}"#,
+    ];
+    let provider = ScriptedProvider::new(vec![
+        calls(
+            bad.iter()
+                .enumerate()
+                .map(|(i, a)| call(&format!("c{i}"), "propose_restart_service", a))
+                .collect(),
+        ),
+        say("Nothing saved."),
+    ]);
+    run(&w, &provider, TurnConfig::default(), "restart things").await?;
+    assert!(db::list_proposals(&w.conn, &w.org, None, 10)?.is_empty());
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn a_model_cannot_flood_the_review_queue() -> TestResult {
     let w = world()?;
     let one = |i: usize| {

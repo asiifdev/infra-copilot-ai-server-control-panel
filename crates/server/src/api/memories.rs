@@ -8,8 +8,10 @@
 use super::{Reply, json_ok, no_content, with_db};
 use crate::app::App;
 use crate::errors::{INVALID_INPUT, NOT_FOUND, from_db};
+use crate::guard::Lang;
 use crate::util::{clean_text, limit_param, query_get};
 use crate::util::{json_object, opt_str};
+use axum::Extension;
 use axum::body::Bytes;
 use axum::extract::{Path, RawQuery, State};
 use db::{
@@ -97,9 +99,21 @@ pub(crate) async fn memory_delete(State(app): State<Arc<App>>, Path(id): Path<St
     Ok(no_content())
 }
 
+/// The impact sentence of a proposal. A tool stores the catalog key of its own fixed sentence
+/// (`assistant.proposal.*`); it is shown in the reader's language. Anything else is text, shown as
+/// cleaned text.
+fn impact_text(app: &App, locale: i18n::Locale, impact: &str) -> String {
+    let sentence = impact
+        .starts_with("assistant.proposal.")
+        .then(|| app.catalog.raw(locale, impact))
+        .flatten();
+    clean_text(sentence.unwrap_or(impact))
+}
+
 /// `GET /api/proposals?status=`.
 pub(crate) async fn proposals_list(
     State(app): State<Arc<App>>,
+    Extension(lang): Extension<Lang>,
     RawQuery(query): RawQuery,
 ) -> Reply {
     let status = match query_get(query.as_deref(), "status") {
@@ -108,6 +122,7 @@ pub(crate) async fn proposals_list(
     };
     let limit = limit_param(query.as_deref(), "limit", 200, 500).map_err(|()| INVALID_INPUT)?;
     let body = with_db(&app, move |conn, app| {
+        let locale = lang.0;
         let rows = db::list_proposals(conn, &app.scope.org, status, limit)
             .map_err(|e| from_db(&e))?;
         Ok(Value::Array(
@@ -121,12 +136,17 @@ pub(crate) async fn proposals_list(
                         "title": clean_text(&p.title),
                         "rationale": clean_text(&p.rationale),
                         "suggested_action": clean_text(&p.suggested_action),
-                        "impact": clean_text(&p.impact),
+                        "impact": impact_text(app, locale, &p.impact),
                         "rule_id": p.rule_id,
                         "subject_key": p.subject_key.as_deref().map(clean_text),
                         "status": p.status.as_str(),
                         "created_at": p.created_at,
                         "expires_at": p.expires_at,
+                        "action": super::execute::action_view(p),
+                        "node": p.node_id.as_ref().and_then(|n| {
+                            db::get_node(conn, &app.scope.org, n).ok().map(|n| clean_text(&n.name))
+                        }),
+                        "execution": super::execute::execution_view(conn, app, p),
                     })
                 })
                 .collect(),

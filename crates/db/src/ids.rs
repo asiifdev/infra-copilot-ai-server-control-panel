@@ -65,6 +65,10 @@ id_type!(
     NodeId
 );
 id_type!(
+    /// Execution identifier.
+    ExecutionId
+);
+id_type!(
     /// Agent identifier.
     AgentId
 );
