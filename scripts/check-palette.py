@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Checks the Nodivara colour tokens (ui/src/tokens.css): WCAG 2.2 contrast (AAA 7:1 for every text token on every surface, 3:1 for UI boundaries)
+"""Checks the Nodivara colour tokens (web/src/tokens.css): WCAG 2.2 contrast (AAA 7:1 for every text token on every surface, 3:1 for UI boundaries)
 in the light and dark themes, and that the two dark blocks are identical. Exit 1 on failure."""
 import re
 import sys
 from pathlib import Path
 
-CSS = Path(__file__).resolve().parent.parent / "ui" / "src" / "tokens.css"
+CSS = Path(__file__).resolve().parent.parent / "web" / "src" / "tokens.css"
 TEXT = 7.0  # WCAG AAA, normal text
 UI = 3.0  # non-text UI: focus ring, control borders, button fill (WCAG 2.2 1.4.11)
 

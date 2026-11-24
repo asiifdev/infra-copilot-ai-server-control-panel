@@ -25,7 +25,7 @@ PAIRS = [
 ]
 SKIP_DIRS = (
     "research_notes/", "reports/", "target/", ".git/", ".claude/worktrees/", ".playwright-mcp/",
-    "ui/node_modules/", "web/node_modules/", "web/dist/",
+    "web/node_modules/", "web/dist/",
 )
 failures = []
 

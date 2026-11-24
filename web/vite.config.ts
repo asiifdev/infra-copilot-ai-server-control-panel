@@ -3,9 +3,9 @@ import { defineConfig } from 'vitest/config';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { mockApiPlugin } from './mock/vite-plugin.ts';
 
-const uiSrc = fileURLToPath(new URL('../ui/src', import.meta.url));
+const uiSrc = fileURLToPath(new URL('./src', import.meta.url));
 
-// Colour tokens are reused from the prototype (ADR 0029): an alias, never a copy.
+// Colour tokens are kept in web/src/tokens.css (moved from the retired ui/ probe, ADR 0036); an alias keeps one import path.
 export default defineConfig({
   plugins: [svelte(), mockApiPlugin()],
   resolve: {

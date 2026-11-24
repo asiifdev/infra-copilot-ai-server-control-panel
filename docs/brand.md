@@ -2,7 +2,7 @@
 
 Terakhir diperbarui: 2026-11-19. Keputusan: `docs/decisions/0019`. Dokumen kerja internal (Indonesia).
 
-## Warna (sumber: `ui/src/tokens.css`)
+## Warna (sumber: `web/src/tokens.css`)
 
 Jangan menulis kode warna langsung di komponen; pakai variabel `--nv-*`. Tema terang bawaan, gelap mengikuti sistem atau `data-theme="light|dark"` pada `<html>`.
 

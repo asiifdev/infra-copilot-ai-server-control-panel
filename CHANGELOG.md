@@ -100,6 +100,10 @@ cannot drift apart. Release notes may get an Indonesian summary.
 - Replaced `chunks_exact` with `as_chunks` in the SHA-256 code and removed an unused dependency from `i18n`, found by the latest stable clippy.
 - Contributor rules: documentation is updated in the same change, and commits are pushed right after they are made when the owner asks for a commit; CI must be green after each push; toolchain and dependencies track the latest stable versions.
 
+### Removed
+
+- The M0 probe `ui/` and crate `proto-server` (ADR 0036). The colour tokens moved to `web/src/tokens.css`; `docs/perf-budget.json` and the CI `perf-budget` job now cover only the real `infra` binary.
+
 ### Fixed
 
 - `infra serve` installs its shutdown handlers before it prints the sign-in address, so a signal right after startup stops it cleanly (it could kill the process on macOS CI).

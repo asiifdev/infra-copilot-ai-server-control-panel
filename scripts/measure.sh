@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Performance measurement for the M0 prototype (docs/decisions/0010).
+# Performance measurement of the infra binary with the embedded web UI (docs/decisions/0010, 0032).
 # Builds the UI and the release binary, then prints one JSON document with:
 # UI bundle sizes (raw + gzip), release binary size, idle RSS after 5 s and
 # time from exec to "GET / answers 200" (median of RUNS runs).
@@ -11,14 +11,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNS="${RUNS:-5}"
 SETTLE_SECONDS="${SETTLE_SECONDS:-5}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
-# TARGET=proto (default): the M0 probe (ui/ + proto-server). TARGET=infra: the real `infra`
-# binary with web/dist embedded, started as `infra serve` on a throwaway database.
-TARGET="${TARGET:-proto}"
-case "$TARGET" in
-  proto) UI_DIR="$ROOT/ui"; PKG=proto-server; BIN="$ROOT/target/release/proto-server" ;;
-  infra) UI_DIR="$ROOT/web"; PKG=cli; BIN="$ROOT/target/release/infra" ;;
-  *) echo "TARGET must be proto or infra" >&2; exit 2 ;;
-esac
+# Measures the real `infra` binary with web/dist embedded, started as `infra serve` on a throwaway
+# database (ADR 0032, 0036).
+UI_DIR="$ROOT/web"
+PKG=cli
+BIN="$ROOT/target/release/infra"
+TARGET=infra
 WORK="$(mktemp -d)"
 PIDFILE="$WORK/pid"
 
@@ -45,7 +43,7 @@ fi
 file_size() { wc -c <"$1" | tr -d ' '; }
 gz_size() { gzip -9 -c "$1" | wc -c | tr -d ' '; }
 
-# Bundle sizes: one JSON object per file under ui/dist.
+# Bundle sizes: one JSON object per file under web/dist.
 bundle_json=""
 total_raw=0
 total_gz=0

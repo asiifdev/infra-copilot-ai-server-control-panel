@@ -228,9 +228,7 @@ crates/cli          the `infra` command line: collect, compare, init, node, plan
 crates/bootstrap    setup helpers shared by the CLI and the server: database location, one local organization, vault from the environment, providers with sealed keys
 crates/server       local web server (axum, tokio, rust-embed): JSON API and the embedded web/dist, loopback only, one-time sign-in token, strict headers; started by `infra serve`
 crates/db           SQLite schema (version 9, migrations 0001-0009), tenant-scoped queries, FTS5 search, hash-chained audit log
-crates/proto-server throwaway prototype used to measure binary size, memory and startup
 web/                the web UI: Svelte 5 + Vite + TypeScript, no SvelteKit; built into web/dist and embedded by crates/server
-ui/                 Svelte 5 + Vite prototype page (embedded into the prototype binary; still the probe behind the performance budget)
 brand/              Nodivara logo files (optimized); colours and usage in docs/brand.md
 docs/design.md      technical design: schema, inventory format, agent protocol, approval flow
 docs/decisions/     architecture decision records

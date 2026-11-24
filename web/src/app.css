@@ -1,4 +1,4 @@
-/* Global styles: scale tokens (the colour tokens come from ui/src/tokens.css through the alias),
+/* Global styles: scale tokens (the colour tokens come from web/src/tokens.css through the alias),
    the reset and the few rules shared by every page. Components use these tokens only.
    Surfaces, shadows and tints are derived from the colour tokens with color-mix, so the light and
    the dark theme stay in step and no colour is declared twice. */

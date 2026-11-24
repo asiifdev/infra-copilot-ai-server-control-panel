@@ -113,6 +113,8 @@ describe('security rules of the UI sources', () => {
 
   it('has no hex or rgb colours outside the shared tokens (components use var(--nv-*))', () => {
     for (const file of sources) {
+      // The shared token file is the one place where colour values live.
+      if (file.endsWith('tokens.css')) continue;
       const text = readFileSync(file, 'utf8');
       expect(/#[0-9a-fA-F]{3,8}\b/.test(text.replace(/&#\d+;/g, '')), `${relative(root, file)} hex`).toBe(false);
       expect(/\brgba?\(|\bhsla?\(/.test(text), `${relative(root, file)} rgb/hsl`).toBe(false);

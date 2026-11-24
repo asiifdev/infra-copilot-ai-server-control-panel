@@ -1,23 +1,12 @@
 {
-  "_note": "Performance budget for the M0 prototype (docs/decisions/0010). Values are measured + margin. Raising a number needs a written decision, not a silent edit (docs/decisions/0005). Per-OS blocks override \"default\". Block \"infra\" is the real infra binary with web/dist embedded (decision 0032); the top-level default/Linux/Darwin blocks are the M0 probe.",
+  "_note": "Performance budget of the infra binary with the embedded web UI (docs/decisions/0032, 0035, 0036). Values are measured + margin. Raising a number needs a written decision, not a silent edit (docs/decisions/0005). Per-OS blocks override \"default\".",
   "default": {
-    "ui_gzip_bytes": 25000,
-    "ui_js_raw_bytes": 60000,
-    "binary_bytes": 1572864,
-    "idle_rss_kib": 8192,
-    "startup_ms": 100
+    "ui_gzip_bytes": 64000,
+    "ui_js_raw_bytes": 180000,
+    "binary_bytes": 7340032,
+    "idle_rss_kib": 16384,
+    "startup_ms": 150
   },
   "Linux": {},
-  "Darwin": {},
-  "infra": {
-    "default": {
-      "ui_gzip_bytes": 64000,
-      "ui_js_raw_bytes": 180000,
-      "binary_bytes": 7340032,
-      "idle_rss_kib": 16384,
-      "startup_ms": 150
-    },
-    "Linux": {},
-    "Darwin": {}
-  }
+  "Darwin": {}
 }

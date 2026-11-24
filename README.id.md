@@ -229,9 +229,7 @@ crates/cli          baris perintah `infra`: collect, compare, init, node, plan, 
 crates/bootstrap    pembantu penyiapan yang dipakai CLI dan server: lokasi database, satu organisasi lokal, vault dari lingkungan, penyedia dengan kunci tersegel
 crates/server       server web lokal (axum, tokio, rust-embed): API JSON dan web/dist yang tertanam, hanya loopback, token masuk sekali pakai, header ketat; dijalankan oleh `infra serve`
 crates/db           skema SQLite (versi 9, migrasi 0001-0009), kueri berbatas tenant, pencarian FTS5, log audit berantai hash
-crates/proto-server prototipe sementara untuk mengukur ukuran biner, memori, dan waktu mulai
 web/                UI web: Svelte 5 + Vite + TypeScript, tanpa SvelteKit; dibangun ke web/dist dan ditanam oleh crates/server
-ui/                 halaman prototipe Svelte 5 + Vite (ditanam ke biner prototipe; masih probe di balik anggaran kinerja)
 brand/              berkas logo Nodivara (sudah dioptimalkan); warna dan pemakaian di docs/brand.md
 docs/design.md      desain teknis: skema, format inventaris, protokol agen, alur persetujuan
 docs/decisions/     catatan keputusan arsitektur
