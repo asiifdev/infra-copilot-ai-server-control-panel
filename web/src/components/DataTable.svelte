@@ -10,6 +10,7 @@
 
 <script lang="ts" generics="Row">
   import type { Snippet } from 'svelte';
+  import Icon from './Icon.svelte';
 
   interface Props {
     /** Localized caption: names the table for assistive technology. */
@@ -73,7 +74,7 @@
             {#if column.sortValue}
               <button type="button" class="sort" onclick={() => toggle(column)}>
                 {column.header}
-                <span aria-hidden="true">{sortId === column.id ? (descending ? '▼' : '▲') : '⇅'}</span>
+                <Icon name={sortId === column.id ? (descending ? 'down' : 'up') : 'sort'} size="sm" />
               </button>
             {:else}
               {column.header}
@@ -103,39 +104,74 @@
 </div>
 
 <style>
+  /* The region scrolls in both directions and keeps the header in view. On a phone the soft shadows
+     on the left and right edge show that more columns wait off screen (they fade out at the end). */
   .scroll {
-    overflow-x: auto;
+    overflow: auto;
+    max-height: min(75vh, 52rem);
     border: var(--nv-border-width) solid var(--nv-border);
     border-radius: var(--nv-radius);
-    background: var(--nv-surface);
+    box-shadow: var(--nv-shadow-1);
+    background:
+      linear-gradient(to right, var(--nv-surface) 30%, transparent) left center / 2rem 100% no-repeat local,
+      linear-gradient(to left, var(--nv-surface) 30%, transparent) right center / 2rem 100% no-repeat local,
+      linear-gradient(to right, color-mix(in srgb, var(--nv-text) 16%, transparent), transparent) left center / 0.75rem 100% no-repeat scroll,
+      linear-gradient(to left, color-mix(in srgb, var(--nv-text) 16%, transparent), transparent) right center / 0.75rem 100% no-repeat scroll,
+      var(--nv-surface);
   }
   table {
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
     width: 100%;
   }
   caption {
     text-align: start;
-    font-weight: 600;
-    padding: var(--nv-space-3);
+    font-weight: 650;
+    padding: var(--nv-space-3) var(--nv-space-4);
+    background: var(--nv-surface);
   }
   th,
   td {
     text-align: start;
-    padding: var(--nv-space-2) var(--nv-space-3);
+    padding: var(--nv-space-3) var(--nv-space-4);
     border-top: var(--nv-border-width) solid var(--nv-border);
-    vertical-align: top;
+    vertical-align: middle;
     overflow-wrap: anywhere;
   }
   td {
     min-width: 6rem;
   }
+  td :global(a),
+  tbody th :global(a) {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--nv-target);
+  }
   /* A header never breaks inside a word, and a column never gets narrower than a few characters:
      on a phone the table scrolls sideways (the region is focusable) instead of squeezing text
      into one letter per line. */
   thead th {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 1;
     background: var(--nv-surface-2);
+    font-size: var(--nv-text-caption);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--nv-text-muted);
     white-space: nowrap;
     overflow-wrap: normal;
+  }
+  tbody tr {
+    background: var(--nv-surface);
+    transition: background var(--nv-motion) var(--nv-ease);
+  }
+  tbody tr:nth-child(even) {
+    background: color-mix(in srgb, var(--nv-surface-2) 45%, var(--nv-surface));
+  }
+  tbody tr:hover {
+    background: var(--nv-tint-primary);
   }
   tbody th {
     font-weight: 600;
@@ -150,7 +186,12 @@
     background: none;
     color: inherit;
     font: inherit;
-    font-weight: 600;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    font-weight: 700;
     cursor: pointer;
+  }
+  .sort:hover {
+    color: var(--nv-text);
   }
 </style>

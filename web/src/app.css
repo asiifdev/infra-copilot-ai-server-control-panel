@@ -1,28 +1,60 @@
 /* Global styles: scale tokens (the colour tokens come from ui/src/tokens.css through the alias),
-   the reset and the few rules shared by every page. Components use these tokens only. */
+   the reset and the few rules shared by every page. Components use these tokens only.
+   Surfaces, shadows and tints are derived from the colour tokens with color-mix, so the light and
+   the dark theme stay in step and no colour is declared twice. */
 :root {
-  --nv-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --nv-font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  --nv-text-sm: 0.875rem;
-  --nv-text-md: 1rem;
-  --nv-text-lg: 1.25rem;
+  --nv-font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI Variable', 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans', sans-serif;
+  --nv-font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+
+  /* Type scale: display, heading, title, body, caption. */
+  --nv-text-display: 2rem;
   --nv-text-xl: 1.625rem;
+  --nv-text-lg: 1.25rem;
+  --nv-text-title: 1.0625rem;
+  --nv-text-md: 1rem;
+  --nv-text-sm: 0.875rem;
+  --nv-text-caption: 0.8125rem;
   --nv-leading: 1.55;
+  --nv-leading-tight: 1.25;
+
   --nv-space-1: 0.25rem;
   --nv-space-2: 0.5rem;
   --nv-space-3: 0.75rem;
   --nv-space-4: 1rem;
   --nv-space-5: 1.5rem;
   --nv-space-6: 2.5rem;
-  --nv-radius: 0.5rem;
-  --nv-radius-sm: 0.25rem;
+  --nv-space-7: 4rem;
+
+  /* Radius scale: 10 to 14 px for surfaces, pill for chips and badges. */
+  --nv-radius-xs: 0.375rem;
+  --nv-radius-sm: 0.5rem;
+  --nv-radius: 0.75rem;
+  --nv-radius-lg: 0.875rem;
+  --nv-radius-pill: 62rem;
+
+  /* Elevation: two steps, built from the text colour so they work in both themes. */
+  --nv-shadow-1: 0 1px 2px color-mix(in srgb, var(--nv-text) 8%, transparent), 0 1px 1px color-mix(in srgb, var(--nv-text) 4%, transparent);
+  --nv-shadow-2: 0 10px 30px -10px color-mix(in srgb, var(--nv-text) 28%, transparent), 0 2px 6px color-mix(in srgb, var(--nv-text) 10%, transparent);
+
+  /* Tints for status surfaces and hover states (text stays on a plain surface token). */
+  --nv-tint-success: color-mix(in srgb, var(--nv-success) 9%, var(--nv-surface));
+  --nv-tint-warning: color-mix(in srgb, var(--nv-warning) 9%, var(--nv-surface));
+  --nv-tint-danger: color-mix(in srgb, var(--nv-danger) 8%, var(--nv-surface));
+  --nv-tint-info: color-mix(in srgb, var(--nv-info) 8%, var(--nv-surface));
+  --nv-tint-primary: color-mix(in srgb, var(--nv-primary) 10%, var(--nv-surface));
+  --nv-hover: color-mix(in srgb, var(--nv-text) 5%, var(--nv-surface));
+  --nv-scrim: color-mix(in srgb, var(--nv-bg) 70%, transparent);
+
   --nv-target: 2.75rem;
   --nv-focus-width: 3px;
   --nv-border-width: 1px;
-  --nv-content-max: 72rem;
-  --nv-sidebar: 14rem;
+  --nv-content-max: 76rem;
+  --nv-sidebar: 16rem;
+  --nv-topbar: 3.5rem;
   --nv-measure: 70ch;
   --nv-motion: 150ms;
+  --nv-motion-slow: 220ms;
+  --nv-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 *,
@@ -35,6 +67,8 @@ html {
   font-family: var(--nv-font);
   font-size: 100%;
   -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  scroll-padding-block-start: var(--nv-topbar);
 }
 
 body {
@@ -43,25 +77,31 @@ body {
   color: var(--nv-text);
   font-size: var(--nv-text-md);
   line-height: var(--nv-leading);
+  overflow-x: hidden;
 }
 
 h1,
 h2,
 h3 {
-  line-height: 1.25;
+  line-height: var(--nv-leading-tight);
   margin: 0;
+  letter-spacing: -0.01em;
 }
 
 h1 {
   font-size: var(--nv-text-xl);
+  font-weight: 750;
+  letter-spacing: -0.02em;
 }
 
 h2 {
   font-size: var(--nv-text-lg);
+  font-weight: 700;
 }
 
 h3 {
-  font-size: var(--nv-text-md);
+  font-size: var(--nv-text-title);
+  font-weight: 650;
 }
 
 p {
@@ -72,6 +112,11 @@ p {
 a {
   color: var(--nv-link);
   text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
 }
 
 :focus-visible {
@@ -86,6 +131,18 @@ a {
 code,
 pre {
   font-family: var(--nv-font-mono);
+  font-size: 0.92em;
+}
+
+code {
+  padding: 0.05em 0.35em;
+  border-radius: var(--nv-radius-xs);
+  background: var(--nv-surface-2);
+  overflow-wrap: anywhere;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--nv-primary) 28%, transparent);
 }
 
 .visually-hidden {
@@ -117,10 +174,43 @@ pre {
   color: var(--nv-text-muted);
 }
 
-.grid {
-  display: grid;
-  gap: var(--nv-space-4);
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.eyebrow {
+  font-size: var(--nv-text-caption);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--nv-text-muted);
+}
+
+.plain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Page enter: a short fade and rise; reduced motion switches it off below. */
+@keyframes nv-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.375rem);
+  }
+}
+
+@keyframes nv-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes nv-pop {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem) scale(0.98);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

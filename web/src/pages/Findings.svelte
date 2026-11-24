@@ -8,7 +8,8 @@
   import Card from '../components/Card.svelte';
   import EmptyState from '../components/EmptyState.svelte';
   import PageHeader from '../components/PageHeader.svelte';
-  import Select from '../components/Select.svelte';
+  import Icon from '../components/Icon.svelte';
+  import Segmented from '../components/Segmented.svelte';
   import StatusBadge from '../components/StatusBadge.svelte';
   import TextBlock from '../components/TextBlock.svelte';
 
@@ -25,8 +26,8 @@
 </script>
 
 <div class="stack">
-  <PageHeader title={t('ui.nav.findings')} description={t('ui.findings.intro')} />
-  <Select label={t('ui.findings.filter')} id="severity-filter" bind:value={minSeverity} {options} />
+  <PageHeader title={t('ui.nav.findings')} description={t('ui.findings.intro')} eyebrow={t('ui.nav.group_monitor')} />
+  <Segmented label={t('ui.findings.filter')} {options} value={minSeverity} onchange={(value) => (minSeverity = value)} />
 
   <AsyncView resource={findings}>
     {#snippet children(view)}
@@ -49,6 +50,7 @@
                 <summary>
                   <StatusBadge kind="severity" value={finding.severity} />
                   <span class="title">{inlineText(finding.title, 200)}</span>
+                  <span class="chev"><Icon name="chevron" size="sm" /></span>
                 </summary>
                 <div class="stack body">
                   <p class="muted">
@@ -88,27 +90,49 @@
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--nv-space-2);
+    gap: var(--nv-space-3);
   }
   .finding {
     background: var(--nv-surface);
     border: var(--nv-border-width) solid var(--nv-border);
     border-radius: var(--nv-radius);
-    padding: var(--nv-space-3);
+    box-shadow: var(--nv-shadow-1);
+    padding: 0 var(--nv-space-4);
+    transition: box-shadow var(--nv-motion-slow) var(--nv-ease);
+  }
+  .finding[open] {
+    box-shadow: var(--nv-shadow-2);
+    padding-block-end: var(--nv-space-4);
   }
   summary {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: var(--nv-space-3);
-    min-height: var(--nv-target);
+    gap: var(--nv-space-2) var(--nv-space-3);
+    min-height: 3.5rem;
+    padding-block: var(--nv-space-2);
     cursor: pointer;
+    list-style: none;
+  }
+  summary::-webkit-details-marker {
+    display: none;
   }
   .title {
-    font-weight: 600;
+    flex: 1 1 14rem;
+    min-width: 0;
+    font-weight: 650;
     overflow-wrap: anywhere;
   }
+  .chev {
+    display: inline-flex;
+    margin-inline-start: auto;
+    color: var(--nv-text-muted);
+    transition: transform var(--nv-motion) var(--nv-ease);
+  }
+  .finding[open] .chev {
+    transform: rotate(90deg);
+  }
   .body {
-    margin-top: var(--nv-space-3);
+    margin-top: var(--nv-space-2);
   }
 </style>

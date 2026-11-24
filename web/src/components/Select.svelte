@@ -32,14 +32,23 @@
   }
   label {
     font-weight: 600;
+    font-size: var(--nv-text-sm);
   }
   select {
     min-height: var(--nv-target);
     padding: var(--nv-space-2) var(--nv-space-3);
     border: var(--nv-border-width) solid var(--nv-border-strong);
-    border-radius: var(--nv-radius);
+    border-radius: var(--nv-radius-sm);
     background: var(--nv-surface);
     color: var(--nv-text);
     font: inherit;
+    cursor: pointer;
+    transition: border-color var(--nv-motion) var(--nv-ease);
+  }
+  select:hover {
+    border-color: var(--nv-text-muted);
+  }
+  select:focus-visible {
+    border-color: var(--nv-focus);
   }
 </style>

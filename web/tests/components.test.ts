@@ -93,7 +93,7 @@ describe('StatusBadge', () => {
   it('shows text and an icon, never colour alone', () => {
     const root = render(StatusBadge, { kind: 'node', value: 'offline' });
     expect(root.textContent).toContain('Offline');
-    expect(root.querySelector('[aria-hidden="true"]')?.textContent?.length).toBeGreaterThan(0);
+    expect(root.querySelector('svg[data-icon][aria-hidden="true"]')).not.toBeNull();
   });
 
   it('maps severities and risk tiers (number or name) to their own text', () => {
@@ -245,20 +245,37 @@ describe('ProposalCard', () => {
     expires_at: '2026-11-23T07:00:00.000Z',
   };
 
-  it('shows action, reason, impact and state, and has no approve or run control', () => {
+  it('shows action, reason, impact and state, and offers no decision without handlers', () => {
     const root = render(ProposalCard, { proposal });
     expect(root.textContent).toContain('Restart the web service');
     expect(root.textContent).toContain('It stopped answering.');
     expect(root.textContent).toContain('Ten seconds of downtime.');
     expect(root.textContent).toContain('Pending');
-    expect(root.textContent).toContain('milestone M4');
     expect(root.querySelectorAll('button, [role="button"], input, a[href]').length).toBe(0);
+  });
+
+  it('offers Approve and Reject on a pending proposal and says that nothing runs', () => {
+    const approve = vi.fn();
+    const reject = vi.fn();
+    const root = render(ProposalCard, { proposal, onapprove: approve, onreject: reject });
+    expect(root.textContent).toContain('Approving records your decision. Nothing runs yet.');
+    const buttons = [...root.querySelectorAll('button')];
+    expect(buttons.map((b) => b.textContent?.trim())).toEqual(['Approve', 'Reject']);
+    buttons[0]?.click();
+    buttons[1]?.click();
+    expect(approve).toHaveBeenCalledTimes(1);
+    expect(reject).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers no decision on a proposal that is already decided', () => {
+    const root = render(ProposalCard, { proposal: { ...proposal, status: 'approved' }, onapprove: () => {}, onreject: () => {} });
+    expect(root.querySelectorAll('button').length).toBe(0);
   });
 
   it('renders every hostile string as text', () => {
     for (const text of HOSTILE.slice(0, 8)) {
       const root = render(ProposalCard, { proposal: { ...proposal, title: text, rationale: text, suggested_action: text, impact: text, tool: text } });
-      expect(root.querySelector('script, img, svg, iframe, a')).toBeNull();
+      expect(root.querySelector('script, img, svg:not([data-icon]), iframe, a')).toBeNull();
     }
   });
 });

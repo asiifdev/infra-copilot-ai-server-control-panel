@@ -235,11 +235,15 @@ export function buildFixtures(options: { hostile?: boolean } = {}): Fixtures {
     status,
     conversation_id: id(300),
     created_at: '2026-11-22T07:00:00.000Z',
-    expires_at: '2026-11-23T07:00:00.000Z',
+    // Pending proposals expire two days from now (the clock of the test run), the others are history.
+    expires_at: new Date(Date.now() + (status === 'pending' ? 2 * 86_400_000 : -86_400_000)).toISOString(),
   });
   const proposals: ProposalView[] = [
     proposal(1, 'propose_restart', 2, 'pending', text('Restart the web service', 4), long('It stopped answering health checks.', 1), long('Restart the service.', 5), long('About ten seconds of downtime.', 2)),
     proposal(2, 'propose_rotate_logs', 1, 'rejected', 'Rotate the log files', 'Disk is 92 percent full.', 'Rotate the logs.', 'None expected.'),
+    proposal(3, 'propose_move_traffic', 3, 'pending', 'Move traffic to the new server', 'The comparison found no blocking differences.', 'Switch the tunnel to the new server.', 'All visitors reach the new server.'),
+    proposal(4, 'propose_clear_cache', 1, 'expired', 'Clear the page cache', 'The cache is stale.', 'Clear it.', 'Pages load slower for a minute.'),
+    proposal(5, 'propose_add_swap', 2, 'approved', 'Add a swap file', 'Memory use is high.', 'Create a 2 GB swap file.', 'Uses 2 GB of disk.'),
   ];
 
   const conversations: Conversation[] = [

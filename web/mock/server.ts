@@ -372,12 +372,25 @@ export function createMock(options: MockOptions = {}) {
         }
         break;
       }
-      case 'proposals':
-        if (method === 'GET') {
+      case 'proposals': {
+        if (method === 'GET' && !name) {
           const status = query.get('status');
           return json(200, state.proposals.filter((p) => !status || p.status === status));
         }
+        if (method === 'POST' && name && action === 'decision') {
+          const proposal = state.proposals.find((p) => p.id === name);
+          if (!proposal) return fail(req, 404, 'not_found');
+          const decision = (body as { decision?: unknown } | undefined)?.decision;
+          if (decision !== 'approve' && decision !== 'reject') return fail(req, 400, 'invalid_input');
+          // Only a pending proposal can be decided, and only before it expires. Nothing is executed.
+          if (proposal.status === 'pending' && new Date(proposal.expires_at).getTime() < Date.now()) proposal.status = 'expired';
+          if (proposal.status === 'expired') return fail(req, 409, 'proposal_expired');
+          if (proposal.status !== 'pending') return fail(req, 409, 'proposal_decided');
+          proposal.status = decision === 'approve' ? 'approved' : 'rejected';
+          return json(200, { id: proposal.id, status: proposal.status });
+        }
         break;
+      }
       case 'conversations': {
         if (method === 'GET' && !name) return json(200, state.conversations);
         if (method === 'POST' && !name) {

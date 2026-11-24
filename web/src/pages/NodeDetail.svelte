@@ -7,6 +7,7 @@
   import { inlineText } from '../lib/text';
   import type { InventoryItem } from '../lib/types';
   import AsyncView from '../components/AsyncView.svelte';
+  import Button from '../components/Button.svelte';
   import Card from '../components/Card.svelte';
   import DataTable, { type Column } from '../components/DataTable.svelte';
   import PageHeader from '../components/PageHeader.svelte';
@@ -41,8 +42,8 @@
 </script>
 
 <div class="stack">
-  <PageHeader title={t('ui.node.title', { name: inlineText(name, 80) })}>
-    <a href={hrefFor({ name: 'nodes' })}>{t('ui.node.back')}</a>
+  <PageHeader title={t('ui.node.title', { name: inlineText(name, 80) })} eyebrow={t('ui.nav.group_monitor')}>
+    <Button variant="ghost" icon="return" href={hrefFor({ name: 'nodes' })}>{t('ui.node.back')}</Button>
   </PageHeader>
 
   <Select label={t('ui.node.filter')} id="inventory-kind" bind:value={kind} options={kindOptions} />

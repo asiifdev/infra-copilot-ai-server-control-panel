@@ -4,6 +4,7 @@
   import { t } from '../lib/i18n.svelte';
   import { inlineText } from '../lib/text';
   import Button from './Button.svelte';
+  import Icon from './Icon.svelte';
 
   interface Props {
     /** Fixed error code from the contract (or from an error event). */
@@ -20,7 +21,7 @@
 </script>
 
 <div class="notice" role="alert">
-  <p class="title">{t(errorKey(code))}</p>
+  <p class="title"><Icon name="alert" />{t(errorKey(code))}</p>
   {#if advice}<p>{t(advice)}</p>{/if}
   {#if cleanDetail}<p class="muted detail">{t('ui.error.detail', { detail: cleanDetail })}</p>{/if}
   <div class="row">
@@ -38,9 +39,13 @@
     border: var(--nv-border-width) solid var(--nv-danger);
     border-inline-start-width: var(--nv-space-1);
     border-radius: var(--nv-radius);
-    background: var(--nv-surface);
+    background: var(--nv-tint-danger);
+    box-shadow: var(--nv-shadow-1);
   }
   .title {
+    display: flex;
+    align-items: center;
+    gap: var(--nv-space-2);
     font-weight: 700;
     color: var(--nv-danger);
   }

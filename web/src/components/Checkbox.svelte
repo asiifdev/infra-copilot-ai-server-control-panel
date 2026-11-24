@@ -22,7 +22,8 @@
 <style>
   .hint {
     margin: 0;
-    font-size: var(--nv-text-sm);
+    padding-inline-start: calc(var(--nv-space-5) + var(--nv-space-2));
+    font-size: var(--nv-text-caption);
   }
   .check {
     display: flex;
@@ -30,9 +31,13 @@
     gap: var(--nv-space-2);
     min-height: var(--nv-target);
   }
+  label {
+    font-weight: 500;
+  }
   input {
     width: var(--nv-space-5);
     height: var(--nv-space-5);
     accent-color: var(--nv-primary);
+    cursor: pointer;
   }
 </style>

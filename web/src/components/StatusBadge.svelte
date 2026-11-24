@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from '../lib/i18n.svelte';
   import { inlineText } from '../lib/text';
+  import Icon, { type IconName } from './Icon.svelte';
 
   type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
   type Kind = 'node' | 'severity' | 'tier' | 'state';
@@ -61,12 +62,12 @@
     tier: TIER,
     state: STATE,
   };
-  const ICONS: Record<Tone, string> = {
-    success: '✓',
-    warning: '▲',
-    danger: '✕',
-    info: 'ℹ',
-    neutral: '○',
+  const ICONS: Record<Tone, IconName> = {
+    success: 'check',
+    warning: 'alert',
+    danger: 'cross',
+    info: 'info',
+    neutral: 'circle',
   };
 
   const entry = $derived(TABLES[kind][String(value).toLowerCase()]);
@@ -75,7 +76,7 @@
 </script>
 
 <span class={['badge', tone]}>
-  <span class="icon" aria-hidden="true">{ICONS[tone]}</span>
+  <Icon name={ICONS[tone]} size="sm" />
   <span>{label}</span>
 </span>
 
@@ -84,27 +85,33 @@
     display: inline-flex;
     align-items: center;
     gap: var(--nv-space-1);
-    padding: 0 var(--nv-space-2);
-    border: var(--nv-border-width) solid currentColor;
-    border-radius: var(--nv-radius-sm);
-    font-size: var(--nv-text-sm);
-    font-weight: 600;
+    padding: 0.125rem var(--nv-space-2) 0.125rem 0.375rem;
+    border: var(--nv-border-width) solid color-mix(in srgb, currentColor 45%, transparent);
+    border-radius: var(--nv-radius-pill);
+    font-size: var(--nv-text-caption);
+    font-weight: 650;
+    line-height: 1.3;
     background: var(--nv-surface);
     white-space: nowrap;
   }
   .success {
     color: var(--nv-success);
+    background: var(--nv-tint-success);
   }
   .warning {
     color: var(--nv-warning);
+    background: var(--nv-tint-warning);
   }
   .danger {
     color: var(--nv-danger);
+    background: var(--nv-tint-danger);
   }
   .info {
     color: var(--nv-info);
+    background: var(--nv-tint-info);
   }
   .neutral {
     color: var(--nv-text-muted);
+    background: var(--nv-surface-2);
   }
 </style>

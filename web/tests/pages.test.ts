@@ -141,7 +141,7 @@ describe('Assistant page', () => {
     const root = await open({ hostile: true });
     await ask(root, 'hostile');
     await eventually(() => expect(root.textContent).toContain('line three'));
-    expect(root.querySelector('script, img, svg, iframe, object, embed, a[href^="javascript"]')).toBeNull();
+    expect(root.querySelector('script, img, svg:not([data-icon]), iframe, object, embed, a[href^="javascript"]')).toBeNull();
     const all = root.querySelectorAll('*');
     for (const el of all) {
       for (const attr of el.attributes) expect(attr.name.startsWith('on'), `${el.tagName} ${attr.name}`).toBe(false);
@@ -373,13 +373,13 @@ describe('Plan detail page', () => {
     const mock = installMock();
     await readyApp(mock, locale);
     const root = render(PlanDetail, { name });
-    await eventually(() => expect(root.querySelector('table')).not.toBeNull());
+    await eventually(() => expect(root.querySelector('ol.timeline')).not.toBeNull());
     return { mock, root };
   }
 
-  it('shows the steps as an ordered table with localized kinds, sides and dependencies', async () => {
+  it('shows the steps as an ordered timeline with localized kinds, sides and dependencies', async () => {
     const { root } = await open('move-alpha');
-    const rows = [...root.querySelectorAll('tbody tr')].map((row) => row.textContent?.replace(/\s+/g, ' ').trim() ?? '');
+    const rows = [...root.querySelectorAll('ol.timeline li')].map((row) => row.textContent?.replace(/\s+/g, ' ').trim() ?? '');
     expect(rows.length).toBe(10);
     expect(rows[0]).toContain('Collect an inventory');
     expect(rows[0]).toContain('Source server');
@@ -394,7 +394,7 @@ describe('Plan detail page', () => {
 
   it('shows every gate as a localized label with Yes/No or a number, never a raw key', async () => {
     const { root } = await open('move-alpha');
-    const facts = root.querySelector('dl.facts, dl')?.textContent?.replace(/\s+/g, ' ') ?? '';
+    const facts = root.querySelector('ul.gates')?.textContent?.replace(/\s+/g, ' ') ?? '';
     for (const key of ['cutover_allowed', 'shutdown_allowed', 'inventory_incomplete', 'comparison_current', 'open_critical', 'accepted_critical']) {
       expect(facts).not.toContain(key);
     }
@@ -422,7 +422,7 @@ describe('Plan detail page', () => {
     plan.gates = { future_gate: true, other_number: 3, nested: { a: 1 }, open_critical: 'oops' };
     await readyApp(mock);
     const root = render(PlanDetail, { name: 'move-beta' });
-    await eventually(() => expect(root.querySelector('table')).not.toBeNull());
+    await eventually(() => expect(root.querySelector('ol.timeline')).not.toBeNull());
     const text = root.textContent?.replace(/\s+/g, ' ') ?? '';
     expect(text).toContain('Other step: teleport');
     expect(text).toContain('moon');
@@ -437,8 +437,8 @@ describe('Plan detail page', () => {
     const mock = installMock({ hostile: true });
     await readyApp(mock);
     const root = render(PlanDetail, { name: 'move-alpha' });
-    await eventually(() => expect(root.querySelector('table')).not.toBeNull());
-    expect(root.querySelector('script, img, svg, iframe, a[href^="javascript"]')).toBeNull();
+    await eventually(() => expect(root.querySelector('ol.timeline')).not.toBeNull());
+    expect(root.querySelector('script, img, svg:not([data-icon]), iframe, a[href^="javascript"]')).toBeNull();
     expect((window as unknown as { __pwned?: unknown }).__pwned).toBeUndefined();
   });
 });

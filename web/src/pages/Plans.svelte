@@ -9,11 +9,11 @@
   import DataTable, { type Column } from '../components/DataTable.svelte';
   import EmptyState from '../components/EmptyState.svelte';
   import PageHeader from '../components/PageHeader.svelte';
-  import ProposalCard from '../components/ProposalCard.svelte';
+  import Button from '../components/Button.svelte';
+  import Card from '../components/Card.svelte';
   import StatusBadge from '../components/StatusBadge.svelte';
 
   const plans = useResource((signal) => api.plans(signal));
-  const proposals = useResource((signal) => api.proposals(undefined, signal));
 
   const columns = $derived<Column<PlanSummary>[]>([
     { id: 'name', header: t('ui.plans.name'), sortValue: (p) => p.name },
@@ -22,8 +22,8 @@
 </script>
 
 <div class="stack">
-  <PageHeader title={t('ui.nav.plans')} description={t('ui.plans.intro')} />
-  <p class="draft-note"><StatusBadge kind="state" value="draft" /> {t('ui.plans.draft_note')}</p>
+  <PageHeader title={t('ui.nav.plans')} description={t('ui.plans.intro')} eyebrow={t('ui.nav.group_work')} />
+  <p class="row"><StatusBadge kind="state" value="draft" /> {t('ui.plans.draft_note')}</p>
   <AsyncView resource={plans}>
     {#snippet children(list)}
       {#if list.length === 0}
@@ -49,29 +49,10 @@
     {/snippet}
   </AsyncView>
 
-  <h2>{t('ui.plans.proposals')}</h2>
-  <AsyncView resource={proposals}>
-    {#snippet children(list)}
-      {#if list.length === 0}
-        <EmptyState title={t('ui.plans.no_proposals')} />
-      {:else}
-        <ul class="plain">
-          {#each list as proposal (proposal.id)}
-            <li><ProposalCard {proposal} /></li>
-          {/each}
-        </ul>
-      {/if}
-    {/snippet}
-  </AsyncView>
+  <Card title={t('ui.nav.proposals')}>
+    <p class="muted">{t('ui.plans.proposals_moved')}</p>
+    <div class="row">
+      <Button icon="proposals" href={hrefFor({ name: 'proposals' })}>{t('ui.plans.open_approvals')}</Button>
+    </div>
+  </Card>
 </div>
-
-<style>
-  .plain {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--nv-space-3);
-  }
-</style>

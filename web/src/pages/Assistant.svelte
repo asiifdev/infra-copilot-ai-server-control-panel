@@ -1,17 +1,18 @@
 <script lang="ts">
   import type { Attachment } from 'svelte/attachments';
-  import { api, ApiError } from '../lib/api';
+  import { api } from '../lib/api';
   import { ChatSession } from '../lib/chat.svelte';
   import { errorKey } from '../lib/errors';
   import { t } from '../lib/i18n.svelte';
-  import { hrefFor, router } from '../lib/router.svelte';
+  import { conversationEvents, startConversation } from '../lib/conversations.svelte';
+  import { hrefFor } from '../lib/router.svelte';
   import { Resource, useResource } from '../lib/resource.svelte';
-  import { toasts } from '../lib/toast.svelte';
   import { inlineText } from '../lib/text';
   import type { ChatMessage as ChatMessageRow } from '../lib/types';
   import AsyncView from '../components/AsyncView.svelte';
   import Button from '../components/Button.svelte';
   import ChatMessage from '../components/ChatMessage.svelte';
+  import Icon from '../components/Icon.svelte';
   import EmptyState from '../components/EmptyState.svelte';
   import PageHeader from '../components/PageHeader.svelte';
   import TextField from '../components/TextField.svelte';
@@ -22,7 +23,12 @@
 
   let { conversation }: Props = $props();
 
-  const conversations = useResource((signal) => api.conversations(signal));
+  // Reads the revision, so the list reloads when a conversation is started from elsewhere
+  // (the command palette).
+  const conversations = useResource((signal) => {
+    void conversationEvents.revision;
+    return api.conversations(signal);
+  });
   const history = new Resource<ChatMessageRow[]>();
   const chat = new ChatSession();
 
@@ -55,15 +61,8 @@
 
   async function newConversation() {
     creating = true;
-    try {
-      const created = await api.createConversation();
-      conversations.reload();
-      router.go({ name: 'assistant', conversation: String(created.id) });
-    } catch (cause) {
-      toasts.push('error', t(errorKey(cause instanceof ApiError ? cause.code : 'internal')));
-    } finally {
-      creating = false;
-    }
+    await startConversation();
+    creating = false;
   }
 
   async function submit(event: SubmitEvent) {
@@ -75,7 +74,9 @@
   }
 
   function onkeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+    // Enter sends, Shift+Enter makes a new line; Ctrl or Cmd+Enter sends too. A key press that
+    // only confirms an input-method composition (Enter in some languages) must not send.
+    if (event.key === 'Enter' && !event.isComposing && (!event.shiftKey || event.ctrlKey || event.metaKey)) {
       event.preventDefault();
       (event.currentTarget as HTMLTextAreaElement).form?.requestSubmit();
     }
@@ -96,9 +97,9 @@
   const historyFailed = $derived(history.status === 'error' ? history.error : null);
 </script>
 
-<div class="stack">
-  <PageHeader title={t('ui.nav.assistant')} description={t('ui.assistant.intro')}>
-    <Button variant="primary" onclick={newConversation} busy={creating} busyLabel={t('ui.common.loading')}>
+<div class="stack page">
+  <PageHeader title={t('ui.nav.assistant')} description={t('ui.assistant.intro')} eyebrow={t('ui.nav.group_work')}>
+    <Button variant="primary" icon="plus" onclick={newConversation} busy={creating} busyLabel={t('ui.common.loading')}>
       {t('ui.assistant.new')}
     </Button>
   </PageHeader>
@@ -110,7 +111,7 @@
           {#if list.length === 0}
             <p class="muted">{t('ui.assistant.no_conversations')}</p>
           {:else}
-            <ul>
+            <ul class="plain">
               {#each list as item (item.id)}
                 <li>
                   <a
@@ -129,33 +130,35 @@
 
     <section class="chat" aria-label={t('ui.assistant.chat')}>
       {#if conversation === null}
-        <EmptyState title={t('ui.assistant.pick')} message={t('ui.assistant.pick_hint')} />
+        <EmptyState icon="assistant" title={t('ui.assistant.pick')} message={t('ui.assistant.pick_hint')} />
       {:else}
         {#if historyFailed}
           <p class="muted">{t(errorKey(historyFailed.code))}</p>
         {/if}
         <!-- Not a live region: announcing every streamed word would drown a screen reader. The
              status line below speaks only when a reply starts and when it ends. -->
-        <ol class="messages" aria-label={t('ui.assistant.messages')} aria-busy={chat.streaming} {@attach followNewest}>
+        <ol class="messages plain" aria-label={t('ui.assistant.messages')} aria-busy={chat.streaming} {@attach followNewest}>
           {#each chat.messages as message, index (index)}
             <ChatMessage {message} writing={chat.streaming && index === chat.messages.length - 1} />
           {/each}
         </ol>
         <p class="visually-hidden" role="status" aria-live="polite">{announcement}</p>
         {#if chat.messages.length === 0 && history.status === 'ready'}
-          <p class="muted">{t('ui.assistant.empty')}</p>
+          <EmptyState icon="assistant" title={t('ui.assistant.empty')} />
         {/if}
         <form class="composer" onsubmit={submit}>
-          <TextField id="composer" label={t('ui.assistant.message')} bind:value={draft} multiline {onkeydown} />
-          <p class="muted hint">{t('ui.assistant.send_hint')}</p>
-          <div class="row">
-            <Button type="submit" variant="primary" disabled={draft.trim() === '' || chat.streaming || history.status !== 'ready'}>
-              {t('ui.assistant.send')}
-            </Button>
-            {#if chat.streaming}
-              <Button onclick={() => chat.stop()}>{t('ui.assistant.stop')}</Button>
-            {/if}
+          <div class="box">
+            <TextField id="composer" label={t('ui.assistant.message')} hideLabel placeholder={t('ui.assistant.message')} bind:value={draft} multiline rows={2} {onkeydown} />
+            <div class="send row">
+              {#if chat.streaming}
+                <Button icon="stop" onclick={() => chat.stop()}>{t('ui.assistant.stop')}</Button>
+              {/if}
+              <Button type="submit" variant="primary" icon="send" disabled={draft.trim() === '' || chat.streaming || history.status !== 'ready'}>
+                {t('ui.assistant.send')}
+              </Button>
+            </div>
           </div>
+          <p class="muted hint"><Icon name="return" size="sm" />{t('ui.assistant.send_hint')}</p>
         </form>
       {/if}
     </section>
@@ -170,48 +173,106 @@
   }
   @media (min-width: 52rem) {
     .layout {
-      grid-template-columns: 16rem minmax(0, 1fr);
+      grid-template-columns: 15rem minmax(0, 1fr);
+      align-items: start;
+    }
+    .list {
+      position: sticky;
+      inset-block-start: var(--nv-space-5);
     }
   }
+  /* A strip of pills you can swipe on a phone; a column on a wide screen. */
   .list ul {
-    list-style: none;
-    margin: 0;
-    padding: 0;
     display: flex;
-    flex-direction: column;
-    gap: var(--nv-space-1);
+    gap: var(--nv-space-2);
+    overflow-x: auto;
+    padding-block-end: var(--nv-space-1);
+  }
+  @media (min-width: 52rem) {
+    .list ul {
+      flex-direction: column;
+      gap: var(--nv-space-1);
+      overflow: visible;
+    }
   }
   .list a {
-    display: block;
-    padding: var(--nv-space-2) var(--nv-space-3);
+    display: flex;
+    align-items: center;
     min-height: var(--nv-target);
-    border-radius: var(--nv-radius);
-    overflow-wrap: anywhere;
+    padding: var(--nv-space-2) var(--nv-space-4);
+    border: var(--nv-border-width) solid var(--nv-border);
+    border-radius: var(--nv-radius-pill);
+    background: var(--nv-surface);
+    color: var(--nv-text);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background var(--nv-motion) var(--nv-ease);
+  }
+  .list a:hover {
+    background: var(--nv-hover);
   }
   .list a[aria-current='page'] {
-    background: var(--nv-surface-2);
+    background: var(--nv-tint-primary);
+    border-color: var(--nv-primary);
     font-weight: 700;
+  }
+  @media (min-width: 52rem) {
+    .list a {
+      white-space: normal;
+      overflow-wrap: anywhere;
+      border-radius: var(--nv-radius-sm);
+      border-color: transparent;
+      background: none;
+    }
+    .list a:hover {
+      background: var(--nv-hover);
+    }
+    .list a[aria-current='page'] {
+      background: var(--nv-tint-primary);
+      border-color: transparent;
+    }
   }
   .chat {
     display: flex;
     flex-direction: column;
-    gap: var(--nv-space-3);
+    gap: var(--nv-space-4);
     min-width: 0;
+    min-height: 50vh;
   }
   .messages {
-    list-style: none;
-    margin: 0;
-    padding: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--nv-space-3);
+    gap: var(--nv-space-4);
   }
+  /* The composer stays at the bottom of the window while the conversation scrolls. */
   .composer {
+    position: sticky;
+    inset-block-end: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    gap: var(--nv-space-1);
+    margin-block-start: auto;
+    padding-block: var(--nv-space-3) var(--nv-space-2);
+    background: linear-gradient(to bottom, transparent, var(--nv-bg) var(--nv-space-3));
+  }
+  .box {
     display: flex;
     flex-direction: column;
     gap: var(--nv-space-2);
+    padding: var(--nv-space-3);
+    border: var(--nv-border-width) solid var(--nv-border-strong);
+    border-radius: var(--nv-radius-lg);
+    background: var(--nv-surface);
+    box-shadow: var(--nv-shadow-2);
+  }
+  .send {
+    justify-content: flex-end;
   }
   .hint {
-    font-size: var(--nv-text-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--nv-space-1);
+    font-size: var(--nv-text-caption);
   }
 </style>

@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { toasts } from '../src/lib/toast.svelte';
 import Memory from '../src/pages/Memory.svelte';
 import Plans from '../src/pages/Plans.svelte';
+import Proposals from '../src/pages/Proposals.svelte';
 import Transports from '../src/pages/Transports.svelte';
 import { fromHistory } from '../src/lib/chat.svelte';
 import { readCheck } from '../src/lib/transport';
@@ -104,16 +105,25 @@ describe('Memory page with real notes', () => {
   });
 });
 
-describe('Proposals on the Plans page', () => {
-  it('shows title, rationale, suggested action and tool of real proposals, read-only', async () => {
+describe('Proposals on the Approvals page', () => {
+  it('shows title, rationale, suggested action and tool of real proposals', async () => {
     const mock = installMock();
     await readyApp(mock);
-    const root = render(Plans);
+    const root = render(Proposals);
     await eventually(() => expect(root.textContent).toContain('Restart the web service'));
     const proposal = mock.state.proposals[0] as ProposalView;
     expect(root.textContent).toContain(proposal.rationale);
     expect(root.textContent).toContain(proposal.suggested_action);
     expect(root.textContent).toContain('propose_restart');
-    expect(root.textContent).not.toMatch(/\b(Approve|Run now|Execute)\b/);
+    expect(root.textContent).toContain('Approving records your decision. Nothing runs yet.');
+  });
+
+  it('no longer lists proposals on the Plans page, only a link to Approvals', async () => {
+    const mock = installMock();
+    await readyApp(mock);
+    const root = render(Plans);
+    await eventually(() => expect(root.textContent).toContain('move-alpha'));
+    expect(root.textContent).not.toContain('Restart the web service');
+    expect(root.querySelector('a[href="#/proposals"]')).not.toBeNull();
   });
 });

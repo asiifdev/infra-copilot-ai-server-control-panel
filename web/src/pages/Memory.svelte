@@ -74,11 +74,11 @@
 
 {#snippet note(item: MemoryNote, canApprove: boolean)}
   <li class="note">
-    <p class="muted meta">{kindLabel(item.kind)} · {sourceLabel(item.source)}</p>
+    <p class="meta"><span class="chip">{kindLabel(item.kind)}</span><span class="chip">{sourceLabel(item.source)}</span></p>
     <TextBlock text={item.content} />
     <div class="row">
       {#if canApprove}
-        <Button variant="primary" onclick={() => approve(item)} disabled={working}>{t('ui.memory.approve')}</Button>
+        <Button variant="primary" icon="check" onclick={() => approve(item)} disabled={working}>{t('ui.memory.approve')}</Button>
       {/if}
       <Button variant="danger" onclick={() => (toDelete = item)} disabled={working}>{t('ui.common.delete')}</Button>
     </div>
@@ -86,14 +86,14 @@
 {/snippet}
 
 <div class="stack">
-  <PageHeader title={t('ui.nav.memory')} description={t('ui.memory.intro')} />
+  <PageHeader title={t('ui.nav.memory')} description={t('ui.memory.intro')} eyebrow={t('ui.nav.group_workspace')} />
   <p class="muted">{t('ui.memory.why')}</p>
 
   <Card title={t('ui.memory.pending')}>
     <AsyncView resource={pending}>
       {#snippet children(list)}
         {#if list.length === 0}
-          <EmptyState title={t('ui.memory.none_pending')} />
+          <EmptyState icon="check" title={t('ui.memory.none_pending')} />
         {:else}
           <ul class="notes" aria-label={t('ui.memory.pending')}>
             {#each list as item (item.id)}{@render note(item, true)}{/each}
@@ -107,7 +107,7 @@
     <AsyncView resource={active}>
       {#snippet children(list)}
         {#if list.length === 0}
-          <EmptyState title={t('ui.memory.none_active')} />
+          <EmptyState icon="memory" title={t('ui.memory.none_active')} />
         {:else}
           <ul class="notes" aria-label={t('ui.memory.active')}>
             {#each list as item (item.id)}{@render note(item, false)}{/each}
@@ -140,14 +140,25 @@
     gap: var(--nv-space-3);
   }
   .meta {
-    font-size: var(--nv-text-sm);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--nv-space-2);
+    font-size: var(--nv-text-caption);
+  }
+  .chip {
+    padding: 0 var(--nv-space-2);
+    border-radius: var(--nv-radius-pill);
+    background: var(--nv-surface-2);
+    color: var(--nv-text);
+    font-weight: 650;
   }
   .note {
     display: flex;
     flex-direction: column;
     gap: var(--nv-space-2);
-    padding: var(--nv-space-3);
+    padding: var(--nv-space-4);
     border: var(--nv-border-width) solid var(--nv-border);
-    border-radius: var(--nv-radius);
+    border-radius: var(--nv-radius-sm);
+    background: var(--nv-surface-2);
   }
 </style>

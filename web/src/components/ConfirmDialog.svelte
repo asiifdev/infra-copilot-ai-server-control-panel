@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Attachment } from 'svelte/attachments';
+  import { FOCUSABLE, trapTab } from '../lib/focus';
   import Button from './Button.svelte';
 
   interface Props {
@@ -8,14 +9,13 @@
     confirmLabel: string;
     cancelLabel: string;
     busy?: boolean;
+    /** Look of the confirming button: danger for a deletion, primary for a deliberate approval. */
+    tone?: 'danger' | 'primary';
     onconfirm: () => void;
     oncancel: () => void;
   }
 
-  let { title, message, confirmLabel, cancelLabel, busy = false, onconfirm, oncancel }: Props = $props();
-
-  const FOCUSABLE =
-    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  let { title, message, confirmLabel, cancelLabel, busy = false, tone = 'danger', onconfirm, oncancel }: Props = $props();
 
   // Set once the person confirmed: the action usually removes the row the dialog was opened
   // from (a deleted note or provider), so the opener is no longer a place to return to.
@@ -53,21 +53,7 @@
       cancel();
       return;
     }
-    if (event.key !== 'Tab') return;
-    const items = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE)];
-    const first = items[0];
-    const last = items[items.length - 1];
-    if (!first || !last) return;
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    } else if (!dialog.contains(document.activeElement)) {
-      event.preventDefault();
-      first.focus();
-    }
+    trapTab(event, dialog);
   }
 </script>
 
@@ -86,7 +72,7 @@
     <p id="confirm-message">{message}</p>
     <div class="row actions">
       <Button onclick={cancel} disabled={busy}>{cancelLabel}</Button>
-      <Button variant="danger" onclick={accept} {busy}>{confirmLabel}</Button>
+      <Button variant={tone} onclick={accept} {busy}>{confirmLabel}</Button>
     </div>
   </div>
 </div>
@@ -98,21 +84,26 @@
     display: grid;
     place-items: center;
     padding: var(--nv-space-4);
-    background: var(--nv-bg);
-    z-index: 10;
+    background: var(--nv-scrim);
+    backdrop-filter: blur(6px);
+    z-index: 50;
+    animation: nv-fade var(--nv-motion-slow) var(--nv-ease);
   }
   .dialog {
     display: flex;
     flex-direction: column;
-    gap: var(--nv-space-4);
-    max-width: 32rem;
+    gap: var(--nv-space-3);
+    max-width: 30rem;
     width: 100%;
     padding: var(--nv-space-5);
     background: var(--nv-surface);
     border: var(--nv-border-width) solid var(--nv-border-strong);
-    border-radius: var(--nv-radius);
+    border-radius: var(--nv-radius-lg);
+    box-shadow: var(--nv-shadow-2);
+    animation: nv-pop var(--nv-motion-slow) var(--nv-ease);
   }
   .actions {
     justify-content: flex-end;
+    margin-block-start: var(--nv-space-2);
   }
 </style>

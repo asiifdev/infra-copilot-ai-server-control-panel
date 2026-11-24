@@ -55,11 +55,11 @@
 {/snippet}
 
 <div class="stack">
-  <PageHeader title={t('ui.nav.transports')} description={t('ui.transports.intro')} />
+  <PageHeader title={t('ui.nav.transports')} description={t('ui.transports.intro')} eyebrow={t('ui.nav.group_work')} />
   <AsyncView resource={transports}>
     {#snippet children(list)}
       {#if list.length === 0}
-        <EmptyState title={t('ui.transports.empty')} message={t('ui.transports.empty_hint')} />
+        <EmptyState icon="transports" title={t('ui.transports.empty')} message={t('ui.transports.empty_hint')} />
       {:else}
         <DataTable
           caption={t('ui.transports.caption')}

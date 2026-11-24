@@ -24,11 +24,11 @@
 </script>
 
 <div class="stack">
-  <PageHeader title={t('ui.nav.nodes')} description={t('ui.nodes.intro')} />
+  <PageHeader title={t('ui.nav.nodes')} description={t('ui.nodes.intro')} eyebrow={t('ui.nav.group_monitor')} />
   <AsyncView resource={nodes}>
     {#snippet children(list)}
       {#if list.length === 0}
-        <EmptyState title={t('ui.nodes.empty')} message={t('ui.nodes.empty_hint')} />
+        <EmptyState icon="nodes" title={t('ui.nodes.empty')} message={t('ui.nodes.empty_hint')} />
       {:else}
         <DataTable
           caption={t('ui.nodes.caption')}

@@ -15,6 +15,7 @@
   import DataTable, { type Column } from '../components/DataTable.svelte';
   import EmptyState from '../components/EmptyState.svelte';
   import ErrorNotice from '../components/ErrorNotice.svelte';
+  import Icon from '../components/Icon.svelte';
   import PageHeader from '../components/PageHeader.svelte';
   import ProviderForm from '../components/ProviderForm.svelte';
   import Select from '../components/Select.svelte';
@@ -88,11 +89,11 @@
 </script>
 
 <div class="stack">
-  <PageHeader title={t('ui.nav.settings')} description={t('ui.settings.intro')} />
+  <PageHeader title={t('ui.nav.settings')} description={t('ui.settings.intro')} eyebrow={t('ui.nav.group_workspace')} />
 
   {#if !masterKey}
     <div class="banner" role="alert">
-      <p class="title">{t('ui.settings.no_master_key_title')}</p>
+      <p class="title"><Icon name="alert" />{t('ui.settings.no_master_key_title')}</p>
       <p>{t('ui.settings.no_master_key')}</p>
     </div>
   {/if}
@@ -109,7 +110,7 @@
     <AsyncView resource={providers}>
       {#snippet children(list)}
         {#if list.length === 0}
-          <EmptyState title={t('ui.settings.no_providers')} message={t('ui.settings.no_providers_hint')} />
+          <EmptyState icon="assistant" title={t('ui.settings.no_providers')} message={t('ui.settings.no_providers_hint')} />
         {:else}
           <DataTable
             caption={t('ui.settings.providers_caption')}
@@ -194,10 +195,19 @@
     border: var(--nv-border-width) solid var(--nv-warning);
     border-inline-start-width: var(--nv-space-1);
     border-radius: var(--nv-radius);
-    background: var(--nv-surface);
+    background: var(--nv-tint-warning);
   }
   .title {
+    display: flex;
+    align-items: center;
+    gap: var(--nv-space-2);
     font-weight: 700;
     color: var(--nv-warning);
+  }
+  .ok {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--nv-space-2);
   }
 </style>

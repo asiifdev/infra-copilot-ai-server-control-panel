@@ -179,6 +179,9 @@ export const api = {
   deleteMemory: (id: string | number) => empty('DELETE', `/api/memories/${enc(String(id))}`),
   proposals: (status?: string, signal?: AbortSignal) =>
     json<ProposalView[]>('GET', '/api/proposals', { query: { status }, signal }),
+  /** Records the decision only; nothing is executed (that arrives with milestone M4). */
+  decideProposal: (id: string | number, decision: 'approve' | 'reject') =>
+    json<{ id: string; status: string }>('POST', `/api/proposals/${enc(String(id))}/decision`, { body: { decision } }),
   conversations: (signal?: AbortSignal) => json<Conversation[]>('GET', '/api/conversations', { signal }),
   createConversation: (title?: string) => json<Conversation>('POST', '/api/conversations', { body: { title } }),
   messages: (id: string | number, signal?: AbortSignal) =>

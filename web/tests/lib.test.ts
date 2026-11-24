@@ -42,7 +42,7 @@ describe('i18n', () => {
     expect(t('ui.nav.overview')).toBe('Ringkasan');
     expect(document.documentElement.lang).toBe('id');
     expect(localStorage.getItem('nv.locale')).toBe('id');
-    expect(t('ui.overview.nodes_count', { count: 3 })).toBe('3 node');
+    expect(t('ui.overview.online_of', { total: 3 })).toBe('online dari 3');
   });
 
   it('keeps working (with keys) when the catalog cannot be loaded', async () => {

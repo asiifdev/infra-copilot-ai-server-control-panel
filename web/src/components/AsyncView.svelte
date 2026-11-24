@@ -1,9 +1,8 @@
 <script lang="ts" generics="T">
   import type { Snippet } from 'svelte';
   import type { Resource } from '../lib/resource.svelte';
-  import { t } from '../lib/i18n.svelte';
   import ErrorNotice from './ErrorNotice.svelte';
-  import Spinner from './Spinner.svelte';
+  import Skeleton from './Skeleton.svelte';
 
   interface Props {
     resource: Resource<T>;
@@ -15,8 +14,9 @@
 
 {#if resource.status === 'error' && resource.error}
   <ErrorNotice code={resource.error.code} detail={resource.error.message} onretry={() => resource.reload()} />
-{:else if resource.status === 'ready' && resource.data !== null}
+{:else if resource.data !== null}
+  <!-- While it reloads the previous data stays in place: no flicker after a filter or a decision. -->
   {@render children(resource.data)}
 {:else}
-  <Spinner label={t('ui.common.loading')} />
+  <Skeleton />
 {/if}

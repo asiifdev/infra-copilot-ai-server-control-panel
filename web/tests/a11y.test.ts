@@ -4,10 +4,12 @@
 // checked by scripts/check-palette.py and the layout rules by the browser check in ADR 0031.
 
 import axe from 'axe-core';
+import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { hostileShort, id } from '../mock/fixtures';
 import Shell from '../src/Shell.svelte';
 import { i18n, type Locale } from '../src/lib/i18n.svelte';
+import { palette } from '../src/lib/palette.svelte';
 import { router } from '../src/lib/router.svelte';
 import { theme, type Theme } from '../src/lib/theme.svelte';
 import { eventually, installMock, readyApp, render, resetSession } from './helpers';
@@ -21,6 +23,7 @@ const ROUTES = [
   '#/findings',
   '#/assistant',
   `#/assistant/${CHAT}`,
+  '#/proposals',
   '#/plans',
   '#/plans/move-alpha',
   '#/transports',
@@ -41,7 +44,7 @@ async function openRoute(hash: string, options?: Parameters<typeof installMock>[
   window.location.hash = options?.hostile ? hash.replace('node-alpha', encodeURIComponent(hostileShort(0))) : hash;
   const stop = router.start();
   const root = render(Shell);
-  await eventually(() => expect(root.querySelector('.spinner')).toBeNull());
+  await eventually(() => expect(root.querySelector('.spinner, [data-loading]')).toBeNull());
   return { root, stop, mock };
 }
 
@@ -60,6 +63,35 @@ describe('accessibility (axe-core)', () => {
           stop();
         });
       }
+    }
+  }
+});
+
+describe('accessibility of the overlays (axe-core)', () => {
+  for (const locale of ['en', 'id'] as const) {
+    for (const mode of ['light', 'dark'] as const) {
+      it(`the command palette in ${locale}, ${mode} theme has no violations`, async () => {
+        const { stop } = await openRoute('#/', undefined, locale, mode);
+        palette.show();
+        flushSync();
+        const results = await axe.run(document.documentElement, { rules: { 'color-contrast': { enabled: false } } });
+        expect(results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`)).toEqual([]);
+        palette.hide();
+        stop();
+      });
+
+      it(`the confirmation dialog on the Approvals page in ${locale}, ${mode} theme has no violations`, async () => {
+        const { root, stop } = await openRoute('#/proposals', undefined, locale, mode);
+        const approve = [...root.querySelectorAll('section button')].find((b) => /Setujui|Approve/.test(b.textContent ?? '')) as HTMLButtonElement;
+        // The second pending card is the risky one.
+        const buttons = [...root.querySelectorAll('section button')].filter((b) => /Setujui|Approve/.test(b.textContent ?? ''));
+        ((buttons[1] ?? approve) as HTMLButtonElement).click();
+        flushSync();
+        expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
+        const results = await axe.run(document.documentElement, { rules: { 'color-contrast': { enabled: false } } });
+        expect(results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`)).toEqual([]);
+        stop();
+      });
     }
   }
 });
@@ -103,7 +135,7 @@ describe('hostile server text is inert on every page', () => {
   for (const hash of ROUTES) {
     it(`${hash}`, async () => {
       const { root, stop } = await openRoute(hash, { hostile: true });
-      expect(root.querySelector('script, iframe, object, embed, img, svg, a[href^="javascript"]')).toBeNull();
+      expect(root.querySelector('script, iframe, object, embed, img, svg:not([data-icon]), a[href^="javascript"]')).toBeNull();
       for (const el of root.querySelectorAll('*')) {
         for (const attr of el.attributes) {
           expect(attr.name.startsWith('on'), `${el.tagName} ${attr.name}`).toBe(false);
