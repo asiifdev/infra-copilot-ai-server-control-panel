@@ -14,7 +14,9 @@ pub(crate) use conversations::{
     conversation_messages, conversations_create, conversations_list, own_conversation,
 };
 pub(crate) use data::{findings, inventory, nodes, plan_detail, plans, transports};
-pub(crate) use memories::{memories_list, memory_approve, memory_delete, proposals_list};
+pub(crate) use memories::{
+    memories_list, memory_approve, memory_delete, proposal_decide, proposals_list,
+};
 pub(crate) use providers::{provider_add, provider_remove, provider_test, providers_list};
 
 use crate::app::App;

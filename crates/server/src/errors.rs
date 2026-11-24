@@ -208,6 +208,16 @@ const TABLE: &[Entry] = &[
         StatusCode::NOT_FOUND,
         "api.error.conversation_not_found"
     ),
+    entry!(
+        "proposal_decided",
+        StatusCode::CONFLICT,
+        "api.error.proposal_decided"
+    ),
+    entry!(
+        "proposal_expired",
+        StatusCode::CONFLICT,
+        "api.error.proposal_expired"
+    ),
     entry!("turn_busy", StatusCode::CONFLICT, "api.error.turn_busy"),
     entry!(
         "turn_claim_lost",

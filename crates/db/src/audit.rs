@@ -188,6 +188,18 @@ fn redacted_subject(conn: &Connection, subject_json: &str) -> Result<String> {
 /// Constraint violation for an invalid actor, action or JSON; database failure.
 pub fn append_audit(conn: &Connection, org: &OrgId, new: &NewAuditEntry<'_>) -> Result<AuditEntry> {
     let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+    let entry = append_audit_in_tx(&tx, org, new)?;
+    tx.commit()?;
+    Ok(entry)
+}
+
+/// The body of [`append_audit`] for a caller that already holds an `IMMEDIATE` transaction, so the
+/// entry commits or rolls back together with the change it records.
+pub(crate) fn append_audit_in_tx(
+    tx: &Connection,
+    org: &OrgId,
+    new: &NewAuditEntry<'_>,
+) -> Result<AuditEntry> {
     let last: Option<(i64, String)> = tx
         .query_row(
             "SELECT seq, hash FROM audit_log WHERE org_id = ?1 ORDER BY seq DESC LIMIT 1",
@@ -203,9 +215,9 @@ pub fn append_audit(conn: &Connection, org: &OrgId, new: &NewAuditEntry<'_>) -> 
         Some((seq, hash)) => (seq + 1, hash),
         None => (1, GENESIS.to_owned()),
     };
-    let id = new_uuid(&tx)?;
-    let created_at = now_utc(&tx)?;
-    let subject = redacted_subject(&tx, new.subject_json)?;
+    let id = new_uuid(tx)?;
+    let created_at = now_utc(tx)?;
+    let subject = redacted_subject(tx, new.subject_json)?;
     let node_id = new.node_id.map(NodeId::as_str);
     let hash = entry_hash(
         org.as_str(),
@@ -237,7 +249,6 @@ pub fn append_audit(conn: &Connection, org: &OrgId, new: &NewAuditEntry<'_>) -> 
             hash
         ],
     )?;
-    tx.commit()?;
     Ok(AuditEntry {
         id: AuditId::from_db(id),
         seq,

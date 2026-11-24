@@ -1,15 +1,21 @@
 //! Memories (notes the assistant proposed or a person wrote) and Usulan (proposals).
 //!
 //! A memory becomes active only when a person approves it, and only here (and in the command
-//! line): nothing a model can call reaches approval. Proposals are read-only: approving and
-//! running them is milestone M4.
+//! line): nothing a model can call reaches approval. A person may approve or reject a pending
+//! proposal here; approving only records the decision (and an audit entry): nothing is executed,
+//! running approved proposals is milestone M4.
 
 use super::{Reply, json_ok, no_content, with_db};
 use crate::app::App;
 use crate::errors::{INVALID_INPUT, NOT_FOUND, from_db};
 use crate::util::{clean_text, limit_param, query_get};
+use crate::util::{json_object, opt_str};
+use axum::body::Bytes;
 use axum::extract::{Path, RawQuery, State};
-use db::{MemoryId, MemoryRow, MemoryStatus, ProposalStatus};
+use db::{
+    DecisionOutcome, MemoryId, MemoryRow, MemoryStatus, ProposalDecision, ProposalId,
+    ProposalStatus,
+};
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -91,7 +97,7 @@ pub(crate) async fn memory_delete(State(app): State<Arc<App>>, Path(id): Path<St
     Ok(no_content())
 }
 
-/// `GET /api/proposals?status=`: read-only.
+/// `GET /api/proposals?status=`.
 pub(crate) async fn proposals_list(
     State(app): State<Arc<App>>,
     RawQuery(query): RawQuery,
@@ -128,4 +134,36 @@ pub(crate) async fn proposals_list(
     })
     .await?;
     Ok(json_ok(&body))
+}
+
+/// `POST /api/proposals/{id}/decision {"decision": "approve" | "reject"}`: a person decides a
+/// pending proposal. Approving does not run anything. A proposal someone already decided answers
+/// `409 proposal_decided`; an expired one `409 proposal_expired`.
+pub(crate) async fn proposal_decide(
+    State(app): State<Arc<App>>,
+    Path(id): Path<String>,
+    body: Bytes,
+) -> Reply {
+    let map = json_object(&body, false).ok_or(INVALID_INPUT)?;
+    if map.len() != 1 {
+        return Err(INVALID_INPUT);
+    }
+    let decision = match opt_str(&map, "decision") {
+        Ok(Some("approve")) => ProposalDecision::Approve,
+        Ok(Some("reject")) => ProposalDecision::Reject,
+        _ => return Err(INVALID_INPUT),
+    };
+    let id = ProposalId::parse(&id).map_err(|_| NOT_FOUND)?;
+    let outcome = with_db(&app, move |conn, app| {
+        db::decide_proposal(conn, &app.scope.org, &id, decision, &app.scope.user)
+            .map_err(|e| from_db(&e))
+    })
+    .await?;
+    match outcome {
+        DecisionOutcome::Decided(row) => Ok(json_ok(
+            &json!({"id": row.id.as_str(), "status": row.status.as_str()}),
+        )),
+        DecisionOutcome::AlreadyDecided(_) => Err(crate::errors::ApiError::new("proposal_decided")),
+        DecisionOutcome::Expired => Err(crate::errors::ApiError::new("proposal_expired")),
+    }
 }

@@ -85,6 +85,7 @@ fn important(key: &str) -> Finding {
 
 /// Everything the read tests look at, for one organization.
 struct Seeded {
+    proposal: String,
     memory: String,
     conversation: String,
 }
@@ -203,7 +204,7 @@ fn seed(
             status: MemoryStatus::Active,
         },
     )?;
-    db::create_proposal(
+    let proposal = db::create_proposal(
         conn,
         org,
         &NewProposal {
@@ -221,6 +222,7 @@ fn seed(
     )?;
     let conversation = db::create_conversation(conn, org, user, &format!("{tag} chat"), None)?;
     Ok(Seeded {
+        proposal: proposal.as_str().to_owned(),
         memory: memory.as_str().to_owned(),
         conversation: conversation.as_str().to_owned(),
     })
@@ -705,7 +707,7 @@ fn memory_ids_of_others_or_malformed_ones_behave_like_missing_ones() -> TestResu
 }
 
 #[test]
-fn proposals_are_read_only() -> TestResult {
+fn proposals_are_listed_and_a_person_can_decide_them_once() -> TestResult {
     let f = fixture()?;
     let body = f.session.get("/api/proposals").json();
     assert_eq!(body.as_array().map(Vec::len), Some(1));
@@ -718,6 +720,51 @@ fn proposals_are_read_only() -> TestResult {
         json!([])
     );
     assert_eq!(f.session.get("/api/proposals?status=bogus").status, 400);
+
+    let path = format!("/api/proposals/{}/decision", f.mine.proposal);
+    // Bad bodies change nothing.
+    for bad in [
+        json!({}),
+        json!({"decision": "run"}),
+        json!({"decision": "approve", "x": 1}),
+        json!({"decision": 1}),
+    ] {
+        assert_eq!(f.session.post(&path, &bad).status, 400, "{bad}");
+    }
+    let r = f.session.post(&path, &json!({"decision": "approve"}));
+    assert_eq!(r.status, 200);
+    assert_eq!(r.json()["status"], "approved");
+    // The second decision loses with 409 and the status stays.
+    let again = f.session.post(&path, &json!({"decision": "reject"}));
+    assert_eq!(again.status, 409);
+    assert_eq!(
+        f.session
+            .get("/api/proposals?status=approved")
+            .json()
+            .as_array()
+            .map(Vec::len),
+        Some(1)
+    );
+    // Approving executed nothing and left one audit entry.
+    let audited: i64 = f.world.conn()?.query_row(
+        "SELECT COUNT(*) FROM audit_log WHERE action = 'proposal.approve'",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(audited, 1);
+    // The rival's proposal and malformed ids behave like missing ones.
+    for id in [f.theirs.proposal.as_str(), "not-a-uuid", "../x"] {
+        assert_eq!(
+            f.session
+                .post(
+                    &format!("/api/proposals/{id}/decision"),
+                    &json!({"decision": "approve"})
+                )
+                .status,
+            404,
+            "{id}"
+        );
+    }
     Ok(())
 }
 

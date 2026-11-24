@@ -769,3 +769,87 @@ pub fn count_pending_proposals(conn: &Connection, org: &OrgId, id: &Conversation
     )?;
     Ok(u32::try_from(n).unwrap_or(u32::MAX))
 }
+
+/// What a person decides about a pending proposal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProposalDecision {
+    /// Approve: records the approval only. Nothing is executed (milestone M4 executes later).
+    Approve,
+    /// Reject.
+    Reject,
+}
+
+/// Result of [`decide_proposal`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DecisionOutcome {
+    /// The proposal moved from `pending` to the new status.
+    Decided(Box<ProposalRow>),
+    /// It was no longer pending (someone decided first, or it ran): nothing changed.
+    AlreadyDecided(ProposalStatus),
+    /// It had expired: it is now marked `expired` and nothing else changed.
+    Expired,
+}
+
+/// Records a person's decision on a proposal and appends an audit entry, in one transaction.
+/// Only a `pending`, unexpired proposal can be decided; the status change is one conditional
+/// UPDATE, so two decisions cannot both win.
+///
+/// # Errors
+/// [`Error::NotFound`] when it is missing or belongs to another org; database failure.
+pub fn decide_proposal(
+    conn: &Connection,
+    org: &OrgId,
+    id: &ProposalId,
+    decision: ProposalDecision,
+    user: &UserId,
+) -> Result<DecisionOutcome> {
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+    let current = get_proposal(&tx, org, id)?;
+    if current.status != ProposalStatus::Pending {
+        return Ok(DecisionOutcome::AlreadyDecided(current.status));
+    }
+    let expired: bool = tx.query_row(
+        "SELECT expires_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM proposals \
+         WHERE org_id = ?1 AND id = ?2",
+        params![org.as_str(), id.as_str()],
+        |row| row.get(0),
+    )?;
+    if expired {
+        tx.execute(
+            "UPDATE proposals SET status = 'expired' WHERE org_id = ?1 AND id = ?2 AND status = 'pending'",
+            params![org.as_str(), id.as_str()],
+        )?;
+        tx.commit()?;
+        return Ok(DecisionOutcome::Expired);
+    }
+    let (status, action) = match decision {
+        ProposalDecision::Approve => (ProposalStatus::Approved, "proposal.approve"),
+        ProposalDecision::Reject => (ProposalStatus::Rejected, "proposal.reject"),
+    };
+    tx.execute(
+        "UPDATE proposals SET status = ?3 WHERE org_id = ?1 AND id = ?2 AND status = 'pending'",
+        params![org.as_str(), id.as_str(), status.as_str()],
+    )?;
+    // Only an id, a number and a hex digest: nothing that needs JSON escaping.
+    let subject = format!(
+        r#"{{"proposal":"{}","tier":{},"args_hash":"{}"}}"#,
+        id.as_str(),
+        current.tier,
+        current.args_hash
+    );
+    crate::audit::append_audit_in_tx(
+        &tx,
+        org,
+        &crate::audit::NewAuditEntry {
+            actor_kind: crate::audit::ActorKind::User,
+            actor_id: Some(user.as_str()),
+            action,
+            node_id: None,
+            subject_json: &subject,
+            result: crate::audit::AuditOutcome::Success,
+        },
+    )?;
+    let row = get_proposal(&tx, org, id)?;
+    tx.commit()?;
+    Ok(DecisionOutcome::Decided(Box::new(row)))
+}

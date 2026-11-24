@@ -513,3 +513,53 @@ fn derived_titles_are_cut_blank_text_is_ignored_and_the_second_default_works() -
     );
     Ok(())
 }
+
+#[test]
+fn a_proposal_is_decided_once_audited_and_never_across_orgs() -> TestResult {
+    let conn = open_in_memory()?;
+    let a = populate(&conn, "alpha")?;
+    let b = populate(&conn, "beta")?;
+    let hash = sha256_hex(b"args");
+    let id = create_proposal(&conn, &a.org, &proposal(None, &hash))?;
+
+    // Another org cannot decide it.
+    assert!(is_not_found(&decide_proposal(
+        &conn,
+        &b.org,
+        &id,
+        ProposalDecision::Approve,
+        &b.user
+    )));
+    let done = decide_proposal(&conn, &a.org, &id, ProposalDecision::Approve, &a.user)?;
+    assert!(matches!(&done, DecisionOutcome::Decided(r) if r.status == ProposalStatus::Approved));
+    // The second decision loses and changes nothing.
+    assert_eq!(
+        decide_proposal(&conn, &a.org, &id, ProposalDecision::Reject, &a.user)?,
+        DecisionOutcome::AlreadyDecided(ProposalStatus::Approved)
+    );
+    let audit = list_audit(&conn, &a.org, 10)?;
+    assert_eq!(
+        audit
+            .iter()
+            .filter(|e| e.action == "proposal.approve")
+            .count(),
+        1
+    );
+    assert!(audit.iter().all(|e| e.action != "proposal.reject"));
+
+    // An expired proposal cannot be approved; it becomes expired.
+    let old = create_proposal(&conn, &a.org, &proposal(None, &hash))?;
+    conn.execute(
+        "UPDATE proposals SET expires_at = '2000-01-01T00:00:00.000Z' WHERE id = ?1",
+        params![old.as_str()],
+    )?;
+    assert_eq!(
+        decide_proposal(&conn, &a.org, &old, ProposalDecision::Approve, &a.user)?,
+        DecisionOutcome::Expired
+    );
+    assert_eq!(
+        get_proposal(&conn, &a.org, &old)?.status,
+        ProposalStatus::Expired
+    );
+    Ok(())
+}

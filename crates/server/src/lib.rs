@@ -9,7 +9,7 @@
 //! * Handlers are thin: they call `db`, `agent`, `plan`, `parity`, `vault` and `bootstrap`.
 //!
 //! Intentionally missing: remote access and TLS, accounts and passwords, and anything that
-//! approves or runs a proposal or a plan (milestone M4).
+//! runs a proposal or a plan (milestone M4); a person can approve or reject a proposal, which only records the decision.
 
 mod api;
 mod app;
@@ -116,6 +116,7 @@ fn router(app: &Arc<App>) -> Router {
         .route("/api/memories/{id}/approve", post(api::memory_approve))
         .route("/api/memories/{id}", delete(api::memory_delete))
         .route("/api/proposals", get(api::proposals_list))
+        .route("/api/proposals/{id}/decision", post(api::proposal_decide))
         .route(
             "/api/conversations",
             get(api::conversations_list).post(api::conversations_create),

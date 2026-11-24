@@ -16,6 +16,7 @@
 
 mod advice;
 mod plan;
+mod policy;
 mod runner;
 mod spec;
 pub mod store;
@@ -29,6 +30,7 @@ pub use plan::{
     CommandPlan, CopyOptions, Credentials, EnvValue, MAX_SPEED_BYTES, MAX_TRANSFERS, Operation,
     PlanError, SPEED_LEAF, StdinData, plan,
 };
+pub use policy::{EndpointBlocked, EndpointPolicy, check_host, is_internal_ip};
 pub use runner::{
     ENV_ALLOW_LIST, FakeRunner, ProcessRunner, RecordedCall, RunError, RunOutput, Runner,
 };

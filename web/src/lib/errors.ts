@@ -30,6 +30,8 @@ const MESSAGE_KEYS: Record<string, string> = {
   already_exists: 'ui.error.already_exists',
   default_exists: 'ui.error.default_exists',
   provider_in_use: 'ui.error.provider_in_use',
+  proposal_decided: 'ui.error.proposal_decided',
+  proposal_expired: 'ui.error.proposal_expired',
   no_provider: 'ui.error.no_provider',
   conversation_archived: 'ui.error.conversation_archived',
   conversation_not_found: 'ui.error.not_found',
