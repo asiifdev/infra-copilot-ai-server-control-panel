@@ -3,9 +3,20 @@
 version = 4
 
 [[package]]
+name = "actions"
+version = "0.0.0"
+dependencies = [
+ "core-domain",
+ "db",
+ "serde_json",
+ "transport",
+]
+
+[[package]]
 name = "agent"
 version = "0.0.0"
 dependencies = [
+ "actions",
  "ai",
  "core-domain",
  "db",
@@ -193,6 +204,7 @@ checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
 name = "cli"
 version = "0.0.0"
 dependencies = [
+ "actions",
  "agent",
  "ai",
  "bootstrap",
@@ -971,6 +983,7 @@ dependencies = [
 name = "server"
 version = "0.0.0"
 dependencies = [
+ "actions",
  "agent",
  "ai",
  "axum",

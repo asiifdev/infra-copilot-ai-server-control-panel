@@ -35,7 +35,7 @@ Last updated: 2026-11-24.
 |---|---|---|
 | Collect a Linux inventory, read-only: ports, processes, cron, PM2, systemd, Docker | Uptime checks (HTTP, TCP, TLS expiry) with SSRF protection | The approval workflow for AI proposals |
 | Compare two inventories with **7 parity rules** and read the report in English or Indonesian | Incident engine and Telegram alerts | Remote access with TLS and a real login, multi-user; the desktop app |
-| Exit code 1 when a critical gap is found, so it fits a migration checklist | Database schema (version 9) with tenant isolation and a hash-chained audit log | Git deploys, DNS and Cloudflare Tunnel |
+| Exit code 1 when a critical gap is found, so it fits a migration checklist | Database schema (version 10) with tenant isolation and a hash-chained audit log | Git deploys, DNS and Cloudflare Tunnel |
 | Store inventories and comparisons for a node in a local SQLite database (`--save`), and search them | AI assistant turn loop with 14 tools (tier 0 reads, plus tier 1 tools that only write pending proposals, pending memories and draft plans); `infra ask` runs it; OpenAI-compatible client (never run against a live provider) | Approval and execution of proposals and plans (M4) |
 | Draft a migration plan from stored inventories and read its gates (`infra plan`); the plan is only a draft | Encrypted secret storage (AES-256-GCM) for provider keys and transport credentials | Running rclone, rsync, scp or ssh for real (the whole run path is covered only by test doubles) |
 | Save transport settings, with credentials from stdin only, and preview the commands as a dry run (`infra transport check`) | Organization memory: notes the assistant may propose, active only after a person approves them | An AI model checked against a live provider (Muse, OpenAI, Ollama) |
@@ -219,7 +219,8 @@ crates/net          SSRF-safe async HTTP/TLS client (certificate inspection) for
 crates/monitor      uptime incident engine (thresholds, maintenance, uptime %), pure logic
 crates/notifier     NotificationChannel contract, Telegram send channel, localized alerts
 crates/watch        glue: probes via net, incidents via monitor, Telegram alerts via notifier (library)
-crates/agent        AI tool layer and assistant turn loop: tool contract, strict argument schemas, tier-gated registry, conversations, 14-tool registry, tier 1 tools write only pending proposals, pending memories and draft plans (library; no approval or execution)
+crates/actions      the closed list of actions an approved proposal may run (restart a service), their fixed tiers, and the argv-only executor behind `transport::Runner` (ADR 0037)
+crates/agent        AI tool layer and assistant turn loop: tool contract, strict argument schemas, tier-gated registry, conversations, 15-tool registry, tier 1 tools write only pending proposals, pending memories and draft plans (library; no approval or execution)
 crates/vault        AES-256-GCM sealing of secrets at rest, key rotation (library)
 crates/ai           OpenAI-compatible chat client: tool calls, SSE streaming, retries, circuit breaker (library, not yet run against a live provider)
 crates/plan         migration plan model: strict spec, step ordering and gates, capacity advice, written plan (pure library)
@@ -227,7 +228,7 @@ crates/transport    transport specs, command plans for rclone/rsync/scp/ssh_pipe
 crates/cli          the `infra` command line: collect, compare, init, node, plan, transport, provider, ask, memory, serve (local single-user mode)
 crates/bootstrap    setup helpers shared by the CLI and the server: database location, one local organization, vault from the environment, providers with sealed keys
 crates/server       local web server (axum, tokio, rust-embed): JSON API and the embedded web/dist, loopback only, one-time sign-in token, strict headers; started by `infra serve`
-crates/db           SQLite schema (version 9, migrations 0001-0009), tenant-scoped queries, FTS5 search, hash-chained audit log
+crates/db           SQLite schema (version 10, migrations 0001-0010), tenant-scoped queries, FTS5 search, hash-chained audit log
 web/                the web UI: Svelte 5 + Vite + TypeScript, no SvelteKit; built into web/dist and embedded by crates/server
 brand/              Nodivara logo files (optimized); colours and usage in docs/brand.md
 docs/design.md      technical design: schema, inventory format, agent protocol, approval flow

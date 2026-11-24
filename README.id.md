@@ -35,7 +35,7 @@ Terakhir diperbarui: 2026-11-24.
 |---|---|---|
 | Mengumpulkan inventaris Linux secara hanya-baca: port, proses, cron, PM2, systemd, Docker | Pengecekan uptime (HTTP, TCP, kedaluwarsa TLS) dengan perlindungan SSRF | Alur persetujuan untuk usulan AI |
 | Membandingkan dua inventaris dengan **7 aturan kesetaraan**, laporan dalam bahasa Indonesia atau Inggris | Mesin insiden dan alert Telegram | Akses jarak jauh dengan TLS dan login sungguhan, multi-pengguna; aplikasi desktop |
-| Kode keluar 1 bila ada celah kritis, jadi cocok untuk daftar periksa migrasi | Skema database (versi 9) dengan isolasi tenant dan log audit berantai hash | Deploy dari Git, DNS, dan Cloudflare Tunnel |
+| Kode keluar 1 bila ada celah kritis, jadi cocok untuk daftar periksa migrasi | Skema database (versi 10) dengan isolasi tenant dan log audit berantai hash | Deploy dari Git, DNS, dan Cloudflare Tunnel |
 | Menyimpan inventaris dan hasil perbandingan per node di database SQLite lokal (`--save`), dan mencarinya | Putaran giliran asisten AI dengan 14 alat (tingkat 0 untuk membaca, ditambah alat tingkat 1 yang hanya menulis Usulan pending, memori pending, dan draf rencana); `infra ask` menjalankannya; klien OpenAI-compatible (belum pernah dijalankan ke penyedia nyata) | Persetujuan dan eksekusi Usulan dan rencana (M4) |
 | Menyusun draf rencana migrasi dari inventaris tersimpan dan membaca gerbangnya (`infra plan`); rencananya hanya draf | Penyimpanan rahasia terenkripsi (AES-256-GCM) untuk kunci penyedia dan kredensial transport | Menjalankan rclone, rsync, scp, atau ssh sungguhan (seluruh jalur eksekusi baru diuji dengan pengganti uji) |
 | Menyimpan pengaturan transport, kredensial hanya dari stdin, dan melihat perintahnya sebagai uji coba (`infra transport check`) | Memori organisasi: catatan yang boleh diusulkan asisten, aktif hanya setelah orang menyetujuinya | Model AI diuji ke penyedia nyata (Muse, OpenAI, Ollama) |
@@ -220,7 +220,8 @@ crates/net          klien HTTP/TLS async aman SSRF (pemeriksaan sertifikat) untu
 crates/monitor      mesin insiden uptime (ambang, pemeliharaan, persen uptime), logika murni
 crates/notifier     kontrak NotificationChannel, channel kirim Telegram, alert terlokalisasi
 crates/watch        perekat: probe lewat net, insiden lewat monitor, alert Telegram lewat notifier (pustaka)
-crates/agent        lapisan alat AI dan putaran giliran asisten: kontrak alat, skema argumen ketat, registri berbatas tingkat, percakapan, registri 14 alat, alat tingkat 1 hanya menulis Usulan pending, memori pending, dan draf rencana (pustaka; belum ada persetujuan atau eksekusi)
+crates/actions      daftar tertutup aksi yang boleh dijalankan Usulan yang disetujui (memulai ulang layanan), tingkatnya yang tetap, dan pelaksana argv-saja di belakang `transport::Runner` (ADR 0037)
+crates/agent        lapisan alat AI dan putaran giliran asisten: kontrak alat, skema argumen ketat, registri berbatas tingkat, percakapan, registri 15 alat, alat tingkat 1 hanya menulis Usulan pending, memori pending, dan draf rencana (pustaka; belum ada persetujuan atau eksekusi)
 crates/vault        penyegelan rahasia AES-256-GCM, rotasi kunci (pustaka)
 crates/ai           klien chat OpenAI-compatible: tool call, streaming SSE, retry, pemutus sirkuit (pustaka, belum dijalankan ke penyedia nyata)
 crates/plan         model rencana migrasi: spesifikasi ketat, urutan langkah dan gerbang, saran kapasitas, rencana tertulis (pustaka murni)
@@ -228,7 +229,7 @@ crates/transport    spesifikasi transport, rencana perintah rclone/rsync/scp/ssh
 crates/cli          baris perintah `infra`: collect, compare, init, node, plan, transport, provider, ask, memory, serve (mode lokal satu pengguna)
 crates/bootstrap    pembantu penyiapan yang dipakai CLI dan server: lokasi database, satu organisasi lokal, vault dari lingkungan, penyedia dengan kunci tersegel
 crates/server       server web lokal (axum, tokio, rust-embed): API JSON dan web/dist yang tertanam, hanya loopback, token masuk sekali pakai, header ketat; dijalankan oleh `infra serve`
-crates/db           skema SQLite (versi 9, migrasi 0001-0009), kueri berbatas tenant, pencarian FTS5, log audit berantai hash
+crates/db           skema SQLite (versi 10, migrasi 0001-0010), kueri berbatas tenant, pencarian FTS5, log audit berantai hash
 web/                UI web: Svelte 5 + Vite + TypeScript, tanpa SvelteKit; dibangun ke web/dist dan ditanam oleh crates/server
 brand/              berkas logo Nodivara (sudah dioptimalkan); warna dan pemakaian di docs/brand.md
 docs/design.md      desain teknis: skema, format inventaris, protokol agen, alur persetujuan
