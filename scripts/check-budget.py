@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Compare scripts/measure.sh output with the performance budget (docs/decisions/0005, 0010).
 
-Usage: check-budget.py MEASURE_JSON [BUDGET_JSON]
+Usage: [BUDGET_PROFILE=infra] check-budget.py MEASURE_JSON [BUDGET_JSON]
+BUDGET_PROFILE selects a named block of the budget file (e.g. "infra" for the real binary with the
+embedded web UI, measured with TARGET=infra scripts/measure.sh); unset uses the M0 probe's block.
 Exits 1 when any metric is over budget or missing. Prints a Markdown table, also appended to
 $GITHUB_STEP_SUMMARY when that variable is set. Standard library only.
 """
@@ -45,6 +47,9 @@ def main(argv):
         got = measured(json.load(fh))
     with open(budget_path, encoding="utf-8") as fh:
         raw = json.load(fh)
+    profile = os.environ.get("BUDGET_PROFILE")
+    if profile:
+        raw = raw[profile]
     budget = dict(raw["default"])
     budget.update(raw.get(platform.system(), {}))
 
@@ -60,7 +65,7 @@ def main(argv):
         rows.append(f"| {label} | {fmt(value, unit)} | {fmt(limit, unit)} | {'ok' if ok else 'OVER BUDGET'} |")
 
     table = "\n".join(
-        [f"### Performance budget ({platform.system()} {platform.machine()})", "",
+        [f"### Performance budget {profile or 'probe'} ({platform.system()} {platform.machine()})", "",
          "| Metric | Measured | Budget | Result |", "|---|---|---|---|", *rows]
     )
     print(table)

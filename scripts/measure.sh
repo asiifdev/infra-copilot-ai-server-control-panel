@@ -11,7 +11,14 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNS="${RUNS:-5}"
 SETTLE_SECONDS="${SETTLE_SECONDS:-5}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
-BIN="$ROOT/target/release/proto-server"
+# TARGET=proto (default): the M0 probe (ui/ + proto-server). TARGET=infra: the real `infra`
+# binary with web/dist embedded, started as `infra serve` on a throwaway database.
+TARGET="${TARGET:-proto}"
+case "$TARGET" in
+  proto) UI_DIR="$ROOT/ui"; PKG=proto-server; BIN="$ROOT/target/release/proto-server" ;;
+  infra) UI_DIR="$ROOT/web"; PKG=cli; BIN="$ROOT/target/release/infra" ;;
+  *) echo "TARGET must be proto or infra" >&2; exit 2 ;;
+esac
 WORK="$(mktemp -d)"
 PIDFILE="$WORK/pid"
 
@@ -29,8 +36,8 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 if [[ "$SKIP_BUILD" != "1" ]]; then
-  (cd "$ROOT/ui" && npm ci --no-audit --no-fund >&2 && npm run build >&2)
-  (cd "$ROOT" && cargo build --release -p proto-server >&2)
+  (cd "$UI_DIR" && npm ci --no-audit --no-fund >&2 && npm run build >&2)
+  (cd "$ROOT" && cargo build --release -p "$PKG" >&2)
 fi
 
 [[ -x "$BIN" ]] || { echo "missing $BIN" >&2; exit 1; }
@@ -47,25 +54,38 @@ while IFS= read -r f; do
   gz="$(gz_size "$f")"
   total_raw=$((total_raw + raw))
   total_gz=$((total_gz + gz))
-  rel="${f#"$ROOT/ui/dist/"}"
+  rel="${f#"$UI_DIR/dist/"}"
   bundle_json+="${bundle_json:+,}{\"file\":\"$rel\",\"raw\":$raw,\"gzip\":$gz}"
-done < <(find "$ROOT/ui/dist" -type f | LC_ALL=C sort)
+done < <(find "$UI_DIR/dist" -type f | LC_ALL=C sort)
 
 bin_size="$(file_size "$BIN")"
 
 run_once() {
-  python3 - "$BIN" "$PIDFILE" "$SETTLE_SECONDS" <<'PY'
-import subprocess, sys, time, urllib.request, signal, json
+  python3 - "$BIN" "$PIDFILE" "$SETTLE_SECONDS" "$TARGET" "$WORK" <<'PY'
+import os, re, subprocess, sys, time, urllib.request, signal, json
 
-binary, pidfile, settle = sys.argv[1], sys.argv[2], float(sys.argv[3])
+binary, pidfile, settle, target, work = sys.argv[1], sys.argv[2], float(sys.argv[3]), sys.argv[4], sys.argv[5]
+env = dict(os.environ)
+args = [binary]
+if target == "infra":
+    env["NODIVARA_DB"] = os.path.join(work, "measure.db")
+    if not os.path.exists(env["NODIVARA_DB"]):
+        subprocess.run([binary, "init", "--name", "Measure", "--slug", "measure", "--email", "owner@example.test"],
+                       env=env, check=True, stdout=subprocess.DEVNULL)
+    args = [binary, "serve", "--port", "0"]
 t0 = time.perf_counter()
-proc = subprocess.Popen([binary], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+proc = subprocess.Popen(args, env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
 with open(pidfile, "w") as fh:
     fh.write(str(proc.pid))
 try:
-    line = proc.stdout.readline().strip()
-    addr = line.split(" ", 1)[1]
-    url = f"http://{addr}/"
+    url = None
+    while url is None:
+        line = proc.stdout.readline()
+        if not line:
+            raise SystemExit("server exited before printing its address")
+        m = re.search(r"http://127\.0\.0\.1:\d+", line) or re.search(r"\d+\.\d+\.\d+\.\d+:\d+", line)
+        if m:
+            url = (m.group(0) if m.group(0).startswith("http") else "http://" + m.group(0)) + "/"
     while True:
         try:
             with urllib.request.urlopen(url, timeout=2) as r:
