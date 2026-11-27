@@ -275,6 +275,7 @@ impl Server {
 /// first polled: the caller prints the sign-in address in between, and a signal that arrives
 /// right after that must stop the server cleanly instead of killing the process. Call it inside
 /// the runtime, before announcing that the server is ready.
+#[allow(clippy::manual_async_fn)] // cfg(unix) pre-binding before the async block
 pub fn shutdown_signal() -> impl Future<Output = ()> + Send + 'static {
     #[cfg(unix)]
     let handlers = {
