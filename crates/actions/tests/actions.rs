@@ -493,6 +493,7 @@ fn configure_site_tiers_canonical_json_parse_and_validation() -> TestResult {
 }
 
 #[test]
+#[cfg(unix)]
 fn configure_site_dry_run_backup_execute_and_rollback() -> TestResult {
     let dir = TempDir::new("site-cfg")?;
     let backups = TempDir::new("site-bak")?;
@@ -592,6 +593,7 @@ fn issue_tls_cert_validation_argv_dry_run_backup_execute_and_rollback() -> TestR
 }
 
 #[test]
+#[cfg(unix)]
 fn backup_database_validation_argv_dry_run_backup_execute_and_rollback() -> TestResult {
     // Reject flag-injection and unsafe DB names.
     for bad in ["--all-databases", "-h", "db;drop", "db name", "db.name", ""] {
