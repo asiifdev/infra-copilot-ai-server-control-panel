@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Git commit-msg hook: rejects AI agent attribution or Co-Authored-By trailers
+# (CLAUDE.md: Conventional Commits, no Co-Authored-By or AI agent mentions).
+
+msg_file="${1:-}"
+if [ -z "$msg_file" ] || [ ! -f "$msg_file" ]; then
+    echo "commit-msg: missing commit message file" >&2
+    exit 2
+fi
+
+# Strip git comment lines (# ...) before inspecting.
+clean_msg="$(grep -vE '^[[:space:]]*#' "$msg_file" || true)"
+
+if echo "$clean_msg" | grep -qiE '^[[:space:]]*Co-Authored-By:'; then
+    echo "commit-msg: rejected — 'Co-Authored-By:' is not allowed." >&2
+    exit 1
+fi
+
+if echo "$clean_msg" | grep -qiE '\b(claude|anthropic|codex|openai|hermess?|cursor|antigravity|gemini|windsurf|cline|aider|devin|chatgpt|github[[:space:]]+copilot)\b|noreply@(anthropic|openai)\.com|generated[[:space:]]+(with|by)[[:space:]]+(ai|llm|agent|claude|codex|cursor|antigravity|copilot)'; then
+    echo "commit-msg: rejected — AI agent attribution or name is not allowed in commit messages." >&2
+    exit 1
+fi

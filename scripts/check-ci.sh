@@ -116,21 +116,34 @@ fi
 section "Windows compatibility (heuristics)"
 win_issues=0
 
-# Helper: check whether a line number is inside a #[cfg(unix)] block.
-# Looks backwards for the nearest fn/struct/enum/impl and whether it has cfg(unix).
+# Helper: check whether a line number is inside a #[cfg(unix)] or #[cfg(target_os = "linux")] block.
+# Recognizes file-level #![cfg(...)], mod/fn/struct/enum/impl blocks, and local #[cfg(...)] blocks.
 in_unix_scope() {
     local file="$1" lineno="$2"
     awk -v line="$lineno" '
-        /^[[:space:]]*#\[cfg\(unix\)\]/ { saw_cfg = NR }
-        /^[[:space:]]*#\[cfg\(test\)\]/ { in_test_mod = 1 }
-        /^[[:space:]]*(pub )?(unsafe )?(async )?(fn |struct |enum |impl )/ {
-            if (saw_cfg >= NR-3 && saw_cfg < NR) fn_start = NR
-            else fn_start = 0
+        /^[[:space:]]*#!\[cfg\((unix|target_os = "linux")\)\]/ { file_unix = 1 }
+        /^[[:space:]]*#\[cfg\((unix|target_os = "linux")\)\]/ { saw_cfg = NR }
+        /^[[:space:]]*(pub )?(unsafe )?(async )?(mod |fn |struct |enum |impl |let )/ {
+            if (saw_cfg >= NR-3 && saw_cfg < NR) {
+                block_depth = depth
+                in_unix_block = 1
+            } else if (!in_unix_block) {
+                in_unix_block = 0
+            }
             saw_cfg = 0
         }
-        /^[[:space:]]*#\[cfg\(unix\)\]/ && NR >= line-2 && NR <= line { found_inline = 1 }
+        {
+            # Track brace depth to exit mod/fn/let #[cfg(unix)] scopes accurately
+            n_open = gsub(/\{/, "{", $0)
+            n_close = gsub(/\}/, "}", $0)
+            depth += n_open - n_close
+            if (in_unix_block && depth <= block_depth && n_close > 0) {
+                in_unix_block = 0
+            }
+        }
+        /^[[:space:]]*#\[cfg\((unix|target_os = "linux")\)\]/ && NR >= line-2 && NR <= line { found_inline = 1 }
         NR == line {
-            if (fn_start > 0 || found_inline) print "yes"
+            if (file_unix || in_unix_block || found_inline) print "yes"
             else print "no"
         }
     ' "$file"
@@ -187,8 +200,8 @@ while IFS=: read -r file lineno content; do
     win_issues=$((win_issues + 1))
 done < <(grep -rn '"/dev/' crates/ --include='*.rs' 2>/dev/null || true)
 
-# 8c. Unix-only std APIs without cfg gate
-for pattern in 'std::os::unix' 'nix::' 'libc::' 'signal(SignalKind'; do
+# 8c. Unix-only std APIs & commands without cfg gate
+for pattern in 'std::os::unix' '\bnix::' '\blibc::' 'signal\(SignalKind' 'Command::new\("(kill|mkfifo|chmod|ln)"\)'; do
     while IFS=: read -r file lineno content; do
         echo "$content" | grep -qE '^\s*//' && continue
         scope=$(in_unix_scope "$file" "$lineno")
@@ -197,7 +210,7 @@ for pattern in 'std::os::unix' 'nix::' 'libc::' 'signal(SignalKind'; do
                 "$file" "$lineno" "$pattern"
             win_issues=$((win_issues + 1))
         fi
-    done < <(grep -rn "$pattern" crates/ --include='*.rs' 2>/dev/null || true)
+    done < <(grep -rnE "$pattern" crates/ --include='*.rs' 2>/dev/null || true)
 done
 
 # 8d. Fake secret patterns that gitleaks would flag (high-entropy API key lookalikes)
@@ -214,6 +227,16 @@ if [ "$win_issues" -eq 0 ]; then
     ok "no Windows / cross-platform issues found"
 else
     err "$win_issues cross-platform issue(s) found — fix before pushing"
+fi
+
+# 8e. Cross-compile check for Windows when rustup + x86_64-pc-windows-gnu are installed
+if [ -x "$HOME/.cargo/bin/rustup" ] && "$HOME/.cargo/bin/rustup" target list --installed 2>/dev/null | grep -q '^x86_64-pc-windows-gnu$'; then
+    section "Windows cross-check (x86_64-pc-windows-gnu)"
+    if PATH="$HOME/.cargo/bin:$PATH" cargo check --workspace --all-targets --locked --target x86_64-pc-windows-gnu 2>&1; then
+        ok "cargo check --target x86_64-pc-windows-gnu"
+    else
+        err "Windows cross-check failed"
+    fi
 fi
 
 # ── Summary ────────────────────────────────────────────────────────────────

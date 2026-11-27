@@ -211,6 +211,7 @@ struct Running {
     child: Child,
     port: u16,
     token: String,
+    #[cfg(unix)]
     reader: BufReader<std::process::ChildStdout>,
 }
 
@@ -254,6 +255,7 @@ fn start(scratch: &Scratch) -> Result<Running, Box<dyn std::error::Error>> {
         child,
         port: port.parse()?,
         token: token.to_owned(),
+        #[cfg(unix)]
         reader,
     })
 }
@@ -279,6 +281,7 @@ fn exchange(port: u16, token: &str) -> Result<String, Box<dyn std::error::Error>
     )
 }
 
+#[cfg(unix)]
 fn signal(child: &Child, name: &str) -> TestResult {
     // The pid of the child this test started, and nothing else.
     let status = Command::new("kill")
@@ -289,8 +292,8 @@ fn signal(child: &Child, name: &str) -> TestResult {
 }
 
 #[test]
-fn the_printed_address_works_once_and_the_server_stops_on_sigterm() -> TestResult {
-    let scratch = Scratch::new("term")?;
+fn the_printed_address_works_once() -> TestResult {
+    let scratch = Scratch::new("once")?;
     let mut running = start(&scratch)?;
     assert_eq!(running.token.len(), 64);
     assert!(running.token.bytes().all(|b| b.is_ascii_hexdigit()));
@@ -314,6 +317,16 @@ fn the_printed_address_works_once_and_the_server_stops_on_sigterm() -> TestResul
         second.starts_with("HTTP/1.1 401"),
         "the token must work once: {second}"
     );
+    let _ = running.child.kill();
+    let _ = running.child.wait();
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn the_server_stops_on_sigterm() -> TestResult {
+    let scratch = Scratch::new("term")?;
+    let mut running = start(&scratch)?;
     signal(&running.child, "-TERM")?;
     let status = running.child.wait()?;
     assert!(status.success(), "a clean stop exits 0: {status:?}");
@@ -323,6 +336,7 @@ fn the_printed_address_works_once_and_the_server_stops_on_sigterm() -> TestResul
     Ok(())
 }
 
+#[cfg(unix)]
 #[test]
 fn the_server_stops_cleanly_on_ctrl_c() -> TestResult {
     let scratch = Scratch::new("int")?;
