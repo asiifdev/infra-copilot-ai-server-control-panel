@@ -216,8 +216,8 @@ impl RootFs {
     /// reparse point along the path so nothing can escape `self.base`.
     #[cfg(not(unix))]
     fn resolve_portable(&self, rel: &str) -> Result<PathBuf, FsError> {
-        self.validate()?;
         let names = split_path(rel)?;
+        self.validate()?;
         let mut cur = self.base.clone();
         for name in names {
             cur.push(name);
