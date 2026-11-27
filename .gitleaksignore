@@ -14,3 +14,6 @@ f6cc53b6f9c7ec46fe32f876a105dba73450d315:crates/collectors/src/systemd.rs:generi
 # Historical false positives: fake credentials in the transport wizard tests (commit fe5f98e): a fake OAuth token JSON fixture (line 14) and fake secret values the test proves are never shown in advice text (line 345). None is a real credential.
 fe5f98e923e9d714318a56129789da187daa468b:crates/transport/tests/wizard.rs:generic-api-key:14
 fe5f98e923e9d714318a56129789da187daa468b:crates/transport/tests/wizard.rs:generic-api-key:345
+
+# Historical false positive: a fake API_KEY in the journalctl redaction test (commit e919f1a). The value is test fixture data the test proves is hidden.
+e919f1a26378fd2e90be4c3abc04c09b39e4d417:crates/actions/src/logs.rs:generic-api-key:169
