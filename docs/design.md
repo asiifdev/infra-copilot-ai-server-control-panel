@@ -129,17 +129,17 @@ licenses(id, org_id, key_id, tier, limits jsonb, valid_from, valid_to, instance_
 usage_counters(id, org_id, metric, period, value)    -- nodes, ai_messages, migrations
 ```
 
-### 3.7a Status implementasi skema (2026-11-27, skema versi 14)
+### 3.7a Status implementasi skema (2026-11-28, skema versi 15)
 
 Kode menyimpang dari draf di atas pada hal berikut; kode yang benar, draf disesuaikan di sini.
 
-- **Sudah ada** (migrasi 0001-0014): identitas, node, audit, inventaris/item/perbandingan/temuan (0004), `secrets` dan `ai_providers` (0005), `conversations`, `messages`, `tool_calls`, `proposals` (0006), `transports` (0007), `migration_plans` dan `migration_steps` (0008), `memories`, `search_docs` dan tabel virtual FTS5 `search_fts` (0009).
+- **Sudah ada** (migrasi 0001-0015): identitas, node, audit, inventaris/item/perbandingan/temuan (0004), `secrets` dan `ai_providers` (0005), `conversations`, `messages`, `tool_calls`, `proposals` (0006), `transports` (0007), `migration_plans` dan `migration_steps` (0008), `memories`, `search_docs` dan tabel virtual FTS5 `search_fts` (0009).
 - **Sudah ada (0010, M4):** `executions` (satu baris per Usulan, `UNIQUE (org_id, proposal_id)`) dan kolom `proposals.action_json` + `node_id` (tak berubah sesudah dibuat; pemicu). Keputusan: 0037.
 - **Sudah ada (0011, M4):** `approvals` (`UNIQUE (org_id, proposal_id, user_id)`, `typed_confirmation`), kolom `proposals.dry_run_json` + `dry_run_at`, `execution_backups` (`sha256`, `UNIQUE (org_id, execution_id)`), dan `execution_rollbacks` (`UNIQUE (org_id, execution_id)`, maksimal 1 rollback per eksekusi). Keputusan: 0038.
 - **Sudah ada (0012, M1-b):** `monitor_targets`, `incidents`, `notification_channels` (token tersegel di `secrets` via `secret_id`), `alert_rules` (`quiet_start`/`quiet_end`), `pending_alerts`, dan `telegram_links` (`link_code_hash`, `language`, `status`). Keputusan: 0040.
 - **Sudah ada (0013, M1):** perluasan batas `CHECK` pada `inventory_items.kind` dan `findings.subject_kind` untuk `vhost`, `cert`, `database`, `dns`, dan `check` sambil mempertahankan pemicu pencarian FTS5. Keputusan: 0042.
 - **Sudah ada (0014, M4/M5):** `agent_tokens` (`token_hash` SHA-256 per `(org_id, node_id)`), `agent_jobs` (antrean pekerjaan agen *pull-only* terikat `execution_id`, `proposal_id`, `args_hash`), dan `local_sites` (registri situs lokal `.test` dengan `domain`, `upstream_port`, `config_path`, `status`). Keputusan: 0043.
-- **Belum ada:** `ai_provider_models`, `licenses`, `usage_counters`.
+- **Sudah ada (0015, Tata Kelola, DNS & M5):** `organizations.require_two_approvers`, `ai_provider_models`, `licenses`, `usage_counters`, `local_sites.php_version` dan `local_sites.tls_enabled`, serta `dns_snapshots`. Keputusan: 0045.
 - `conversations`: tanpa kolom `scope`; ada `turn_token` dan `turn_claimed_at` (klaim satu giliran berjalan per percakapan). `messages`: kunci utama `(org_id, conversation_id, seq)` dan kolom `tool_calls` (JSON) pada pesan asisten; tanpa `id`. `tool_calls`: kolom `message_seq`, `idx`, `call_id`, `duration_ms`, `redactions`, `truncated`, argumen dibatasi 4000 karakter; tanpa `proposal_id`/`result`.
 - `proposals`: kolom `title`, `rationale`, `suggested_action`, `impact`, `rule_id`, `subject_key`, `args_hash`, `expires_at`; tanpa `plan_step_id`, `target_node_id`, `dry_run`, `created_by`; status `cancelled` belum ada.
 - `migration_steps`: kunci utama `(org_id, plan_id, seq)`, tanpa `id`, `started_at`, `finished_at`, `result`; `depends_on` wajib array JSON. Dua pemicu database menjaga `decommission_source` (harus mulai `pending`; tidak boleh maju sebelum semua langkah lain `succeeded`, kecuali `delta` yang `skipped`). `migration_plans` tanpa `created_by`; sumber dan target harus berbeda.

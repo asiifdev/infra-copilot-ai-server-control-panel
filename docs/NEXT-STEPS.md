@@ -1,14 +1,14 @@
 # Langkah berikutnya: serah terima ke sesi implementasi
 
-Terakhir diperbarui: 2026-11-28 (setelah Sprint 6 & Sprint 7, keputusan 0041–0044; skema kini versi 14; 914 tes Rust lulus dan 1 diabaikan (uji hidup penyedia AI) lewat `cargo test --workspace`, ditambah 296 tes di `web/` lewat `npm test`). Dokumen kerja internal (Indonesia).
+Terakhir diperbarui: 2026-11-28 (setelah Sprint 8, keputusan 0041–0045; skema kini versi 15; 296 tes di `web/` lulus lewat `npm test`). Dokumen kerja internal (Indonesia).
 
 ## Yang sudah ada
 
 - Repo publik dengan CI hijau (fmt, clippy, tes di Linux, macOS, dan Windows + dependensi Linux GTK/WebKit di `ubuntu-latest`, `cargo deny`, `cargo audit`, gitleaks, pemeriksaan dokumen, job `web`: periksa tipe, tes, build, ukuran bundel, biner dengan UI tertanam, uji asap, serta alur rilis `.github/workflows/release.yml`) dan perlindungan cabang `main`.
 - Crate `core-domain` (tingkat risiko dan penyaring rahasia), 25 tes, tanpa dependensi luar.
-- Crate `i18n` (katalog en/id), `db` (skema SQLite, kini versi 14 / migrasi 0001-0014, isolasi tenant, audit berantai-hash), dan (dipensiunkan di 0036) prototipe pengukuran dengan `scripts/measure.sh` (langkah 1-5 M0 selesai; keputusan 0007-0013 diterima; angka anggaran Linux menunggu kalibrasi).
-- Server lokal, UI web, dan cangkang desktop tipis: crate `server` dan `bootstrap`, `infra serve`, `web/` (lihat langkah 6c), serta `src-tauri/` (`nodivara-desktop`, lihat langkah 6j / 0044).
-- Dokumen: `docs/design.md`, `docs/plan.md`, `docs/decisions/0000-0044`, `docs/market-research.md`, `docs/RELEASE-CHECKLIST.md`.
+- Crate `i18n` (katalog en/id), `db` (skema SQLite, kini versi 15 / migrasi 0001-0015, isolasi tenant, audit berantai-hash), dan (dipensiunkan di 0036) prototipe pengukuran dengan `scripts/measure.sh` (langkah 1-5 M0 selesai; keputusan 0007-0013 diterima; angka anggaran Linux menunggu kalibrasi).
+- Server lokal, UI web, agen mandiri, dan cangkang desktop tipis: crate `server`, `bootstrap`, `dns`, `nodivara-agent`, `infra serve`, `web/` (lihat langkah 6c & 6k), serta `src-tauri/` (`nodivara-desktop`, lihat langkah 6j / 0044).
+- Dokumen: `docs/design.md`, `docs/plan.md`, `docs/decisions/0000-0045`, `docs/market-research.md`, `docs/RELEASE-CHECKLIST.md`.
 - Konfigurasi pengembangan AI: `CLAUDE.md`, skill (parity-rules, ai-tool-tiers, migration-planning, security-review, repo-hygiene, rust-conventions, tauri-v2-*, svelte), hook `tauri-guard`, plugin Svelte (MCP dikunci 0.1.31).
 
 ## Memulai sesi implementasi
@@ -46,11 +46,15 @@ Terakhir diperbarui: 2026-11-28 (setelah Sprint 6 & Sprint 7, keputusan 0041–0
    - **`src-tauri/` (`nodivara-desktop`)**: anggota workspace Cargo root yang mewarisi `[workspace.lints]` (`unsafe_code = "forbid"`, `unwrap_used = "deny"`, `expect_used = "deny"`, `print_stdout = "deny"`, `print_stderr = "deny"`), 3 unit test lulus.
    - **Server loopback tertanam & pengamanan webview**: menjalankan `crates/server` secara *in-process* pada `127.0.0.1:0` dan mengarahkan jendela `main` ke URL sekali pakai `http://127.0.0.1:<port>/#t=<token>`; `src-tauri/build.rs` membatasi command melalui `AppManifest::new().commands(&["app_info"])`; `tauri.conf.json` menyetel `withGlobalTauri: false`, `freezePrototype: true`, dan CSP ketat; `src-tauri/capabilities/main.json` (`main-capability`) terikat ke `"windows": ["main"]` hanya dengan `core:window:allow-set-title` (tanpa `core:default`, tanpa plugin `shell`/`fs`).
    - **CI Linux**: `.github/workflows/ci.yml` memasang `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`, dan `librsvg2-dev` saat `runner.os == 'Linux'`.
-6k. **Sisa pekerjaan berikutnya**:
-   - Biner agen mandiri untuk dipasang di server jarak jauh dan mode 2 penyetuju di Cloud.
-   - *Lazy-loading* / *code-splitting* UI untuk memperlebar margin anggaran kinerja (`ui_js_raw_bytes` kini di `179,794 / 180,000 B`, `ui_gzip_bytes` `~61,547 / 64,000 B`).
+6k. **Sprint 8 — Agen mandiri, tata kelola 2 penyetuju, adapter DNS, dan aksi M5 (0045, migrasi `0015_governance_and_m5.sql`), selesai 2026-11-28**:
+   - **Antarmuka *entitlements* (`crates/core/src/entitlements.rs`)**: `EntitlementProvider`, `LimitsService`, `EntitlementLimits`, `UsageMetric`, dan `LocalCommunityEntitlements` di repo publik; harga/penagihan tetap di repo privat.
+   - **Agen keluar-saja mandiri (`crates/nodivara-agent`)**: biner agen yang melakukan *poll* ke `POST /api/agents/poll`, memverifikasi `args_hash`, mengeksekusi aksi daftar tertutup melalui `LocalExecutor` + `ProcessRunner`, meredaksi dan membatasi keluaran, lalu melapor ke `POST /api/agents/result`.
+   - **Adapter DNS (`crates/dns`)**: trait `DnsProvider` dan `CloudflareDnsProvider` (zona, rekaman, pemeriksaan kepemilikan, *snapshot* & *rollback diff*).
+   - **Aksi M5 (`crates/actions`)**: `ConfigureSite`, `IssueTlsCert`, dan `BackupDatabase` dengan `dry_run`, `backup`, dan `rollback` pada `LocalExecutor` dan `SshExecutor`.
+   - **Migrasi 0015 & penegakan server (`crates/db`, `crates/server`, `web/`)**: `organizations.require_two_approvers`, `ai_provider_models`, `licenses`, `usage_counters`, `local_sites.php_version`/`tls_enabled`, `dns_snapshots`, penegakan 2 penyetuju Tier 4 di `db::decide_proposal_with_details` & `server::verify_tier_approval`, `GET /api/entitlements`, serta pembaruan UI (progres 2 penyetuju, cuplikan perintah `nodivara-agent`, opsi PHP/TLS, dan konsolidasi *stylesheet* menjaga bundel JS mentah di `177,590 / 180,000 B` dan gzip `~61.2 KB / 64,000 B`; 296 tes web lulus).
+6l. **Sisa pekerjaan berikutnya**:
    - Penandatanganan kode (*code signing*) & installer desktop Tauri v2 (`.dmg`, `.msi`, `.deb`).
-   - Pengelolaan penuh M5 (situs produksi, SSL ACME, multi-versi PHP-FPM, manajemen database penuh), M6 (Cloud/lisensi/billing), dan M7 (rilis terbuka).
+   - Orkestrasi penuh panel produksi M5 & ACME, layanan Cloud/lisensi/billing di repo privat (M6), uji hidup ke penyedia AI nyata, dan M7 (rilis terbuka).
 7. Cangkang Tauri tipis sudah terpasang di `src-tauri/` (ADR 0044); yang tersisa untuk distribusi desktop adalah bundling installer dan *code signing*.
 
 ## Keputusan yang masih menunggu pemilik

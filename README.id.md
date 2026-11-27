@@ -35,11 +35,11 @@ Terakhir diperbarui: 2026-11-28.
 | Berjalan sekarang (dari kode sumber) | Sudah berupa pustaka, belum terhubung penuh atau masih terbatas | Direncanakan |
 |---|---|---|
 | Mengumpulkan inventaris Linux/macOS secara hanya-baca: port, proses, cron, PM2, systemd, Docker, `vhost`, `cert`, `db`, `launchd` | Penegakan DNS + `is_internal_ip` untuk infrastruktur bersama sudah ada di `transport::ProcessRunner`, menunggu pelaksana Cloud/jarak jauh | Akses jarak jauh dengan TLS, login sungguhan multi-pengguna, dan aturan dua penyetuju di Cloud |
-| Membandingkan dua inventaris dengan **11 aturan kesetaraan** (`PAR-001`..`PAR-011`), laporan dalam bahasa Indonesia atau Inggris | Klien AI OpenAI-compatible (belum pernah dijalankan ke penyedia nyata; diuji dengan tiruan lokal) | Pemasangan biner agen mandiri di server jarak jauh |
-| Kode keluar 1 bila ada celah kritis, jadi cocok untuk daftar periksa migrasi | Skema database (versi 14) dengan isolasi tenant, antrean agen *pull-only* (`agent_tokens`/`agent_jobs`), dan log audit berantai hash | Deploy dari Git, DNS, dan Cloudflare Tunnel |
+| Membandingkan dua inventaris dengan **11 aturan kesetaraan** (`PAR-001`..`PAR-011`), laporan dalam bahasa Indonesia atau Inggris | Klien AI OpenAI-compatible (belum pernah dijalankan ke penyedia nyata; diuji dengan tiruan lokal) | Cloud terkelola & penagihan komersial (repo privat) |
+| Kode keluar 1 bila ada celah kritis, jadi cocok untuk daftar periksa migrasi | Skema database (versi 15) dengan isolasi tenant, antrean agen *pull-only* (`agent_tokens`/`agent_jobs`), tata kelola (`require_two_approvers`, `licenses`, `usage_counters`), `dns_snapshots`, dan log audit berantai hash | Deploy dari Git dan otomasi Cloudflare Tunnel |
 | Menyimpan inventaris dan hasil perbandingan per node di database SQLite lokal (`--save`), dan mencarinya | Cangkang desktop Tauri v2 tipis (`src-tauri/`, server `127.0.0.1:0` tertanam; installer pra-alfa tanpa penandatanganan kode) | Installer desktop bertanda tangan (`.dmg`, `.msi`, `.deb`) |
-| Menyusun draf, menyetujui, dan menjalankan rencana migrasi dengan pemeriksaan gerbang (`infra plan`) serta mengelola transport dengan pembaruan kredensial *write-only* (`infra transport`) | | Model AI diuji ke penyedia nyata (Muse, OpenAI, Ollama) |
-| Menyetujui Usulan, menjalankan aksi lokal/SSH/antrean agen (tingkat 2–4 dengan `--enable-execution`, *dry-run*, cadangan `sha256`, konfirmasi ketik, *rollback*), melihat log layanan, mengelola situs lokal `.test`, serta menjalankan monitor uptime + alert jam tenang + bot Telegram (tingkat 0–2) | | Fitur panel server produksi M5 penuh: SSL ACME, multi-versi PHP, manajemen database penuh |
+| Menyusun draf, menyetujui, dan menjalankan rencana migrasi dengan pemeriksaan gerbang (`infra plan`) serta mengelola transport dengan pembaruan kredensial *write-only* (`infra transport`) | `DnsProvider` & `CloudflareDnsProvider` (`crates/dns`) dengan pengelolaan zona/rekaman, pemeriksaan kepemilikan, dan *snapshot*/*rollback diff* | Model AI diuji ke penyedia nyata (Muse, OpenAI, Ollama) |
+| Menyetujui Usulan (dengan penegakan 2 penyetuju Tier 4), menjalankan aksi lokal/SSH/agen mandiri `nodivara-agent` (tingkat 2–4 dengan `--enable-execution`, *dry-run*, cadangan `sha256`, konfirmasi ketik, *rollback*), melihat log layanan, mengelola situs (`.test` + aksi M5 PHP/TLS), serta menjalankan monitor uptime + alert jam tenang + bot Telegram (tingkat 0–2) | | Orkestrasi penuh panel server produksi M5 & ACME |
 
 ### Coba sendiri
 
@@ -68,7 +68,7 @@ target/debug/infra serve             # opsional: --port N, --db PATH, --org SLUG
 ./scripts/smoke-serve.sh             # uji asap biner nyata (yang dijalankan CI)
 ```
 
-Alamat yang dicetak memasukkan Anda satu kali: token berlaku 10 menit, hanya bisa dipakai sekali, dan berada di fragmen URL sehingga tidak pernah terkirim ke server atau situs lain. Server hanya mengikat `127.0.0.1` dan menolak alamat lain. Belum ada TLS dan kata sandi: sesi berakhir setelah 8 jam tanpa aktivitas, saat keluar, atau saat server dimulai ulang, lalu Anda menjalankan `infra serve` lagi. Halamannya: Ringkasan, Node (dengan inventaris, log layanan, dan rotasi token agen *pull-only*), Temuan, Monitor, Usulan, Asisten, Rencana (teks draf, langkah, gerbang, setujui/jalankan), Transport, Memori, dan Pengaturan (formulir penyedia dengan tombol "Uji koneksi", situs lokal `.test`, saluran notifikasi, jam tenang, bahasa, tema). Kunci penyedia hanya diterima dan disegel di vault; tidak ada respons yang memuat rahasia. Sudah diperiksa di Chromium (terang dan gelap, lebar 375 px, keyboard); **belum** diperiksa di mode kontras tinggi Windows yang asli atau dengan pembaca layar sungguhan. CI memeriksa biner `infra` nyata dengan UI tertanam terhadap `docs/perf-budget.json` (`ui_js_raw_bytes` ~179.794 / 180.000 B, `ui_gzip_bytes` ~61.547 / 64.000 B).
+Alamat yang dicetak memasukkan Anda satu kali: token berlaku 10 menit, hanya bisa dipakai sekali, dan berada di fragmen URL sehingga tidak pernah terkirim ke server atau situs lain. Server hanya mengikat `127.0.0.1` dan menolak alamat lain. Belum ada TLS dan kata sandi: sesi berakhir setelah 8 jam tanpa aktivitas, saat keluar, atau saat server dimulai ulang, lalu Anda menjalankan `infra serve` lagi. Halamannya: Ringkasan, Node (dengan inventaris, log layanan, dan rotasi token agen *pull-only*), Temuan, Monitor, Usulan, Asisten, Rencana (teks draf, langkah, gerbang, setujui/jalankan), Transport, Memori, dan Pengaturan (formulir penyedia dengan tombol "Uji koneksi", situs lokal `.test`, saluran notifikasi, jam tenang, bahasa, tema). Kunci penyedia hanya diterima dan disegel di vault; tidak ada respons yang memuat rahasia. Sudah diperiksa di Chromium (terang dan gelap, lebar 375 px, keyboard); **belum** diperiksa di mode kontras tinggi Windows yang asli atau dengan pembaca layar sungguhan. CI memeriksa biner `infra` nyata dengan UI tertanam terhadap `docs/perf-budget.json` (`ui_js_raw_bytes` 177.590 / 180.000 B, `ui_gzip_bytes` ~61,2 KB / 64.000 B).
 
 Kode keluar `infra`: 0 berhasil, 1 ada temuan kritis atau cutover terblokir, 2 galat penggunaan, konfigurasi, atau I/O, 3 asisten atau penyedia gagal.
 
@@ -212,7 +212,7 @@ Selengkapnya di [FAQ](docs/faq.id.md).
 <summary><b>Struktur repositori</b></summary>
 
 ```
-crates/core         tipe domain bersama: tingkat risiko, penyaring rahasia (tanpa dependensi luar)
+crates/core         tipe domain bersama: tingkat risiko, penyaring rahasia, antarmuka EntitlementProvider/LimitsService & LocalCommunityEntitlements (tanpa dependensi luar)
 crates/i18n         katalog pesan en/id dengan kunci stabil dan fallback
 crates/inventory    model inventaris dan kontrak Collector / ParityRule
 crates/collectors   kolektor Linux/macOS hanya-baca (port mendengar, proses, cron, PM2, systemd, Docker, vhost, cert, db, launchd)
@@ -221,7 +221,9 @@ crates/net          klien HTTP/TLS async aman SSRF (pemeriksaan sertifikat) untu
 crates/monitor      mesin insiden uptime (ambang, pemeliharaan, persen uptime), logika murni
 crates/notifier     kontrak NotificationChannel, channel kirim Telegram, alert terlokalisasi
 crates/watch        perekat: probe lewat net, insiden lewat monitor, alert Telegram lewat notifier (pustaka)
-crates/actions      daftar tertutup aksi, tingkat tetap, pelaksana lokal & `SshExecutor` argv-saja di belakang `transport::Runner`, kontrak log layanan & situs `.test` (ADR 0037, 0043)
+crates/dns          trait DnsProvider dan adapter CloudflareDnsProvider (zona, rekaman, pemeriksaan kepemilikan, snapshot & rollback diff; ADR 0045)
+crates/actions      daftar tertutup aksi (termasuk aksi M5 ConfigureSite, IssueTlsCert, BackupDatabase), tingkat tetap, pelaksana lokal & `SshExecutor` argv-saja di belakang `transport::Runner`, kontrak log layanan & situs `.test` (ADR 0037, 0043, 0045)
+crates/nodivara-agent  biner agen keluar-saja mandiri: melakukan poll `/api/agents/poll`, memverifikasi `args_hash`, mengeksekusi aksi daftar tertutup via `LocalExecutor` + `ProcessRunner`, mengirim keluaran ter-redaksi ke `/api/agents/result` (ADR 0045)
 crates/agent        lapisan alat AI dan putaran giliran asisten: kontrak alat, skema argumen ketat, registri berbatas tingkat, percakapan, registri 15 alat, alat tingkat 1 hanya menulis Usulan pending, memori pending, dan draf rencana (pustaka; belum ada persetujuan atau eksekusi)
 crates/vault        penyegelan rahasia AES-256-GCM, rotasi kunci (pustaka)
 crates/ai           klien chat OpenAI-compatible: tool call, streaming SSE, retry, pemutus sirkuit (pustaka, belum dijalankan ke penyedia nyata)
@@ -229,8 +231,8 @@ crates/plan         model rencana migrasi: spesifikasi ketat, urutan langkah dan
 crates/transport    spesifikasi transport, rencana perintah rclone/rsync/scp/ssh_pipe, pelaksana, wizard (pustaka; tidak ada yang dieksekusi ke host nyata)
 crates/cli          baris perintah `infra`: collect, compare, init, node, plan, transport, provider, ask, memory, serve (mode lokal satu pengguna)
 crates/bootstrap    pembantu penyiapan yang dipakai CLI dan server: lokasi database, satu organisasi lokal, vault dari lingkungan, penyedia dengan kunci tersegel
-crates/server       server web lokal (axum, tokio, rust-embed): API JSON, web/dist tertanam, endpoint agen pull-only, log layanan, situs `.test`, hanya loopback, token masuk sekali pakai, header ketat; dijalankan oleh `infra serve`
-crates/db           skema SQLite (versi 14, migrasi 0001-0014), kueri berbatas tenant, pencarian FTS5, antrean agen pull-only, log audit berantai hash
+crates/server       server web lokal (axum, tokio, rust-embed): API JSON, web/dist tertanam, endpoint agen pull-only, log layanan, situs `.test`, `GET /api/entitlements`, verifikasi 2 penyetuju Tier 4, hanya loopback, token masuk sekali pakai, header ketat; dijalankan oleh `infra serve`
+crates/db           skema SQLite (versi 15, migrasi 0001-0015), kueri berbatas tenant, pencarian FTS5, antrean agen pull-only, tabel tata kelola/entitlements, log audit berantai hash
 src-tauri/          cangkang desktop Tauri v2 tipis (`nodivara-desktop`): menanamkan `crates/server` pada `127.0.0.1:0`, `AppManifest::commands`, `capabilities/main.json` terikat ke `main` (ADR 0044)
 web/                UI web: Svelte 5 + Vite + TypeScript, tanpa SvelteKit; dibangun ke web/dist dan ditanam oleh crates/server
 brand/              berkas logo Nodivara (sudah dioptimalkan); warna dan pemakaian di docs/brand.md
