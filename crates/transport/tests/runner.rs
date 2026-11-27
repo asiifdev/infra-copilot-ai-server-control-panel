@@ -1,6 +1,8 @@
 //! ProcessRunner, exercised only with harmless local programs. No test here may point it at
 //! rclone, rsync, scp, ssh or the network.
 
+#![cfg(unix)]
+
 use std::time::Duration;
 use transport::{CommandPlan, EnvValue, ProcessRunner, RunError, Runner, Secret, StdinData};
 
