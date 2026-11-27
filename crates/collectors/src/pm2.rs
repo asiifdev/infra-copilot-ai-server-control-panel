@@ -358,6 +358,7 @@ mod tests {
             fs::write(path, bytes)
         }
 
+        #[cfg(unix)]
         fn path(&self, rel: &str) -> std::path::PathBuf {
             self.0.join(rel)
         }
