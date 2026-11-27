@@ -1,16 +1,21 @@
 <script lang="ts">
   import { api } from '../lib/api';
+  import { toastError } from '../lib/errors';
+  import { dialogFocus, dialogKey } from '../lib/focus';
   import { formatBytes, formatDateTime } from '../lib/format';
   import { i18n, t } from '../lib/i18n.svelte';
   import { useResource } from '../lib/resource.svelte';
   import { inlineText } from '../lib/text';
+  import { toasts } from '../lib/toast.svelte';
   import { readCheck } from '../lib/transport';
   import type { TransportSummary } from '../lib/types';
   import AsyncView from '../components/AsyncView.svelte';
+  import Button from '../components/Button.svelte';
   import DataTable, { type Column } from '../components/DataTable.svelte';
   import EmptyState from '../components/EmptyState.svelte';
-  import StatusBadge from '../components/StatusBadge.svelte';
   import PageHeader from '../components/PageHeader.svelte';
+  import StatusBadge from '../components/StatusBadge.svelte';
+  import TextField from '../components/TextField.svelte';
 
   const transports = useResource((signal) => api.transports(signal));
 
@@ -19,7 +24,66 @@
     { id: 'kind', header: t('ui.transports.kind'), sortValue: (x) => x.kind },
     { id: 'verified', header: t('ui.transports.verified'), sortValue: (x) => x.verified_at ?? '' },
     { id: 'check', header: t('ui.transports.check'), sortValue: (x) => checkRank(x) },
+    { id: 'actions', header: t('ui.transports.update_credentials') },
   ]);
+
+  let editing = $state.raw<TransportSummary | null>(null);
+  let credsJson = $state('');
+  let credsError = $state<string | undefined>(undefined);
+  let saving = $state(false);
+
+  const manageFocus = dialogFocus();
+
+  function openCredentials(item: TransportSummary) {
+    editing = item;
+    credsJson = '';
+    credsError = undefined;
+  }
+
+  function closeCredentials() {
+    editing = null;
+    credsJson = '';
+    credsError = undefined;
+  }
+
+  function parseCredentials(raw: string): Record<string, string> | null {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+      const out: Record<string, string> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v !== 'string' || k.trim() === '') return null;
+        out[k] = v;
+      }
+      return Object.keys(out).length > 0 ? out : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function submitCredentials(event: SubmitEvent) {
+    event.preventDefault();
+    if (!editing || saving) return;
+    const parsed = parseCredentials(credsJson);
+    if (!parsed) {
+      credsError = t('ui.error.invalid_input');
+      return;
+    }
+    const target = editing;
+    credsJson = '';
+    credsError = undefined;
+    saving = true;
+    try {
+      await api.updateTransportCredentials(target.id, parsed);
+      toasts.push('success', t('ui.transports.credentials_updated_toast'));
+      editing = null;
+      transports.reload();
+    } catch (cause) {
+      toastError(cause);
+    } finally {
+      saving = false;
+    }
+  }
 
   // Never checked sorts first, then failed, then passed.
   function checkRank(item: TransportSummary): number {
@@ -76,8 +140,10 @@
               {inlineText(item.kind, 60)}
             {:else if column.id === 'verified'}
               {when(item.verified_at)}
-            {:else}
+            {:else if column.id === 'check'}
               {@render check(item)}
+            {:else}
+              <Button variant="secondary" onclick={() => openCredentials(item)}>{t('ui.transports.update_credentials')}</Button>
             {/if}
           {/snippet}
         </DataTable>
@@ -87,9 +153,69 @@
   </AsyncView>
 </div>
 
+{#if editing}
+  <div class="backdrop" role="presentation">
+    <div
+      {@attach manageFocus}
+      class="dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="creds-title"
+      tabindex="-1"
+      onkeydown={(e) => dialogKey(e, closeCredentials)}
+    >
+      <h2 id="creds-title">{t('ui.transports.update_credentials')}</h2>
+      <p class="muted">{inlineText(editing.name, 80)}</p>
+      <form class="form" onsubmit={submitCredentials}>
+        <TextField
+          id="transport-credentials-json"
+          multiline
+          label={t('ui.transports.credentials_json_label')}
+          bind:value={credsJson}
+          error={credsError}
+          disabled={saving}
+        />
+        <div class="row actions">
+          <Button onclick={closeCredentials} disabled={saving}>{t('ui.common.cancel')}</Button>
+          <Button type="submit" variant="primary" busy={saving}>{t('ui.transports.update_credentials')}</Button>
+        </div>
+      </form>
+    </div>
+  </div>
+{/if}
+
 <style>
   .detail {
     display: block;
     font-size: var(--nv-text-sm);
+  }
+  .backdrop {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: var(--nv-space-4);
+    background: var(--nv-scrim);
+    backdrop-filter: blur(6px);
+    z-index: 50;
+  }
+  .dialog,
+  .form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--nv-space-3);
+  }
+  .dialog {
+    max-width: 30rem;
+    width: 100%;
+    padding: var(--nv-space-5);
+    background: var(--nv-surface);
+    border: var(--nv-border-width) solid var(--nv-border-strong);
+    border-radius: var(--nv-radius-lg);
+    box-shadow: var(--nv-shadow-2);
+  }
+  .actions {
+    justify-content: flex-end;
+    margin-block-start: var(--nv-space-2);
   }
 </style>

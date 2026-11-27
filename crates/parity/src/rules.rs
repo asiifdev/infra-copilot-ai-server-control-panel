@@ -548,3 +548,299 @@ impl ParityRule for Par009 {
             .collect()
     }
 }
+
+fn is_queue_env(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    upper.contains("REDIS")
+        || upper.contains("QUEUE")
+        || upper.contains("BROKER")
+        || upper.contains("AMQP")
+        || upper.contains("RABBIT")
+}
+
+/// PAR-003: queue producers and consumers point to different Redis/queue backends.
+///
+/// Origin of the case: the web app pushed jobs to a new Redis instance while the background worker
+/// still polled the old one, so jobs piled up silently without errors.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Par003;
+
+impl ParityRule for Par003 {
+    fn id(&self) -> &'static str {
+        "PAR-003"
+    }
+
+    fn version(&self) -> u32 {
+        1
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Critical
+    }
+
+    fn category(&self) -> &'static str {
+        "config"
+    }
+
+    fn fix_tier(&self) -> Option<Tier> {
+        Some(Tier::RiskyChange)
+    }
+
+    fn evaluate(
+        &self,
+        _source: &Inventory,
+        target: &Inventory,
+        _ctx: &RuleContext,
+    ) -> Vec<Finding> {
+        let queue_refs: Vec<&Item> = target
+            .items_of(Kind::EnvRef)
+            .filter(|item| item.str_field("name").is_some_and(is_queue_env))
+            .collect();
+        if queue_refs.len() < 2 {
+            return Vec::new();
+        }
+        let mut endpoints: BTreeMap<String, Vec<&Item>> = BTreeMap::new();
+        for item in &queue_refs {
+            let host = item.str_field("target_host").unwrap_or(UNKNOWN_ARG);
+            let port = item
+                .u64_field("target_port")
+                .map_or_else(|| "default".to_owned(), |p| p.to_string());
+            endpoints
+                .entry(format!("{host}:{port}"))
+                .or_default()
+                .push(item);
+        }
+        if endpoints.len() <= 1 {
+            return Vec::new();
+        }
+        let summary = endpoints.keys().cloned().collect::<Vec<_>>().join(", ");
+        let first = queue_refs[0];
+        let evidence = queue_refs.iter().map(|i| subject(i)).collect();
+        let finding = Finding {
+            rule_id: self.id().to_owned(),
+            severity: self.severity(),
+            subject: subject(first),
+            evidence,
+            args: BTreeMap::from([
+                (
+                    "app".to_owned(),
+                    first.str_field("app").unwrap_or(UNKNOWN_ARG).to_owned(),
+                ),
+                ("endpoints".to_owned(), summary),
+            ]),
+        };
+        vec![cap_if_partial(finding, target)]
+    }
+}
+
+/// PAR-004: public DNS for a hostname does not point to the target server.
+///
+/// Origin of the case: cutover looked complete locally, but DNS records in another account still
+/// sent public traffic to the old server.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Par004;
+
+impl ParityRule for Par004 {
+    fn id(&self) -> &'static str {
+        "PAR-004"
+    }
+
+    fn version(&self) -> u32 {
+        1
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Critical
+    }
+
+    fn category(&self) -> &'static str {
+        "dns"
+    }
+
+    fn fix_tier(&self) -> Option<Tier> {
+        Some(Tier::RiskyChange)
+    }
+
+    fn evaluate(
+        &self,
+        _source: &Inventory,
+        target: &Inventory,
+        _ctx: &RuleContext,
+    ) -> Vec<Finding> {
+        target
+            .items_of(Kind::Dns)
+            .filter(|item| item.bool_field("points_to_target") == Some(false))
+            .map(|item| {
+                let domain = item.str_field("domain").unwrap_or(&item.key).to_owned();
+                let expected = item
+                    .str_field("expected_ip")
+                    .unwrap_or(UNKNOWN_ARG)
+                    .to_owned();
+                let finding = Finding {
+                    rule_id: self.id().to_owned(),
+                    severity: self.severity(),
+                    subject: subject(item),
+                    evidence: vec![subject(item)],
+                    args: BTreeMap::from([
+                        ("domain".to_owned(), domain),
+                        ("expected_ip".to_owned(), expected),
+                    ]),
+                };
+                cap_if_partial(finding, target)
+            })
+            .collect()
+    }
+}
+
+/// PAR-005: a database with the same name differs in row count (or empty vs populated) or version.
+///
+/// Origin of the case: a migration restored into an empty database or hit a version/row mismatch
+/// while the app appeared healthy.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Par005;
+
+impl ParityRule for Par005 {
+    fn id(&self) -> &'static str {
+        "PAR-005"
+    }
+
+    fn version(&self) -> u32 {
+        1
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Critical
+    }
+
+    fn category(&self) -> &'static str {
+        "data"
+    }
+
+    fn fix_tier(&self) -> Option<Tier> {
+        None
+    }
+
+    fn evaluate(&self, source: &Inventory, target: &Inventory, _ctx: &RuleContext) -> Vec<Finding> {
+        let mut findings = Vec::new();
+        for s in source.items_of(Kind::Database) {
+            let db_name = s.str_field("name").unwrap_or(&s.key).to_owned();
+            let s_rows = s.u64_field("row_count");
+            let s_ver = s.str_field("version");
+
+            let Some(t) = target.get(Kind::Database, &s.key) else {
+                let finding = Finding {
+                    rule_id: self.id().to_owned(),
+                    severity: Severity::Critical,
+                    subject: subject(s),
+                    evidence: vec![subject(s)],
+                    args: BTreeMap::from([
+                        ("name".to_owned(), db_name),
+                        (
+                            "source_rows".to_owned(),
+                            s_rows.map_or_else(|| UNKNOWN_ARG.to_owned(), |n| n.to_string()),
+                        ),
+                        ("target_rows".to_owned(), "0".to_owned()),
+                    ]),
+                };
+                findings.push(cap_if_partial(finding, target));
+                continue;
+            };
+
+            let t_rows = t.u64_field("row_count");
+            let t_ver = t.str_field("version");
+
+            let row_mismatch = match (s_rows, t_rows) {
+                (Some(sr), Some(tr)) => sr != tr,
+                _ => false,
+            };
+            let ver_mismatch = match (s_ver, t_ver) {
+                (Some(sv), Some(tv)) => sv != tv,
+                _ => false,
+            };
+            if row_mismatch || ver_mismatch {
+                let severity = match (s_rows, t_rows) {
+                    (Some(sr), Some(0)) if sr > 0 => Severity::Critical,
+                    _ => Severity::Important,
+                };
+                let finding = Finding {
+                    rule_id: self.id().to_owned(),
+                    severity,
+                    subject: subject(t),
+                    evidence: vec![subject(s), subject(t)],
+                    args: BTreeMap::from([
+                        ("name".to_owned(), db_name),
+                        (
+                            "source_rows".to_owned(),
+                            s_rows.map_or_else(|| UNKNOWN_ARG.to_owned(), |n| n.to_string()),
+                        ),
+                        (
+                            "target_rows".to_owned(),
+                            t_rows.map_or_else(|| UNKNOWN_ARG.to_owned(), |n| n.to_string()),
+                        ),
+                    ]),
+                };
+                findings.push(cap_if_partial(finding, target));
+            }
+        }
+        findings
+    }
+}
+
+/// PAR-011: a functional check (DB connection from inside the process or test login) failed.
+///
+/// Origin of the case: HTTP 200 on the landing page hid a broken database connection or failed
+/// login flow.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Par011;
+
+impl ParityRule for Par011 {
+    fn id(&self) -> &'static str {
+        "PAR-011"
+    }
+
+    fn version(&self) -> u32 {
+        1
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Critical
+    }
+
+    fn category(&self) -> &'static str {
+        "functional"
+    }
+
+    fn fix_tier(&self) -> Option<Tier> {
+        None
+    }
+
+    fn evaluate(
+        &self,
+        _source: &Inventory,
+        target: &Inventory,
+        _ctx: &RuleContext,
+    ) -> Vec<Finding> {
+        target
+            .items_of(Kind::Check)
+            .filter(|item| item.bool_field("passed") == Some(false))
+            .map(|item| {
+                let process = item.str_field("process").unwrap_or(&item.key).to_owned();
+                let check_kind = item
+                    .str_field("check_kind")
+                    .unwrap_or(UNKNOWN_ARG)
+                    .to_owned();
+                let finding = Finding {
+                    rule_id: self.id().to_owned(),
+                    severity: self.severity(),
+                    subject: subject(item),
+                    evidence: vec![subject(item)],
+                    args: BTreeMap::from([
+                        ("process".to_owned(), process),
+                        ("check_kind".to_owned(), check_kind),
+                    ]),
+                };
+                cap_if_partial(finding, target)
+            })
+            .collect()
+    }
+}

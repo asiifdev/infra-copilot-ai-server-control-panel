@@ -3,21 +3,70 @@
 //! An [`Action`] is data, never a command line. It is parsed from a strict JSON form, every field
 //! is validated, its tier is fixed by this code (neither a model nor a person can lower it), and
 //! it has one canonical form whose SHA-256 binds an approval to exactly this action. The
-//! [`Executor`] turns an action into argv-only commands and runs them through a
-//! `transport::Runner`, so tests never touch a real service.
-//!
-//! Only tier 2 actions exist so far. Tier 3 and 4 need dry-run with backup, typed confirmation
-//! and rollback, and are refused by [`Action::executable_now`] until those exist.
+//! [`Executor`] turns an action into argv-only commands or validated local file operations and runs
+//! commands through a `transport::Runner`, so tests never touch a real service.
 
 mod exec;
+mod logs;
+mod sites;
+mod ssh;
 
-pub use exec::{DryRun, Executor, LocalExecutor, Outcome, OutcomeStatus};
+pub use exec::{
+    BackupSnapshot, DryRun, Executor, LocalExecutor, Outcome, OutcomeStatus, dry_run_readonly,
+};
+pub use logs::{
+    LogExcerpt, MAX_LOG_BYTES, MAX_LOG_LINES, format_log_excerpt, read_managed_log,
+    read_service_logs_via_runner,
+};
+pub use sites::{
+    MAX_TEST_DOMAIN_LEN, render_test_vhost_config, validate_test_domain, write_managed_test_site,
+};
+pub use ssh::{SshExecutor, SshTarget};
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+
+    pub(crate) struct TestDir(PathBuf);
+
+    impl TestDir {
+        pub(crate) fn new(prefix: &str) -> Result<Self, std::io::Error> {
+            let seq = SEQ.fetch_add(1, Ordering::Relaxed);
+            let dir = std::env::temp_dir().join(format!(
+                "nodivara-actions-{prefix}-{}-{seq}",
+                std::process::id()
+            ));
+            std::fs::create_dir_all(&dir)?;
+            Ok(Self(dir))
+        }
+
+        pub(crate) fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+}
 
 use core_domain::tier::Tier;
 use std::fmt;
+use std::path::{Component, Path};
 
 /// Longest service name accepted.
 pub const MAX_SERVICE_NAME: usize = 100;
+/// Longest managed file path accepted.
+pub const MAX_PATH_LEN: usize = 300;
+/// Longest environment variable key accepted.
+pub const MAX_ENV_KEY: usize = 128;
+/// Longest environment variable value accepted.
+pub const MAX_ENV_VALUE: usize = 1000;
 
 /// Why an action could not be built or read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,6 +81,13 @@ pub enum ActionError {
     /// `A-Z a-z 0-9 _ . @ -`, or names a unit that is not a service (`.target`, `.socket`,
     /// `.mount`, ...): restarting `poweroff.target` would power the machine off.
     BadServiceName,
+    /// The path is empty, too long, relative, contains `.` or `..`, control characters, or does
+    /// not match the required file naming (e.g. `.env` for env updates).
+    BadPath,
+    /// The environment variable key is empty, too long, or not `[A-Za-z_][A-Za-z0-9_]*`.
+    BadEnvKey,
+    /// The environment variable value is too long or contains NUL / newline characters.
+    BadEnvValue,
 }
 
 impl fmt::Display for ActionError {
@@ -41,6 +97,9 @@ impl fmt::Display for ActionError {
             Self::UnknownAction => "action_unknown",
             Self::UnknownManager => "action_unknown_manager",
             Self::BadServiceName => "action_bad_service_name",
+            Self::BadPath => "action_bad_path",
+            Self::BadEnvKey => "action_bad_env_key",
+            Self::BadEnvValue => "action_bad_env_value",
         })
     }
 }
@@ -173,16 +232,165 @@ impl ServiceName {
     }
 }
 
+/// A validated absolute lexical path without `.` or `..` components or control characters.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ManagedPath(String);
+
+impl ManagedPath {
+    /// Validates a managed file path.
+    ///
+    /// # Errors
+    /// [`ActionError::BadPath`].
+    pub fn new(text: &str) -> Result<Self, ActionError> {
+        if text.is_empty()
+            || text.len() > MAX_PATH_LEN
+            || !text.starts_with('/')
+            || text.ends_with('/')
+            || text.chars().any(char::is_control)
+        {
+            return Err(ActionError::BadPath);
+        }
+        if text[1..]
+            .split('/')
+            .any(|seg| seg.is_empty() || seg == "." || seg == "..")
+        {
+            return Err(ActionError::BadPath);
+        }
+        let p = Path::new(text);
+        let mut normal_count = 0usize;
+        for comp in p.components() {
+            match comp {
+                Component::RootDir => {}
+                Component::Normal(seg) => {
+                    if seg.is_empty() {
+                        return Err(ActionError::BadPath);
+                    }
+                    normal_count += 1;
+                }
+                Component::CurDir | Component::ParentDir | Component::Prefix(_) => {
+                    return Err(ActionError::BadPath);
+                }
+            }
+        }
+        if normal_count == 0 || text.ends_with('/') {
+            return Err(ActionError::BadPath);
+        }
+        Ok(Self(text.to_owned()))
+    }
+
+    /// Validates a path to a `.env` file (filename must be `.env` or `.env.<suffix>`).
+    ///
+    /// # Errors
+    /// [`ActionError::BadPath`].
+    pub fn new_env(text: &str) -> Result<Self, ActionError> {
+        let path = Self::new(text)?;
+        let name = Path::new(&path.0)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or(ActionError::BadPath)?;
+        if name != ".env" && !name.starts_with(".env.") {
+            return Err(ActionError::BadPath);
+        }
+        Ok(path)
+    }
+
+    /// The path string.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// A validated POSIX environment variable key (`[A-Za-z_][A-Za-z0-9_]*`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnvKey(String);
+
+impl EnvKey {
+    /// Validates an environment variable key.
+    ///
+    /// # Errors
+    /// [`ActionError::BadEnvKey`].
+    pub fn new(text: &str) -> Result<Self, ActionError> {
+        let mut chars = text.chars();
+        let Some(first) = chars.next() else {
+            return Err(ActionError::BadEnvKey);
+        };
+        if text.len() > MAX_ENV_KEY
+            || !(first.is_ascii_alphabetic() || first == '_')
+            || !chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            return Err(ActionError::BadEnvKey);
+        }
+        Ok(Self(text.to_owned()))
+    }
+
+    /// The key string.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// A validated single-line environment variable value. `Debug` and `Display` are redacted so the
+/// value never leaks into logs.
+#[derive(Clone, PartialEq, Eq)]
+pub struct EnvValue(String);
+
+impl EnvValue {
+    /// Validates an environment variable value (no NUL or newlines, bounded length).
+    ///
+    /// # Errors
+    /// [`ActionError::BadEnvValue`].
+    pub fn new(text: &str) -> Result<Self, ActionError> {
+        if text.len() > MAX_ENV_VALUE || text.contains(['\0', '\r', '\n']) {
+            return Err(ActionError::BadEnvValue);
+        }
+        Ok(Self(text.to_owned()))
+    }
+
+    /// The underlying value (for executor application only; never log or display).
+    #[must_use]
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Debug for EnvValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("EnvValue([REDACTED])")
+    }
+}
+
+impl fmt::Display for EnvValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("[REDACTED]")
+    }
+}
+
 /// One thing an approved proposal may do.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
     /// Restart a service. Tier 2 for an ordinary service, tier 3 for a critical unit (see
-    /// [`ServiceName::is_critical`]). No undo exists: a restart cannot be reversed, only repeated.
+    /// [`ServiceName::is_critical`]).
     RestartService {
         /// How the service is managed.
         manager: ServiceManagerKind,
         /// Its name.
         name: ServiceName,
+    },
+    /// Set or update an environment variable in an allowlisted `.env` file (tier 3).
+    UpdateEnvVar {
+        /// Path to the `.env` file.
+        path: ManagedPath,
+        /// Variable key.
+        key: EnvKey,
+        /// Variable value (redacted in logs, dry-run diff, and UI).
+        value: EnvValue,
+    },
+    /// Delete a managed file inside an allowlisted directory (tier 4, requires typed confirmation).
+    DeleteManagedFile {
+        /// Path to the managed file.
+        path: ManagedPath,
     },
 }
 
@@ -198,11 +406,35 @@ impl Action {
         })
     }
 
+    /// An update of `key` in `.env` at `path`.
+    ///
+    /// # Errors
+    /// [`ActionError::BadPath`], [`ActionError::BadEnvKey`], or [`ActionError::BadEnvValue`].
+    pub fn update_env_var(path: &str, key: &str, value: &str) -> Result<Self, ActionError> {
+        Ok(Self::UpdateEnvVar {
+            path: ManagedPath::new_env(path)?,
+            key: EnvKey::new(key)?,
+            value: EnvValue::new(value)?,
+        })
+    }
+
+    /// A deletion of a managed file at `path`.
+    ///
+    /// # Errors
+    /// [`ActionError::BadPath`].
+    pub fn delete_managed_file(path: &str) -> Result<Self, ActionError> {
+        Ok(Self::DeleteManagedFile {
+            path: ManagedPath::new(path)?,
+        })
+    }
+
     /// The tool name stored in `proposals.tool`.
     #[must_use]
     pub const fn tool(&self) -> &'static str {
         match self {
             Self::RestartService { .. } => "propose_restart_service",
+            Self::UpdateEnvVar { .. } => "propose_update_env_var",
+            Self::DeleteManagedFile { .. } => "propose_delete_managed_file",
         }
     }
 
@@ -212,18 +444,40 @@ impl Action {
         match self {
             Self::RestartService { name, .. } if name.is_critical() => Tier::RiskyChange,
             Self::RestartService { .. } => Tier::LightChange,
+            Self::UpdateEnvVar { .. } => Tier::RiskyChange,
+            Self::DeleteManagedFile { .. } => Tier::Destructive,
         }
     }
 
-    /// Whether the executor can run this action today. False for tier 3 and 4 until dry-run with
-    /// backup, typed confirmation and rollback exist.
+    /// Human-readable target identifier (also used as the exact string required for tier-4 typed
+    /// confirmation).
     #[must_use]
-    pub fn executable_now(&self) -> bool {
-        matches!(self.tier(), Tier::LightChange)
+    pub fn target_label(&self) -> &str {
+        match self {
+            Self::RestartService { name, .. } => name.as_str(),
+            Self::UpdateEnvVar { path, .. } | Self::DeleteManagedFile { path } => path.as_str(),
+        }
     }
 
-    /// The one canonical JSON form: fixed key order, no spaces. Values are validated, so nothing
-    /// here needs escaping.
+    /// Whether executing this action requires a pre-execution backup (`tier >= 3`).
+    #[must_use]
+    pub fn requires_backup(&self) -> bool {
+        self.tier().requires_dry_run_and_backup()
+    }
+
+    /// Whether approving this action requires typing [`Action::target_label`] (`tier == 4`).
+    #[must_use]
+    pub fn requires_typed_confirmation(&self) -> bool {
+        self.tier().requires_typed_confirmation()
+    }
+
+    /// Whether the executor can run this action today (tiers 2, 3, and 4).
+    #[must_use]
+    pub fn executable_now(&self) -> bool {
+        self.tier().requires_proposal()
+    }
+
+    /// The one canonical JSON form: fixed alphabetical key order, no extra spaces.
     #[must_use]
     pub fn canonical_json(&self) -> String {
         match self {
@@ -232,6 +486,18 @@ impl Action {
                 manager.as_str(),
                 name.as_str()
             ),
+            Self::UpdateEnvVar { path, key, value } => serde_json::json!({
+                "action": "update_env_var",
+                "key": key.as_str(),
+                "path": path.as_str(),
+                "value": value.expose(),
+            })
+            .to_string(),
+            Self::DeleteManagedFile { path } => serde_json::json!({
+                "action": "delete_managed_file",
+                "path": path.as_str(),
+            })
+            .to_string(),
         }
     }
 
@@ -264,6 +530,18 @@ impl Action {
                 let manager = ServiceManagerKind::parse(text("manager")?)
                     .ok_or(ActionError::UnknownManager)?;
                 Self::restart_service(manager, text("service")?)
+            }
+            "update_env_var" => {
+                if object.len() != 4 {
+                    return Err(ActionError::BadShape);
+                }
+                Self::update_env_var(text("path")?, text("key")?, text("value")?)
+            }
+            "delete_managed_file" => {
+                if object.len() != 2 {
+                    return Err(ActionError::BadShape);
+                }
+                Self::delete_managed_file(text("path")?)
             }
             _ => Err(ActionError::UnknownAction),
         }

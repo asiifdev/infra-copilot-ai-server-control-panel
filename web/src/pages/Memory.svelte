@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { api, ApiError } from '../lib/api';
-  import { errorKey } from '../lib/errors';
+  import { api } from '../lib/api';
+  import { toastError } from '../lib/errors';
   import { t } from '../lib/i18n.svelte';
   import { useResource } from '../lib/resource.svelte';
   import { toasts } from '../lib/toast.svelte';
@@ -38,9 +38,7 @@
     active.reload();
   }
 
-  function fail(cause: unknown) {
-    toasts.push('error', t(errorKey(cause instanceof ApiError ? cause.code : 'internal')));
-  }
+  const fail = toastError;
 
   async function approve(note: MemoryNote) {
     working = true;

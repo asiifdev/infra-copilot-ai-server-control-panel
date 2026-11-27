@@ -385,3 +385,58 @@ fn the_wizard_result_feeds_straight_into_save() -> TestResult {
     assert!(store::load(&conn, &a, &id)?.verified_at.is_some());
     Ok(())
 }
+
+#[test]
+fn update_credentials_rotates_secret_resets_verification_and_is_tenant_isolated() -> TestResult {
+    let conn = open_in_memory()?;
+    let vault = Vault::new(KEY, &[])?;
+    let a = org(&conn, "alpha")?;
+    let b = org(&conn, "beta")?;
+    let id = store::save(
+        &conn,
+        &vault,
+        &a,
+        "s3-prod",
+        &spec()?,
+        Some(&creds()?),
+        None,
+    )?;
+    db::record_transport_check(&conn, &a, &id, r#"{"listing_ok":true}"#, true)?;
+    let before = store::load(&conn, &a, &id)?;
+    assert!(before.verified_at.is_some());
+    let old_secret = before.secret_id.clone().ok_or("missing old secret")?;
+
+    let new_creds = Credentials::new(vec![
+        (
+            "access_key_id".to_owned(),
+            Secret::new("NEW-KEY-123".to_owned()),
+        ),
+        (
+            "secret_access_key".to_owned(),
+            Secret::new("NEW-SECRET-456".to_owned()),
+        ),
+    ])?;
+
+    // Rival org cannot update.
+    assert!(matches!(
+        store::update_credentials(&conn, &vault, &b, &id, &new_creds),
+        Err(StoreError::NotFound)
+    ));
+
+    store::update_credentials(&conn, &vault, &a, &id, &new_creds)?;
+    let after = store::load(&conn, &a, &id)?;
+    assert!(after.verified_at.is_none());
+    assert!(after.last_check_json.is_none());
+    assert_ne!(after.secret_id.as_ref(), Some(&old_secret));
+    // Old secret was deleted.
+    assert!(db::get_secret(&conn, &a, &old_secret).is_err());
+
+    let loaded = store::load_credentials(&conn, &vault, &a, &after)?.ok_or("missing creds")?;
+    assert!(
+        loaded
+            .to_vault_text()
+            .expose_secret()
+            .contains("NEW-KEY-123")
+    );
+    Ok(())
+}

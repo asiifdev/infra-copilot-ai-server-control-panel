@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api, ApiError } from '../lib/api';
-  import { errorKey } from '../lib/errors';
+  import { toastError } from '../lib/errors';
   import { i18n, isLocale, LOCALES, t } from '../lib/i18n.svelte';
   import { useResource } from '../lib/resource.svelte';
   import { session } from '../lib/session.svelte';
@@ -20,9 +20,53 @@
   import ProviderForm from '../components/ProviderForm.svelte';
   import Select from '../components/Select.svelte';
   import StatusBadge from '../components/StatusBadge.svelte';
+  import TextField from '../components/TextField.svelte';
 
   const providers = useResource((signal) => api.providers(signal));
+  const channels = useResource((signal) => api.channels(signal));
   const masterKey = $derived(session.info?.master_key_configured ?? false);
+
+  let chKind = $state('telegram');
+  let chName = $state('');
+  let chToken = $state('');
+  let chQuiet = $state('');
+  let chBusy = $state(false);
+  let linkCmd = $state<string | null>(null);
+  const CH_KINDS = [
+    { value: 'telegram', label: 'Telegram' },
+    { value: 'webhook', label: 'Webhook' },
+  ];
+
+  async function runCh(fn: () => Promise<void>) {
+    if (chBusy) return;
+    chBusy = true;
+    try {
+      await fn();
+    } catch (cause) {
+      toastError(cause);
+    } finally {
+      chBusy = false;
+    }
+  }
+
+  function addChannel(event: SubmitEvent) {
+    event.preventDefault();
+    if (!chName.trim()) return;
+    const tok = chToken.trim();
+    const quiet = chQuiet.trim();
+    chToken = '';
+    void runCh(async () => {
+      await api.createChannel({
+        kind: chKind,
+        name: chName.trim(),
+        ...(tok ? { token: tok } : {}),
+        ...(quiet ? { config: { quiet_hours: quiet } } : {}),
+      });
+      chName = '';
+      chQuiet = '';
+      channels.reload();
+    });
+  }
 
   // Literal keys on purpose: the key-coverage test finds them.
   const LOCALE_NAMES: Record<string, string> = { en: 'ui.settings.locale_en', id: 'ui.settings.locale_id' };
@@ -81,7 +125,7 @@
       toDelete = null;
       providers.reload();
     } catch (cause) {
-      toasts.push('error', t(errorKey(cause instanceof ApiError ? cause.code : 'internal')));
+      toastError(cause);
     } finally {
       deleting = false;
     }
@@ -168,6 +212,33 @@
       isFirst={providers.data?.length === 0}
       hasDefault={providers.data?.some((p) => p.is_default) ?? false}
       onsaved={() => { toasts.push('success', t('ui.settings.saved')); providers.reload(); }} />
+  </Card>
+
+  <Card title={t('ui.channels.title')}>
+    {#if channels.data?.length}
+      <ul class="plain stack">
+        {#each channels.data as ch (ch.id)}
+          <li class="row">
+            <span>{inlineText(ch.name, 80)}</span>
+            <span class="muted">{inlineText(ch.kind, 20)}</span>
+            <Button variant="secondary" onclick={() => runCh(async () => { await api.deleteChannel(ch.id); channels.reload(); })} disabled={chBusy}>{t('ui.common.delete')}</Button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    <form class="row" onsubmit={addChannel}>
+      <Select id="ch-kind" label={t('ui.monitors.kind')} bind:value={chKind} options={CH_KINDS} />
+      <TextField id="ch-name" label={t('ui.monitors.name')} bind:value={chName} required disabled={chBusy} />
+      <TextField id="ch-token" type="password" label={t('ui.channels.token')} bind:value={chToken} disabled={chBusy} />
+      <TextField id="ch-quiet" label={t('ui.channels.quiet_hours')} bind:value={chQuiet} disabled={chBusy} />
+      <Button type="submit" variant="primary" busy={chBusy}>{t('ui.channels.add')}</Button>
+    </form>
+    <div class="row">
+      <Button variant="secondary" onclick={() => runCh(async () => { linkCmd = (await api.telegramLinkCode()).command; })} disabled={chBusy}>{t('ui.channels.link_telegram')}</Button>
+      {#if linkCmd}
+        <p>{t('ui.channels.link_code', { command: linkCmd })}</p>
+      {/if}
+    </div>
   </Card>
 
   <Card title={t('ui.settings.session')}>

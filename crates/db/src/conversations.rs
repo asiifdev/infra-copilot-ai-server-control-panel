@@ -9,7 +9,7 @@
 //!   written in one transaction, so history never contains half a round.
 
 use crate::error::{Error, Result};
-use crate::ids::{AiProviderId, ConversationId, OrgId, ProposalId, UserId};
+use crate::ids::{AiProviderId, ApprovalId, ConversationId, OrgId, ProposalId, UserId};
 use crate::{new_uuid, now_utc};
 use core_domain::redact::redact;
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
@@ -659,6 +659,10 @@ pub struct ProposalRow {
     pub action_json: Option<String>,
     /// The node the action targets, when it has an action.
     pub node_id: Option<crate::ids::NodeId>,
+    /// Cached redacted dry-run JSON, when a dry-run has been computed.
+    pub dry_run_json: Option<String>,
+    /// When `dry_run_json` was recorded.
+    pub dry_run_at: Option<String>,
 }
 
 /// Stores a pending proposal that expires in seven days.
@@ -698,7 +702,7 @@ pub fn create_proposal(
 
 const PROPOSAL_COLUMNS: &str = "id, conversation_id, tool, tier, title, rationale, \
     suggested_action, impact, rule_id, subject_key, args_hash, status, created_at, expires_at, \
-    action_json, node_id";
+    action_json, node_id, dry_run_json, dry_run_at";
 
 fn map_proposal(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProposalRow> {
     let status: String = row.get(11)?;
@@ -724,6 +728,8 @@ fn map_proposal(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProposalRow> {
         node_id: row
             .get::<_, Option<String>>(15)?
             .map(crate::ids::NodeId::from_db),
+        dry_run_json: row.get(16)?,
+        dry_run_at: row.get(17)?,
     })
 }
 
@@ -799,6 +805,84 @@ pub enum DecisionOutcome {
     Expired,
 }
 
+/// A stored approval/rejection decision for a proposal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ApprovalRow {
+    /// Id.
+    pub id: ApprovalId,
+    /// Proposal it belongs to.
+    pub proposal_id: ProposalId,
+    /// User who decided.
+    pub user_id: UserId,
+    /// Decision (`Approve` or `Reject`).
+    pub decision: ProposalDecision,
+    /// Whether tier-4 typed confirmation matched the target label.
+    pub typed_confirmation: bool,
+    /// Optional comment.
+    pub comment: Option<String>,
+    /// Creation time.
+    pub created_at: String,
+}
+
+/// Returns the approval record for a proposal, if any.
+///
+/// # Errors
+/// Database failure.
+pub fn get_approval_for_proposal(
+    conn: &Connection,
+    org: &OrgId,
+    proposal: &ProposalId,
+) -> Result<Option<ApprovalRow>> {
+    Ok(conn
+        .query_row(
+            "SELECT id, proposal_id, user_id, decision, typed_confirmation, comment, created_at \
+             FROM approvals WHERE org_id = ?1 AND proposal_id = ?2 \
+             ORDER BY created_at DESC LIMIT 1",
+            params![org.as_str(), proposal.as_str()],
+            |row| {
+                let dec: String = row.get(3)?;
+                Ok(ApprovalRow {
+                    id: ApprovalId::from_db(row.get(0)?),
+                    proposal_id: ProposalId::from_db(row.get(1)?),
+                    user_id: UserId::from_db(row.get(2)?),
+                    decision: if dec == "approved" {
+                        ProposalDecision::Approve
+                    } else {
+                        ProposalDecision::Reject
+                    },
+                    typed_confirmation: row.get::<_, i64>(4)? != 0,
+                    comment: row.get(5)?,
+                    created_at: row.get(6)?,
+                })
+            },
+        )
+        .optional()?)
+}
+
+/// Stores the redacted dry-run JSON and timestamp on a proposal without touching its immutable
+/// action fields.
+///
+/// # Errors
+/// [`Error::NotFound`] when missing or in another org; database failure (including `> 8000` bytes).
+pub fn set_proposal_dry_run(
+    conn: &Connection,
+    org: &OrgId,
+    id: &ProposalId,
+    dry_run_json: &str,
+) -> Result<String> {
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+    let now = now_utc(&tx)?;
+    let changed = tx.execute(
+        "UPDATE proposals SET dry_run_json = ?3, dry_run_at = ?4 WHERE org_id = ?1 AND id = ?2",
+        params![org.as_str(), id.as_str(), dry_run_json, now],
+    )?;
+    if changed == 0 {
+        return Err(Error::NotFound);
+    }
+    tx.commit()?;
+    Ok(now)
+}
+
 /// Records a person's decision on a proposal and appends an audit entry, in one transaction.
 /// Only a `pending`, unexpired proposal can be decided; the status change is one conditional
 /// UPDATE, so two decisions cannot both win.
@@ -811,6 +895,23 @@ pub fn decide_proposal(
     id: &ProposalId,
     decision: ProposalDecision,
     user: &UserId,
+) -> Result<DecisionOutcome> {
+    decide_proposal_with_details(conn, org, id, decision, user, false, None)
+}
+
+/// Records a person's decision on a proposal, stores a row in `approvals`, and appends an audit
+/// entry, in one transaction.
+///
+/// # Errors
+/// [`Error::NotFound`] when it is missing or belongs to another org; database failure.
+pub fn decide_proposal_with_details(
+    conn: &Connection,
+    org: &OrgId,
+    id: &ProposalId,
+    decision: ProposalDecision,
+    user: &UserId,
+    typed_confirmation: bool,
+    comment: Option<&str>,
 ) -> Result<DecisionOutcome> {
     let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
     let current = get_proposal(&tx, org, id)?;
@@ -839,12 +940,27 @@ pub fn decide_proposal(
         "UPDATE proposals SET status = ?3 WHERE org_id = ?1 AND id = ?2 AND status = 'pending'",
         params![org.as_str(), id.as_str(), status.as_str()],
     )?;
-    // Only an id, a number and a hex digest: nothing that needs JSON escaping.
+    let approval_id = new_uuid(&tx)?;
+    tx.execute(
+        "INSERT INTO approvals (id, org_id, proposal_id, user_id, decision, typed_confirmation, comment) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            approval_id,
+            org.as_str(),
+            id.as_str(),
+            user.as_str(),
+            status.as_str(),
+            i64::from(typed_confirmation),
+            comment,
+        ],
+    )?;
+    // Only an id, a number, a boolean and a hex digest: nothing that needs JSON escaping.
     let subject = format!(
-        r#"{{"proposal":"{}","tier":{},"args_hash":"{}"}}"#,
+        r#"{{"proposal":"{}","tier":{},"args_hash":"{}","typed_confirmation":{}}}"#,
         id.as_str(),
         current.tier,
-        current.args_hash
+        current.args_hash,
+        typed_confirmation
     );
     crate::audit::append_audit_in_tx(
         &tx,

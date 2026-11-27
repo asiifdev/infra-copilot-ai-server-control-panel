@@ -46,8 +46,9 @@ pub use plan_flow::{
     draft_migration_plan, gates_for_stored,
 };
 pub use plans::{
-    ComparisonView, DbPlanSink, DbPlanStore, MAX_DRAFT_PLANS, NoPlans, PlanSink, PlanSinkError,
-    PlanStore, PlanSummary, ResolvedTransport, StoredPlan, TransportInfo,
+    ComparisonView, DbPlanSink, DbPlanStore, DefaultPlanStepRunner, MAX_DRAFT_PLANS, NoPlans,
+    PlanRunError, PlanRunReport, PlanSink, PlanSinkError, PlanStepOutcome, PlanStepRunner,
+    PlanStore, PlanSummary, ResolvedTransport, StoredPlan, TransportInfo, approve_plan, run_plan,
 };
 pub use proposals::{
     ActionDraft, DbProposalSink, MAX_PENDING_PER_CONVERSATION, NoProposals, ProposalDraft,

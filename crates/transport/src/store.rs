@@ -210,6 +210,46 @@ pub fn load_credentials(
         .ok_or(StoreError::CorruptCredentials)
 }
 
+/// Updates a transport's sealed credentials in the vault, resets verification state so the new
+/// credentials must be re-verified, and deletes the previous sealed secret.
+///
+/// # Errors
+/// [`StoreError::NotFound`] when not in this org; [`StoreError::CredentialsNotAccepted`] when the
+/// transport kind takes no credentials; [`StoreError::CorruptCredentials`] when `credentials` is
+/// empty; [`StoreError::Vault`] or [`StoreError::Database`].
+pub fn update_credentials(
+    conn: &Connection,
+    vault: &Vault,
+    org: &OrgId,
+    id: &TransportId,
+    credentials: &Credentials,
+) -> Result<(), StoreError> {
+    let row = db::get_transport(conn, org, id)?;
+    let spec = TransportSpec::from_config_json(&row.kind, &row.config_json)
+        .map_err(StoreError::CorruptRow)?;
+    if !spec.kind().accepts_credentials() {
+        return Err(StoreError::CredentialsNotAccepted);
+    }
+    if credentials.is_empty() {
+        return Err(StoreError::CorruptCredentials);
+    }
+    let text = credentials.to_vault_text();
+    let new_secret = vault.store(
+        conn,
+        org,
+        CREDENTIALS_PURPOSE,
+        text.expose_secret().as_bytes(),
+    )?;
+    if let Err(err) = db::update_transport_secret(conn, org, id, Some(&new_secret), true) {
+        let _ = db::delete_secret(conn, org, &new_secret);
+        return Err(err.into());
+    }
+    if let Some(old_secret) = &row.secret_id {
+        let _ = db::delete_secret(conn, org, old_secret);
+    }
+    Ok(())
+}
+
 /// Deletes a transport and its sealed credentials.
 ///
 /// # Errors

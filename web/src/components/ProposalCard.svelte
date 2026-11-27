@@ -23,9 +23,13 @@
     executionEnabled?: boolean;
     /** Offered on an approved proposal that has an action. */
     onrun?: () => void;
+    /** Offered on a proposal that has an action to compute a dry-run preview. */
+    ondryrun?: () => void;
+    /** Offered on an executed proposal that has a backup and has not been rolled back. */
+    onrollback?: () => void;
   }
 
-  let { proposal, level = 3, busy = false, onapprove, onreject, executionEnabled = false, onrun }: Props = $props();
+  let { proposal, level = 3, busy = false, onapprove, onreject, executionEnabled = false, onrun, ondryrun, onrollback }: Props = $props();
 
   const pending = $derived(proposal.status === 'pending');
   const decidable = $derived(pending && onapprove !== undefined && onreject !== undefined);
@@ -34,44 +38,69 @@
   const titleText = $derived(inlineText(proposal.title, 120));
   const approved = $derived(proposal.status === 'approved');
   const runnable = $derived(approved && proposal.action !== null && onrun !== undefined);
+  const canDryRun = $derived((pending || approved) && proposal.action !== null && ondryrun !== undefined);
   const execution = $derived(proposal.execution);
+  const dryRun = $derived(proposal.dry_run);
+  const rollback = $derived(proposal.rollback);
+  const rollbackable = $derived(
+    proposal.has_backup && rollback === null && execution !== null && execution.status !== 'running' && onrollback !== undefined,
+  );
   const hintId = $derived(`run-off-${proposal.id}`);
   // A command the owner types, not text to translate.
   const ENABLE_COMMAND = 'infra serve --enable-execution';
 
   function actionText(action: NonNullable<ProposalView['action']>): string {
-    if (action.kind !== 'restart_service') return t('ui.proposal.action_other', { kind: inlineText((action as { kind: unknown }).kind, 40) });
-    return t('ui.proposal.restart_service', {
-      service: inlineText(action.service, 100),
-      manager: inlineText(action.manager, 20),
-      node: inlineText(proposal.node, 80) || t('ui.proposal.node_unknown'),
+    if (action.kind === 'restart_service') {
+      return t('ui.proposal.restart_service', {
+        service: inlineText(action.service, 100),
+        manager: inlineText(action.manager, 20),
+        node: inlineText(proposal.node, 80) || t('ui.proposal.node_unknown'),
+      });
+    }
+    return t('ui.proposal.action_other', {
+      kind: inlineText(`${action.kind}: ${action.target_label}`, 120),
     });
   }
 
-  // One literal key per reason code of the server; an unknown code gets the generic sentence.
+  const REASONS: Record<string, string> = {
+    ok: 'ui.execution.reason_ok',
+    not_installed: 'ui.execution.reason_not_installed',
+    timeout: 'ui.execution.reason_timeout',
+    command_failed: 'ui.execution.reason_command_failed',
+    not_active_after: 'ui.execution.reason_not_active_after',
+    io: 'ui.execution.reason_io',
+    action_invalid: 'ui.execution.reason_action_invalid',
+    interrupted: 'ui.execution.reason_interrupted',
+  };
+
   function reasonText(reason: string): string {
-    switch (reason) {
-      case 'ok':
-        return t('ui.execution.reason_ok');
-      case 'not_installed':
-        return t('ui.execution.reason_not_installed');
-      case 'timeout':
-        return t('ui.execution.reason_timeout');
-      case 'command_failed':
-        return t('ui.execution.reason_command_failed');
-      case 'not_active_after':
-        return t('ui.execution.reason_not_active_after');
-      case 'io':
-        return t('ui.execution.reason_io');
-      case 'action_invalid':
-        return t('ui.execution.reason_action_invalid');
-      case 'interrupted':
-        return t('ui.execution.reason_interrupted');
-      default:
-        return t('ui.execution.reason_other');
-    }
+    return t(REASONS[reason] ?? 'ui.execution.reason_other');
   }
 </script>
+
+{#snippet outcomeView(item: { status: string; verified: boolean; reason: string | null; output: string; started_at: string; finished_at: string | null }, showBackup: boolean)}
+  <dd class="result">
+    <p class="status">
+      <StatusBadge kind="state" value={item.status} />
+      <span class="muted">
+        {#if item.finished_at}
+          {t('ui.execution.finished', { when: formatDateTime(item.finished_at, i18n.locale) ?? inlineText(item.finished_at, 40) })}
+        {:else}
+          {t('ui.execution.started', { when: formatDateTime(item.started_at, i18n.locale) ?? inlineText(item.started_at, 40) })}
+        {/if}
+      </span>
+    </p>
+    {#if item.reason}<p>{reasonText(item.reason)}</p>{/if}
+    {#if item.status === 'queued'}
+      <p class="muted">{t('ui.execution.queued')}</p>
+    {:else if item.status !== 'running'}
+      <p class="muted">{t(item.verified ? 'ui.execution.verified_yes' : 'ui.execution.verified_no')}</p>
+    {/if}
+    {#if showBackup}
+      <p class="muted">{t('ui.proposals.backup_ready')}</p>
+    {/if}
+  </dd>
+{/snippet}
 
 <Card title={titleText} {level} {tone}>
   {#snippet actions()}
@@ -102,27 +131,39 @@
       <dt>{t('ui.proposal.prepared')}</dt>
       <dd class="prepared">{actionText(proposal.action)}</dd>
     {/if}
-    {#if execution}
-      <dt>{t('ui.proposal.result')}</dt>
+    {#if dryRun}
+      <dt>{t('ui.proposals.dry_run_title')}</dt>
       <dd class="result">
-        <p class="status">
-          <StatusBadge kind="state" value={execution.status} />
-          <span class="muted">
-            {#if execution.finished_at}
-              {t('ui.execution.finished', { when: formatDateTime(execution.finished_at, i18n.locale) ?? inlineText(execution.finished_at, 40) })}
-            {:else}
-              {t('ui.execution.started', { when: formatDateTime(execution.started_at, i18n.locale) ?? inlineText(execution.started_at, 40) })}
-            {/if}
-          </span>
-        </p>
-        {#if execution.reason}<p>{reasonText(execution.reason)}</p>{/if}
-        {#if execution.status !== 'running'}
-          <p class="muted">{t(execution.verified ? 'ui.execution.verified_yes' : 'ui.execution.verified_no')}</p>
+        <p class="muted">{t('ui.proposals.dry_run_state')}</p>
+        <p>{inlineText(dryRun.current_state, 300)}</p>
+        {#if dryRun.steps.length > 0}
+          <p class="muted">{t('ui.proposals.dry_run_steps')}</p>
+          <ol class="steps">
+            {#each dryRun.steps as step}
+              <li>{inlineText(step, 200)}</li>
+            {/each}
+          </ol>
+        {/if}
+        {#if dryRun.diff}
+          <p class="muted">{t('ui.proposals.dry_run_diff')}</p>
+          <pre class="diff"><code>{dryRun.diff}</code></pre>
         {/if}
       </dd>
+    {/if}
+    {#if execution}
+      <dt>{t('ui.proposal.result')}</dt>
+      {@render outcomeView(execution, proposal.has_backup)}
       {#if execution.output.trim() !== ''}
         <dt>{t('ui.proposal.output')}</dt>
         <dd><TextBlock text={execution.output} mono /></dd>
+      {/if}
+    {/if}
+    {#if rollback}
+      <dt>{t('ui.proposals.rollback')}</dt>
+      {@render outcomeView(rollback, false)}
+      {#if rollback.output.trim() !== ''}
+        <dt>{t('ui.proposal.output')}</dt>
+        <dd><TextBlock text={rollback.output} mono /></dd>
       {/if}
     {/if}
   </dl>
@@ -132,6 +173,9 @@
       <div class="row">
         <Button variant="primary" icon="check" onclick={onapprove} disabled={busy}>{t('ui.proposals.approve')}</Button>
         <Button variant="secondary" onclick={onreject} disabled={busy}>{t('ui.proposals.reject')}</Button>
+        {#if canDryRun}
+          <Button variant="secondary" onclick={ondryrun} disabled={busy}>{t('ui.proposals.dry_run')}</Button>
+        {/if}
       </div>
     </div>
   {/if}
@@ -144,6 +188,18 @@
       {/if}
       <div class="row">
         <Button variant="primary" icon="arrow" onclick={onrun} disabled={busy || !executionEnabled} describedby={executionEnabled ? undefined : hintId}>{t('ui.proposals.run')}</Button>
+        {#if canDryRun}
+          <Button variant="secondary" onclick={ondryrun} disabled={busy}>{t('ui.proposals.dry_run')}</Button>
+        {/if}
+      </div>
+    </div>
+  {:else if rollbackable}
+    <div class="decide">
+      {#if !executionEnabled}
+        <p id={hintId} class="muted note">{t('ui.proposals.run_off')} <code>{ENABLE_COMMAND}</code>.</p>
+      {/if}
+      <div class="row">
+        <Button variant="secondary" onclick={onrollback} disabled={busy || !executionEnabled} describedby={executionEnabled ? undefined : hintId}>{t('ui.proposals.rollback')}</Button>
       </div>
     </div>
   {/if}
@@ -202,6 +258,20 @@
     gap: var(--nv-space-2);
   }
   code {
+    overflow-wrap: anywhere;
+  }
+  .steps {
+    margin: 0;
+    padding-inline-start: var(--nv-space-4);
+    font-size: var(--nv-text-sm);
+  }
+  .diff {
+    margin: 0;
+    padding: var(--nv-space-2);
+    background: var(--nv-surface-2);
+    border-radius: var(--nv-radius-sm);
+    font-size: var(--nv-text-caption);
+    white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
   .note {

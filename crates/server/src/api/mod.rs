@@ -4,20 +4,32 @@
 //! server acts for.
 
 mod access;
+mod agents;
 pub(crate) mod conversations;
 mod data;
 mod execute;
 mod memories;
+pub(crate) mod monitors;
 mod providers;
 
 pub(crate) use access::{exchange, healthz, i18n_catalog, logout, session};
+pub(crate) use agents::{
+    agent_poll, agent_result, node_agent_token_rotate, node_logs, sites_create, sites_list,
+};
 pub(crate) use conversations::{
     conversation_messages, conversations_create, conversations_list, own_conversation,
 };
-pub(crate) use data::{findings, inventory, nodes, plan_detail, plans, transports};
-pub(crate) use execute::proposal_execute;
+pub(crate) use data::{
+    findings, inventory, nodes, plan_approve, plan_detail, plan_run, plans, transport_credentials,
+    transports,
+};
+pub(crate) use execute::{proposal_dry_run, proposal_execute, proposal_rollback};
 pub(crate) use memories::{
     memories_list, memory_approve, memory_delete, proposal_decide, proposals_list,
+};
+pub(crate) use monitors::{
+    channel_create, channel_delete, channels_list, incident_ack, incidents_list, monitor_create,
+    monitor_delete, monitors_list, telegram_link_code,
 };
 pub(crate) use providers::{provider_add, provider_remove, provider_test, providers_list};
 

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { Attachment } from 'svelte/attachments';
-  import { FOCUSABLE, trapTab } from '../lib/focus';
+  import type { Snippet } from 'svelte';
+  import { dialogFocus, dialogKey } from '../lib/focus';
   import Button from './Button.svelte';
 
   interface Props {
@@ -9,32 +9,21 @@
     confirmLabel: string;
     cancelLabel: string;
     busy?: boolean;
+    confirmDisabled?: boolean;
     /** Look of the confirming button: danger for a deletion, primary for a deliberate approval. */
     tone?: 'danger' | 'primary';
+    children?: Snippet;
     onconfirm: () => void;
     oncancel: () => void;
   }
 
-  let { title, message, confirmLabel, cancelLabel, busy = false, tone = 'danger', onconfirm, oncancel }: Props = $props();
+  let { title, message, confirmLabel, cancelLabel, busy = false, confirmDisabled = false, tone = 'danger', children, onconfirm, oncancel }: Props = $props();
 
   // Set once the person confirmed: the action usually removes the row the dialog was opened
   // from (a deleted note or provider), so the opener is no longer a place to return to.
   let confirmed = false;
 
-  // Moves the focus into the dialog (to the safe choice, cancel, first) and gives it back when
-  // the dialog goes away: to the element that opened it while that still exists, otherwise to
-  // the page heading, which is always there.
-  const manageFocus: Attachment<HTMLElement> = (dialog) => {
-    const opener = document.activeElement;
-    dialog.querySelector<HTMLElement>(FOCUSABLE)?.focus();
-    return () => {
-      if (!confirmed && opener instanceof HTMLElement && opener.isConnected) {
-        opener.focus();
-        return;
-      }
-      document.getElementById('page-title')?.focus();
-    };
-  };
+  const manageFocus = dialogFocus(() => confirmed);
 
   function accept() {
     confirmed = true;
@@ -44,16 +33,6 @@
   function cancel() {
     confirmed = false;
     oncancel();
-  }
-
-  function onkeydown(event: KeyboardEvent & { currentTarget: HTMLElement }) {
-    const dialog = event.currentTarget;
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      cancel();
-      return;
-    }
-    trapTab(event, dialog);
   }
 </script>
 
@@ -66,13 +45,14 @@
     aria-labelledby="confirm-title"
     aria-describedby="confirm-message"
     tabindex="-1"
-    {onkeydown}
+    onkeydown={(e) => dialogKey(e, cancel)}
   >
     <h2 id="confirm-title">{title}</h2>
     <p id="confirm-message">{message}</p>
+    {@render children?.()}
     <div class="row actions">
       <Button onclick={cancel} disabled={busy}>{cancelLabel}</Button>
-      <Button variant={tone} onclick={accept} {busy}>{confirmLabel}</Button>
+      <Button variant={tone} onclick={accept} disabled={confirmDisabled} {busy}>{confirmLabel}</Button>
     </div>
   </div>
 </div>

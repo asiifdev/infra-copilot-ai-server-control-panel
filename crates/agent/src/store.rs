@@ -220,6 +220,11 @@ const fn kind_from_db(kind: ItemKind) -> Kind {
         ItemKind::Process => Kind::Process,
         ItemKind::Cron => Kind::Cron,
         ItemKind::EnvRef => Kind::EnvRef,
+        ItemKind::Vhost => Kind::Vhost,
+        ItemKind::Cert => Kind::Cert,
+        ItemKind::Database => Kind::Database,
+        ItemKind::Dns => Kind::Dns,
+        ItemKind::Check => Kind::Check,
     }
 }
 

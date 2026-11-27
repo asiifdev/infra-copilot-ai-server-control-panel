@@ -22,7 +22,12 @@ fi
 # Uncommitted files: modified or new, minus ignored.
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-git ls-files -z --modified --others --exclude-standard | grep -z -v '^\.claude/worktrees/' \
-  | tar --null -T - -cf - 2>/dev/null | tar -xf - -C "$tmp"
-gitleaks detect --source "$tmp" --no-git --redact --no-banner
+mkdir -p "$tmp/files"
+git ls-files -z --modified --others --exclude-standard \
+  | { grep -z -v '^\.claude/worktrees/' || [ $? -eq 1 ]; } \
+  > "$tmp/list"
+if [ -s "$tmp/list" ]; then
+  tar --null -T "$tmp/list" -cf - 2>/dev/null | tar -xf - -C "$tmp/files"
+  gitleaks detect --source "$tmp/files" --no-git --redact --no-banner
+fi
 echo "No secrets found in unpushed commits or uncommitted files."

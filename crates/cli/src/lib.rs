@@ -488,6 +488,11 @@ fn kind_key(kind: Kind) -> MessageKey {
         Kind::Process => KIND_PROCESS,
         Kind::Cron => KIND_CRON,
         Kind::EnvRef => KIND_ENV_REF,
+        Kind::Vhost => MessageKey::new("inventory.kind.vhost"),
+        Kind::Cert => MessageKey::new("inventory.kind.cert"),
+        Kind::Database => MessageKey::new("inventory.kind.database"),
+        Kind::Dns => MessageKey::new("inventory.kind.dns"),
+        Kind::Check => MessageKey::new("inventory.kind.check"),
     }
 }
 

@@ -1,11 +1,12 @@
 <script lang="ts">
   import { api } from '../lib/api';
+  import { toastError } from '../lib/errors';
   import { describeData, formatDateTime } from '../lib/format';
   import { i18n, t } from '../lib/i18n.svelte';
   import { hrefFor } from '../lib/router.svelte';
   import { useResource } from '../lib/resource.svelte';
   import { inlineText } from '../lib/text';
-  import type { InventoryItem } from '../lib/types';
+  import type { InventoryItem, NodeLogsView } from '../lib/types';
   import AsyncView from '../components/AsyncView.svelte';
   import Button from '../components/Button.svelte';
   import Card from '../components/Card.svelte';
@@ -14,6 +15,7 @@
   import Select from '../components/Select.svelte';
   import StatusBadge from '../components/StatusBadge.svelte';
   import TextBlock from '../components/TextBlock.svelte';
+  import TextField from '../components/TextField.svelte';
 
   interface Props {
     name: string;
@@ -22,9 +24,23 @@
   let { name }: Props = $props();
 
   let kind = $state('');
-  const ITEM_LIMIT = 500;
+  let logService = $state('');
+  let logBusy = $state(false);
+  let logs = $state.raw<NodeLogsView | null>(null);
 
-  const inventory = useResource((signal) => api.inventory(name, kind || undefined, ITEM_LIMIT, signal));
+  async function loadLogs(event: SubmitEvent) {
+    event.preventDefault();
+    logBusy = true;
+    try {
+      logs = await api.nodeLogs(name, logService.trim());
+    } catch (cause) {
+      toastError(cause);
+    } finally {
+      logBusy = false;
+    }
+  }
+
+  const inventory = useResource((signal) => api.inventory(name, kind || undefined, 500, signal));
 
   const kindOptions = $derived([
     { value: '', label: t('ui.node.kind_all') },
@@ -87,4 +103,14 @@
       </DataTable>
     {/snippet}
   </AsyncView>
+
+  <Card title={t('ui.logs.title')}>
+    <form class="row" onsubmit={loadLogs}>
+      <TextField id="node-log-svc" label={t('ui.logs.title')} bind:value={logService} required disabled={logBusy} />
+      <Button type="submit" variant="secondary" busy={logBusy}>{t('ui.logs.title')}</Button>
+    </form>
+    {#if logs}
+      <pre>{logs.content}</pre>
+    {/if}
+  </Card>
 </div>

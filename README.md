@@ -25,21 +25,20 @@ English | [Bahasa Indonesia](README.id.md)
 
 **Nodivara is an open-source server control panel, aimed at the same job as aaPanel and cPanel, with a built-in AI agent that proposes changes and waits for human approval.** It is written in Rust with a Svelte interface, targets Linux servers and a desktop app, and is pre-alpha: nothing is installable yet.
 
-Last updated: 2026-11-24.
+Last updated: 2026-11-27.
 
 ## What works today
 
-> **Honest status.** There is no installable release and no server-management panel yet (no sites, PHP versions or databases). What exists is a read-only inventory and a parity check you can run from source, a local command line (`infra`) that stores inventories, keeps migration plan drafts and transport settings, and talks to an AI provider you configure, and a local web UI (`infra serve`) over the same data: it listens on this machine only, for one user, with no TLS and no real login. The uptime monitor is a library that nothing runs yet. No approval or execution path exists: no code can change a server, and the AI assistant has never been run against a live provider (the UI's "Test connection" button and an opt-in test exist, and have only run against a local fake).
+> **Honest status.** There is no installable release and no server-management panel yet (no sites, PHP versions or databases). What exists is a read-only inventory and a parity check you can run from source, a local command line (`infra`) that stores inventories, manages migration plans (`draft`, `approve`, `run`) and transport settings (with write-only credential updates), and talks to an AI provider you configure, plus a local web UI (`infra serve`) over the same data: it listens on this machine only, for one user, with no TLS and no real login. Approved proposals (tiers 2–4, with dry-run, `sha256` backups, typed confirmation for tier 4, and one-time rollback) and migration plans can run locally when `infra serve --enable-execution` is passed (execution is **off** by default). Uptime monitoring, quiet-hours alerting, and the interactive Telegram bot (tiers 0–2 only) run in `infra serve`; remote agents/SSH and a live run against a real AI provider are not built or run yet.
 
-| Works now (from source) | Built as libraries, not running yet | Planned |
+| Works now (from source) | Built as libraries, not wired or still limited | Planned |
 |---|---|---|
-| Collect a Linux inventory, read-only: ports, processes, cron, PM2, systemd, Docker | Uptime checks (HTTP, TCP, TLS expiry) with SSRF protection | The approval workflow for AI proposals |
-| Compare two inventories with **7 parity rules** and read the report in English or Indonesian | Incident engine and Telegram alerts | Remote access with TLS and a real login, multi-user; the desktop app |
-| Exit code 1 when a critical gap is found, so it fits a migration checklist | Database schema (version 10) with tenant isolation and a hash-chained audit log | Git deploys, DNS and Cloudflare Tunnel |
-| Store inventories and comparisons for a node in a local SQLite database (`--save`), and search them | AI assistant turn loop with 14 tools (tier 0 reads, plus tier 1 tools that only write pending proposals, pending memories and draft plans); `infra ask` runs it; OpenAI-compatible client (never run against a live provider) | Approval and execution of proposals and plans (M4) |
-| Draft a migration plan from stored inventories and read its gates (`infra plan`); the plan is only a draft | Encrypted secret storage (AES-256-GCM) for provider keys and transport credentials | Running rclone, rsync, scp or ssh for real (the whole run path is covered only by test doubles) |
-| Save transport settings, with credentials from stdin only, and preview the commands as a dry run (`infra transport check`) | Organization memory: notes the assistant may propose, active only after a person approves them | An AI model checked against a live provider (Muse, OpenAI, Ollama) |
-| Run a **local web UI** (`infra serve`): overview, nodes and their inventory, findings, plans and gates (read-only), transports, assistant chat with streaming answers, memory approval, provider settings, English and Indonesian, light and dark | | Server-panel features: sites, PHP versions, databases (M5) |
+| Collect a Linux inventory, read-only: ports, processes, cron, PM2, systemd, Docker | Shared-infrastructure DNS + `is_internal_ip` enforcement exists in `transport::ProcessRunner`, awaiting Cloud/remote runner | Remote access with TLS, real multi-user login, and two-approver enforcement in Cloud |
+| Compare two inventories with **7 parity rules** and read the report in English or Indonesian | OpenAI-compatible AI client (never run against a live provider; tested against a local fake) | Remote node execution via outbound agent or SSH (M4+) |
+| Exit code 1 when a critical gap is found, so it fits a migration checklist | Database schema (version 14) with tenant isolation and a hash-chained audit log | Git deploys, DNS and Cloudflare Tunnel |
+| Store inventories and comparisons for a node in a local SQLite database (`--save`), and search them | | Desktop app (Tauri v2) |
+| Draft, approve, and run migration plans with gate checks (`infra plan`) and manage transports with write-only credential updates (`infra transport`) | | An AI model checked against a live provider (Muse, OpenAI, Ollama) |
+| Approve proposals, run local actions (tiers 2–4 with `--enable-execution`, dry-run, `sha256` backup, typed confirmation, rollback), and run uptime monitors + quiet-hours alerts + Telegram bot (tiers 0–2) | | Server-panel features: sites, PHP versions, databases (M5) |
 
 ### Try it
 
@@ -171,7 +170,7 @@ A tool that can change servers has to earn trust with rules you can check. These
 | The local web server is not reachable from the network or from another website | loopback bind only (other addresses are refused); every request must carry the exact `Host`; changes need a same-origin `Origin` and an `X-Nodivara` header; a one-time sign-in token in the URL fragment, an `HttpOnly` `SameSite=Strict` session cookie; strict security headers including a Content-Security-Policy; no endpoint returns a secret, and provider keys are only accepted and sealed ([`server`](crates/server), [0029](docs/decisions/0029-server-lokal-ui-web-dan-api.md), [0030](docs/decisions/0030-server-lokal-crate-server-dan-bootstrap.md)) | implemented, tested against a real socket; no TLS and no real login, so loopback only |
 | Streamed assistant text is redacted like the stored text | text is released only at cuts where the redactor gives the same result as for the whole answer, with a 64 KiB hold cap ([`stream.rs`](crates/server/src/stream.rs)); the core redactor also hides `password = x` with spaces and `Bearer` tokens after extra spaces or a tab | implemented, tested |
 | The web UI cannot be turned into a script injector | no `{@html}`, `innerHTML`, `eval` or inline script and style; server, model and tool text goes through one text-only component ([0031](docs/decisions/0031-ui-web-svelte-tanpa-kerangka-tambahan.md)) | implemented, tested (214 tests, axe-core pages in two languages and themes) |
-| Human approval for anything that changes a server | proposal flow | **planned** (M4): proposals are only written, never approved or run |
+| Human approval for anything that changes a server | proposal flow (tiers 2–4 local execution behind `--enable-execution`, dry-run, `sha256` backup, typed confirmation for tier 4, one-time rollback; [0034](docs/decisions/0034-keputusan-usulan-oleh-manusia.md), [0037](docs/decisions/0037-eksekusi-aksi-yang-disetujui.md), [0038](docs/decisions/0038-eksekusi-tingkat-3-4-dan-rollback.md)) | implemented for local node; remote/agent execution and two-approver Cloud mode planned |
 
 Found a vulnerability? Please report it privately: see [SECURITY.md](SECURITY.md).
 
@@ -180,10 +179,10 @@ Found a vulnerability? Please report it privately: see [SECURITY.md](SECURITY.md
 | Stage | What | Status |
 |---|---|---|
 | M0 Foundation | domain types, i18n, database schema, size and speed budget | done |
-| M1 Inventory and parity, read-only | collectors, parity rules, CLI, uptime monitor and Telegram alerts | in progress: collectors, rules and CLI done; monitor libraries done, not wired in |
-| M2 Read-only AI assistant | OpenAI-compatible provider, chat, memory, tools of tier 0-1 | mostly done as libraries, a command line and a local web UI (`infra serve`, ADR 0029-0031): tool layer, vault, provider, turn loop, memory, FTS5 search, `infra ask`, chat with streaming answers; remaining: a run against a live provider, a Telegram interface, remote access with TLS, multi-user login |
-| M3 Migration planner | wizard, backup and transport, written plan | mostly done as libraries and a command line: plan model (M3-a), transport specs and wizard (M3-b), AI planning tools (M3-c), `infra plan` and `infra transport` (M3-d), plus a read-only view of plans and transports in the web UI; remaining: running transports for real, a command to update transport credentials, an endpoint policy for shared infrastructure (before managed execution), and every approval and execution step (M4) |
-| M4 Execution with approval | tiers 2-4, dry-run, rollback, verification, audit | planned |
+| M1 Inventory and parity, read-only | collectors, parity rules, CLI, uptime monitor and Telegram alerts | done for core loop: collectors, rules, CLI, uptime monitor + quiet-hours alerting (`watch_loop`) and interactive Telegram bot (tiers 0–2, ADR 0040); remaining: extra collectors/rules |
+| M2 Read-only AI assistant | OpenAI-compatible provider, chat, memory, tools of tier 0-1 | mostly done as libraries, a command line and a local web UI (`infra serve`, ADR 0029-0031): tool layer, vault, provider, turn loop, memory, FTS5 search, `infra ask`, chat with streaming answers, Telegram bot interface; remaining: a run against a live provider, remote access with TLS, multi-user login |
+| M3 Migration planner | wizard, backup and transport, written plan | done for local/library scope: plan model (M3-a), transport specs and wizard (M3-b), AI planning tools (M3-c), `infra plan` and `infra transport` (M3-d), write-only credential updates and DNS + `is_internal_ip` runner check (ADR 0039); remaining: running against real remote hosts |
+| M4 Execution with approval | tiers 2-4, dry-run, rollback, verification, audit | in progress: local execution for tiers 2–4 (`--enable-execution`), dry-run, `sha256` backup, typed confirmation, one-time rollback, plan approve/run (ADR 0037–0039); remaining: remote executor (SSH/outbound agent) and two-approver Cloud mode |
 | M5 Server panel | sites, PHP versions, databases | planned |
 | M6 Commercial | licenses, hosted cloud, billing | planned |
 | M7 Open release | cleanup, documentation, final license and name check | planned |
@@ -228,7 +227,7 @@ crates/transport    transport specs, command plans for rclone/rsync/scp/ssh_pipe
 crates/cli          the `infra` command line: collect, compare, init, node, plan, transport, provider, ask, memory, serve (local single-user mode)
 crates/bootstrap    setup helpers shared by the CLI and the server: database location, one local organization, vault from the environment, providers with sealed keys
 crates/server       local web server (axum, tokio, rust-embed): JSON API and the embedded web/dist, loopback only, one-time sign-in token, strict headers; started by `infra serve`
-crates/db           SQLite schema (version 10, migrations 0001-0010), tenant-scoped queries, FTS5 search, hash-chained audit log
+crates/db           SQLite schema (version 14, migrations 0001-0014), tenant-scoped queries, FTS5 search, hash-chained audit log
 web/                the web UI: Svelte 5 + Vite + TypeScript, no SvelteKit; built into web/dist and embedded by crates/server
 brand/              Nodivara logo files (optimized); colours and usage in docs/brand.md
 docs/design.md      technical design: schema, inventory format, agent protocol, approval flow
@@ -251,7 +250,7 @@ cargo fmt --all --check
 ./scripts/build-web.sh      # web UI: npm ci, type check, tests, production build (needs Node 24 or newer)
 ```
 
-Last run: 850 Rust tests pass and 1 is ignored (the live-provider test) in `cargo test --workspace`, plus 282 tests in `web/`. The production bundle is about 156 KB of JavaScript (49 KB gzip) and 40 KB of CSS (7 KB gzip). Build `web/` before `cargo build -p cli` if you want the UI inside the binary.
+Last run: 890 Rust tests pass and 1 is ignored (the live-provider test) in `cargo test --workspace`, plus 293 tests in `web/`. Build `web/` before `cargo build -p cli` if you want the UI inside the binary.
 
 ## Documentation
 

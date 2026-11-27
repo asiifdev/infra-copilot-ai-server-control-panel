@@ -450,3 +450,222 @@ pub fn set_plan_step_status(
     )?;
     if n == 0 { Err(Error::NotFound) } else { Ok(()) }
 }
+
+/// Approves a `draft` or `reviewed` plan (moving `draft -> reviewed -> approved` when needed) and
+/// appends an audit entry, in one transaction.
+///
+/// # Errors
+/// [`Error::NotFound`] if the plan is not in this org; [`Error::Invalid`] if it has no steps or
+/// is already `approved`, `running`, `paused`, `done`, or `aborted`.
+pub fn approve_plan(
+    conn: &Connection,
+    org: &OrgId,
+    id: &PlanId,
+    actor_kind: crate::audit::ActorKind,
+    actor_id: Option<&str>,
+) -> Result<PlanStatus> {
+    let tx = conn.unchecked_transaction()?;
+    let current: String = tx
+        .query_row(
+            "SELECT status FROM migration_plans WHERE org_id = ?1 AND id = ?2",
+            params![org.as_str(), id.as_str()],
+            |row| row.get(0),
+        )
+        .optional()?
+        .ok_or(Error::NotFound)?;
+    let status = PlanStatus::parse(&current)?;
+    if !matches!(status, PlanStatus::Draft | PlanStatus::Reviewed) {
+        return Err(Error::Invalid("plan cannot be approved"));
+    }
+    let step_count: i64 = tx.query_row(
+        "SELECT COUNT(*) FROM migration_steps WHERE org_id = ?1 AND plan_id = ?2",
+        params![org.as_str(), id.as_str()],
+        |row| row.get(0),
+    )?;
+    if step_count <= 0 {
+        return Err(Error::Invalid("plan has no steps"));
+    }
+    if status == PlanStatus::Draft {
+        tx.execute(
+            "UPDATE migration_plans SET status = 'reviewed' WHERE org_id = ?1 AND id = ?2",
+            params![org.as_str(), id.as_str()],
+        )?;
+    }
+    tx.execute(
+        "UPDATE migration_plans SET status = 'approved' WHERE org_id = ?1 AND id = ?2",
+        params![org.as_str(), id.as_str()],
+    )?;
+    let subject = format!(
+        r#"{{"plan":"{}","from":"{}","to":"approved"}}"#,
+        id.as_str(),
+        status.as_str()
+    );
+    crate::audit::append_audit_in_tx(
+        &tx,
+        org,
+        &crate::audit::NewAuditEntry {
+            actor_kind,
+            actor_id,
+            action: "plan.approve",
+            node_id: None,
+            subject_json: &subject,
+            result: crate::audit::AuditOutcome::Success,
+        },
+    )?;
+    tx.commit()?;
+    Ok(PlanStatus::Approved)
+}
+
+/// Atomically claims an `approved` (or `paused`) plan for execution (`running`) and audits the
+/// start.
+///
+/// # Errors
+/// [`Error::NotFound`] if the plan is not in this org; [`Error::Invalid`] if it is not `approved`
+/// or `paused`.
+pub fn begin_plan_run(
+    conn: &Connection,
+    org: &OrgId,
+    id: &PlanId,
+    actor_kind: crate::audit::ActorKind,
+    actor_id: Option<&str>,
+) -> Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    let current: String = tx
+        .query_row(
+            "SELECT status FROM migration_plans WHERE org_id = ?1 AND id = ?2",
+            params![org.as_str(), id.as_str()],
+            |row| row.get(0),
+        )
+        .optional()?
+        .ok_or(Error::NotFound)?;
+    let status = PlanStatus::parse(&current)?;
+    if !matches!(status, PlanStatus::Approved | PlanStatus::Paused) {
+        return Err(Error::Invalid("plan is not approved"));
+    }
+    let n = tx.execute(
+        "UPDATE migration_plans SET status = 'running' \
+         WHERE org_id = ?1 AND id = ?2 AND status IN ('approved', 'paused')",
+        params![org.as_str(), id.as_str()],
+    )?;
+    if n == 0 {
+        return Err(Error::Invalid("plan is not approved"));
+    }
+    let subject = format!(
+        r#"{{"plan":"{}","from":"{}"}}"#,
+        id.as_str(),
+        status.as_str()
+    );
+    crate::audit::append_audit_in_tx(
+        &tx,
+        org,
+        &crate::audit::NewAuditEntry {
+            actor_kind,
+            actor_id,
+            action: "plan.run.start",
+            node_id: None,
+            subject_json: &subject,
+            result: crate::audit::AuditOutcome::Success,
+        },
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// Finishes a `running` plan run (`done`, `paused`, or `aborted`) and audits it.
+///
+/// # Errors
+/// [`Error::NotFound`] if missing; [`Error::Invalid`] if not `running` or `next` is invalid.
+pub fn finish_plan_run(
+    conn: &Connection,
+    org: &OrgId,
+    id: &PlanId,
+    next: PlanStatus,
+    actor_kind: crate::audit::ActorKind,
+    actor_id: Option<&str>,
+) -> Result<()> {
+    if !matches!(
+        next,
+        PlanStatus::Done | PlanStatus::Paused | PlanStatus::Aborted
+    ) {
+        return Err(Error::Invalid("plan run finish status"));
+    }
+    let tx = conn.unchecked_transaction()?;
+    let n = tx.execute(
+        "UPDATE migration_plans SET status = ?3 \
+         WHERE org_id = ?1 AND id = ?2 AND status = 'running'",
+        params![org.as_str(), id.as_str(), next.as_str()],
+    )?;
+    if n == 0 {
+        return Err(Error::Invalid("plan is not running"));
+    }
+    let subject = format!(
+        r#"{{"plan":"{}","status":"{}"}}"#,
+        id.as_str(),
+        next.as_str()
+    );
+    crate::audit::append_audit_in_tx(
+        &tx,
+        org,
+        &crate::audit::NewAuditEntry {
+            actor_kind,
+            actor_id,
+            action: "plan.run.finish",
+            node_id: None,
+            subject_json: &subject,
+            result: if next == PlanStatus::Done {
+                crate::audit::AuditOutcome::Success
+            } else {
+                crate::audit::AuditOutcome::Failure
+            },
+        },
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// Updates one `migration_steps` row and appends an audit entry, in one transaction.
+///
+/// # Errors
+/// [`Error::NotFound`] if missing; constraint violation if the `decommission_source` trigger
+/// refuses the transition.
+pub fn transition_plan_step(
+    conn: &Connection,
+    org: &OrgId,
+    plan: &PlanId,
+    seq: u32,
+    status: PlanStepStatus,
+    actor_kind: crate::audit::ActorKind,
+    actor_id: Option<&str>,
+) -> Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    let n = tx.execute(
+        "UPDATE migration_steps SET status = ?4 WHERE org_id = ?1 AND plan_id = ?2 AND seq = ?3",
+        params![org.as_str(), plan.as_str(), seq, status.as_str()],
+    )?;
+    if n == 0 {
+        return Err(Error::NotFound);
+    }
+    let subject = format!(
+        r#"{{"plan":"{}","seq":{seq},"status":"{}"}}"#,
+        plan.as_str(),
+        status.as_str()
+    );
+    crate::audit::append_audit_in_tx(
+        &tx,
+        org,
+        &crate::audit::NewAuditEntry {
+            actor_kind,
+            actor_id,
+            action: "plan.step.update",
+            node_id: None,
+            subject_json: &subject,
+            result: if status == PlanStepStatus::Failed {
+                crate::audit::AuditOutcome::Failure
+            } else {
+                crate::audit::AuditOutcome::Success
+            },
+        },
+    )?;
+    tx.commit()?;
+    Ok(())
+}

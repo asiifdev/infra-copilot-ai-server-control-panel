@@ -3,11 +3,14 @@
 // so the tests can prove the UI renders it inert.
 
 import type {
+  ChannelView,
   ChatMessage,
   Conversation,
   Finding,
+  IncidentView,
   InventoryItem,
   MemoryNote,
+  MonitorView,
   NodeSummary,
   PlanDetail,
   PlanStep,
@@ -54,6 +57,9 @@ export interface Fixtures {
   proposals: ProposalView[];
   conversations: Conversation[];
   messages: Record<string, ChatMessage[]>;
+  monitors: MonitorView[];
+  incidents: IncidentView[];
+  channels: ChannelView[];
 }
 
 export function buildFixtures(options: { hostile?: boolean } = {}): Fixtures {
@@ -135,6 +141,7 @@ export function buildFixtures(options: { hostile?: boolean } = {}): Fixtures {
     seq,
     kind,
     depends_on,
+    status: 'pending',
     ...extra,
   });
   const steps: PlanStep[] = [
@@ -151,6 +158,7 @@ export function buildFixtures(options: { hostile?: boolean } = {}): Fixtures {
   ];
   const plans: PlanDetail[] = [
     {
+      id: id(400),
       name: 'move-alpha',
       status: 'draft',
       source_node: 'node-alpha',
@@ -174,6 +182,7 @@ export function buildFixtures(options: { hostile?: boolean } = {}): Fixtures {
       },
     },
     {
+      id: id(401),
       name: 'move-beta',
       status: 'draft',
       source_node: 'node-beta',
@@ -196,9 +205,9 @@ export function buildFixtures(options: { hostile?: boolean } = {}): Fixtures {
   ];
 
   const transports: TransportSummary[] = [
-    { name: 'drive-main', kind: 'rclone', verified_at: '2026-11-18T09:00:00Z', last_check: { ok: true } },
-    { name: 'sftp-spare', kind: 'sftp', verified_at: null, last_check: { ok: false } },
-    { name: 'rsync-new', kind: 'rsync', verified_at: null, last_check: null },
+    { id: id(500), name: 'drive-main', kind: 'rclone', verified_at: '2026-11-18T09:00:00Z', last_check: { ok: true } },
+    { id: id(501), name: 'sftp-spare', kind: 'sftp', verified_at: null, last_check: { ok: false } },
+    { id: id(502), name: 'rsync-new', kind: 'rsync', verified_at: null, last_check: null },
   ];
 
   const providers: ProviderView[] = [
@@ -247,10 +256,14 @@ export function buildFixtures(options: { hostile?: boolean } = {}): Fixtures {
     created_at: '2026-11-22T07:00:00.000Z',
     // Pending proposals expire two days from now (the clock of the test run), the others are history.
     expires_at: new Date(Date.now() + (status === 'pending' || status === 'approved' ? 2 * 86_400_000 : -86_400_000)).toISOString(),
+    dry_run: null,
+    approval: null,
+    has_backup: false,
+    rollback: null,
     ...run,
   });
   const restart = (service: string, execution: ProposalView['execution'] = null): Pick<ProposalView, 'action' | 'node' | 'execution'> => ({
-    action: { kind: 'restart_service', manager: 'systemd', service },
+    action: { kind: 'restart_service', manager: 'systemd', service, target_label: service },
     node: 'this-mac',
     execution,
   });
@@ -294,5 +307,15 @@ export function buildFixtures(options: { hostile?: boolean } = {}): Fixtures {
     [id(301)]: [],
   };
 
-  return { nodes, inventory, findings, plans, transports, providers, memories, proposals, conversations, messages };
+  const monitors: MonitorView[] = [
+    { id: id(600), name: 'web-health', kind: 'http', target: 'https://example.test/health', current_status: 'ok', last_checked_at: '2026-11-22T12:00:00Z' },
+  ];
+  const incidents: IncidentView[] = [
+    { id: id(700), monitor_id: id(600), started_at: '2026-11-22T11:50:00Z', resolved_at: null, cause: 'HTTP 503', severity: 'critical', acknowledged_at: null },
+  ];
+  const channels: ChannelView[] = [
+    { id: id(800), kind: 'telegram', name: 'ops-bot', has_secret: true, is_active: true },
+  ];
+
+  return { nodes, inventory, findings, plans, transports, providers, memories, proposals, conversations, messages, monitors, incidents, channels };
 }

@@ -101,6 +101,11 @@ const fn kind_to_db(kind: Kind) -> ItemKind {
         Kind::Process => ItemKind::Process,
         Kind::Cron => ItemKind::Cron,
         Kind::EnvRef => ItemKind::EnvRef,
+        Kind::Vhost => ItemKind::Vhost,
+        Kind::Cert => ItemKind::Cert,
+        Kind::Database => ItemKind::Database,
+        Kind::Dns => ItemKind::Dns,
+        Kind::Check => ItemKind::Check,
     }
 }
 

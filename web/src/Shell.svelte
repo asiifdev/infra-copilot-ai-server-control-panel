@@ -11,6 +11,7 @@
   import Assistant from './pages/Assistant.svelte';
   import Findings from './pages/Findings.svelte';
   import Memory from './pages/Memory.svelte';
+  import Monitors from './pages/Monitors.svelte';
   import NodeDetail from './pages/NodeDetail.svelte';
   import Nodes from './pages/Nodes.svelte';
   import Overview from './pages/Overview.svelte';
@@ -128,6 +129,8 @@
             {#key router.route.node}<NodeDetail name={router.route.node} />{/key}
           {:else if router.route.name === 'findings'}
             <Findings />
+          {:else if router.route.name === 'monitors'}
+            <Monitors />
           {:else if router.route.name === 'assistant'}
             <Assistant conversation={router.route.conversation} />
           {:else if router.route.name === 'proposals'}

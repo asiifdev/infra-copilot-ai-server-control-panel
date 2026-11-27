@@ -1,11 +1,9 @@
 // Starting a conversation, shared by the Assistant page and the command palette. A revision counter
 // lets the conversation list on the Assistant page reload when one is made from elsewhere.
 
-import { api, ApiError } from './api';
-import { errorKey } from './errors';
-import { t } from './i18n.svelte';
+import { api } from './api';
+import { toastError } from './errors';
 import { router } from './router.svelte';
-import { toasts } from './toast.svelte';
 
 class ConversationEvents {
   revision = $state(0);
@@ -21,7 +19,7 @@ export async function startConversation(): Promise<boolean> {
     router.go({ name: 'assistant', conversation: String(created.id) });
     return true;
   } catch (cause) {
-    toasts.push('error', t(errorKey(cause instanceof ApiError ? cause.code : 'internal')));
+    toastError(cause);
     return false;
   }
 }

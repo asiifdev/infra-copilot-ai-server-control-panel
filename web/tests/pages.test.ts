@@ -1,8 +1,11 @@
 import { flushSync } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Assistant from '../src/pages/Assistant.svelte';
+import Monitors from '../src/pages/Monitors.svelte';
+import NodeDetail from '../src/pages/NodeDetail.svelte';
 import PlanDetail from '../src/pages/PlanDetail.svelte';
 import Settings from '../src/pages/Settings.svelte';
+import Transports from '../src/pages/Transports.svelte';
 import { i18n } from '../src/lib/i18n.svelte';
 import { toasts } from '../src/lib/toast.svelte';
 import type { Mock } from '../mock/server';
@@ -418,7 +421,7 @@ describe('Plan detail page', () => {
   it('degrades unknown step kinds, sides and gate keys to readable text', async () => {
     const mock = installMock();
     const plan = mock.state.plans[1]!;
-    plan.steps = [{ seq: 0, kind: 'teleport', depends_on: [], side: 'moon' }, { seq: 5, kind: 'backup', depends_on: [0, 9] }];
+    plan.steps = [{ seq: 0, kind: 'teleport', depends_on: [], status: 'pending', side: 'moon' }, { seq: 5, kind: 'backup', depends_on: [0, 9], status: 'pending' }];
     plan.gates = { future_gate: true, other_number: 3, nested: { a: 1 }, open_critical: 'oops' };
     await readyApp(mock);
     const root = render(PlanDetail, { name: 'move-beta' });
@@ -440,5 +443,115 @@ describe('Plan detail page', () => {
     await eventually(() => expect(root.querySelector('ol.timeline')).not.toBeNull());
     expect(root.querySelector('script, img, svg:not([data-icon]), iframe, a[href^="javascript"]')).toBeNull();
     expect((window as unknown as { __pwned?: unknown }).__pwned).toBeUndefined();
+  });
+
+  it('approves a draft plan, runs it when execution is enabled, and shows step statuses', async () => {
+    const mock = installMock({ executionEnabled: true });
+    await readyApp(mock);
+    const root = render(PlanDetail, { name: 'move-alpha' });
+    await eventually(() => expect(root.querySelector('ol.timeline')).not.toBeNull());
+    expect(root.querySelector('.step-title')?.textContent).toContain('Pending');
+
+    button(root, 'Approve plan').click();
+    flushSync();
+    const approveDialog = document.querySelector('[role="alertdialog"]') as HTMLElement;
+    expect(approveDialog.textContent).toContain('Approve this migration plan?');
+    (byText(approveDialog, 'button', 'Approve plan') as HTMLButtonElement).click();
+    await eventually(() => expect(toasts.items.some((x) => x.kind === 'success' && x.text === 'Plan approved.')).toBe(true));
+    await eventually(() => expect(button(root, 'Run plan')).toBeDefined());
+
+    button(root, 'Run plan').click();
+    flushSync();
+    const runDialog = document.querySelector('[role="alertdialog"]') as HTMLElement;
+    expect(runDialog.textContent).toContain('Run this approved migration plan now?');
+    (byText(runDialog, 'button', 'Run plan') as HTMLButtonElement).click();
+    await eventually(() => expect(toasts.items.some((x) => x.kind === 'success' && x.text === 'Plan finished.')).toBe(true));
+    await eventually(() => expect(root.querySelector('.step-title')?.textContent).toContain('Succeeded'));
+  });
+
+  it('shows gate_blocked_toast when plan_gate_blocked occurs', async () => {
+    const mock = installMock({ executionEnabled: true, executionFails: true });
+    mock.state.plans[0]!.status = 'approved';
+    await readyApp(mock);
+    const root = render(PlanDetail, { name: 'move-alpha' });
+    await eventually(() => expect(root.querySelector('ol.timeline')).not.toBeNull());
+    button(root, 'Run plan').click();
+    flushSync();
+    const runDialog = document.querySelector('[role="alertdialog"]') as HTMLElement;
+    (byText(runDialog, 'button', 'Run plan') as HTMLButtonElement).click();
+    await eventually(() => expect(toasts.items.some((x) => x.kind === 'error' && x.text.includes('safety gate'))).toBe(true));
+  });
+});
+
+describe('Transports page', () => {
+  it('updates transport credentials via write-only JSON input and clears input after submit', async () => {
+    const mock = installMock();
+    await readyApp(mock);
+    const root = render(Transports);
+    await eventually(() => expect(root.textContent).toContain('drive-main'));
+
+    const updateBtn = [...root.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Update credentials') as HTMLButtonElement;
+    updateBtn.click();
+    flushSync();
+    const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dialog).not.toBeNull();
+    const textarea = dialog.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = '{"token":"secret-val"}';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+
+    const submitBtn = [...dialog.querySelectorAll('button')].find((b) => b.getAttribute('type') === 'submit') as HTMLButtonElement;
+    submitBtn.click();
+    flushSync();
+    expect(textarea.value).toBe('');
+    await eventually(() => expect(toasts.items.some((x) => x.kind === 'success' && x.text.includes('Credentials updated'))).toBe(true));
+    expect(mock.state.requests.some((r) => r.method === 'POST' && r.path.endsWith('/credentials'))).toBe(true);
+  });
+});
+
+describe('Monitors page', () => {
+  it('lists monitors and incidents, adds/deletes a monitor, and acknowledges an incident', async () => {
+    const mock = installMock();
+    await readyApp(mock);
+    const root = render(Monitors);
+    await eventually(() => expect(root.textContent).toContain('web-health'));
+    expect(root.textContent).toContain('HTTP 503');
+
+    type(field(root, 'mon-name'), 'api-tcp');
+    type(field(root, 'mon-target'), '127.0.0.1:8080');
+    button(root, 'Add monitor').click();
+    await eventually(() => expect(root.textContent).toContain('api-tcp'));
+
+    button(root, 'Acknowledge').click();
+    await eventually(() => expect(mock.state.requests.some((r) => r.method === 'POST' && r.path.endsWith('/ack'))).toBe(true));
+  });
+});
+
+describe('Channels and Telegram linking in Settings', () => {
+  it('lists channels, adds a channel, and generates a Telegram link code', async () => {
+    const mock = installMock();
+    await readyApp(mock);
+    const root = render(Settings);
+    await eventually(() => expect(root.textContent).toContain('ops-bot'));
+
+    type(field(root, 'ch-name'), 'alerts-tg');
+    type(field(root, 'ch-token'), '123:abc');
+    button(root, 'Add channel').click();
+    await eventually(() => expect(root.textContent).toContain('alerts-tg'));
+
+    button(root, 'Link Telegram').click();
+    await eventually(() => expect(root.textContent).toContain('/link ABCD1234EFGH'));
+  });
+});
+
+describe('NodeDetail service logs', () => {
+  it('loads bounded service logs for a node', async () => {
+    const mock = installMock();
+    await readyApp(mock);
+    const root = render(NodeDetail, { name: 'node-alpha' });
+    await eventually(() => expect(root.querySelector('#node-log-svc')).not.toBeNull());
+    type(field(root, 'node-log-svc'), 'nginx.service');
+    button(root, 'Service logs').click();
+    await eventually(() => expect(root.querySelector('pre')?.textContent).toContain('line 1 nginx.service'));
   });
 });

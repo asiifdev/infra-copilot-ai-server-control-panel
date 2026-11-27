@@ -143,10 +143,14 @@ pub(crate) async fn proposals_list(
                         "created_at": p.created_at,
                         "expires_at": p.expires_at,
                         "action": super::execute::action_view(p),
+                        "dry_run": super::execute::dry_run_view(p),
+                        "approval": super::execute::approval_view(conn, app, p),
+                        "has_backup": super::execute::has_backup_view(conn, app, p),
                         "node": p.node_id.as_ref().and_then(|n| {
                             db::get_node(conn, &app.scope.org, n).ok().map(|n| clean_text(&n.name))
                         }),
                         "execution": super::execute::execution_view(conn, app, p),
+                        "rollback": super::execute::rollback_view(conn, app, p),
                     })
                 })
                 .collect(),
@@ -156,16 +160,20 @@ pub(crate) async fn proposals_list(
     Ok(json_ok(&body))
 }
 
-/// `POST /api/proposals/{id}/decision {"decision": "approve" | "reject"}`: a person decides a
-/// pending proposal. Approving does not run anything. A proposal someone already decided answers
-/// `409 proposal_decided`; an expired one `409 proposal_expired`.
+/// `POST /api/proposals/{id}/decision {"decision": "approve" | "reject", "typed_confirmation"?: string, "comment"?: string}`:
+/// a person decides a pending proposal. Tier 4 approvals require `typed_confirmation` matching
+/// `action.target_label()`. A proposal someone already decided answers `409 proposal_decided`; an
+/// expired one `409 proposal_expired`.
 pub(crate) async fn proposal_decide(
     State(app): State<Arc<App>>,
     Path(id): Path<String>,
     body: Bytes,
 ) -> Reply {
     let map = json_object(&body, false).ok_or(INVALID_INPUT)?;
-    if map.len() != 1 {
+    if map
+        .keys()
+        .any(|k| !matches!(k.as_str(), "decision" | "typed_confirmation" | "comment"))
+    {
         return Err(INVALID_INPUT);
     }
     let decision = match opt_str(&map, "decision") {
@@ -173,10 +181,42 @@ pub(crate) async fn proposal_decide(
         Ok(Some("reject")) => ProposalDecision::Reject,
         _ => return Err(INVALID_INPUT),
     };
+    let typed_confirmation = opt_str(&map, "typed_confirmation")
+        .map_err(|()| INVALID_INPUT)?
+        .map(str::to_owned);
+    let comment = opt_str(&map, "comment")
+        .map_err(|()| INVALID_INPUT)?
+        .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty());
+    if comment.as_ref().is_some_and(|c| c.chars().count() > 500) {
+        return Err(INVALID_INPUT);
+    }
     let id = ProposalId::parse(&id).map_err(|_| NOT_FOUND)?;
     let outcome = with_db(&app, move |conn, app| {
-        db::decide_proposal(conn, &app.scope.org, &id, decision, &app.scope.user)
-            .map_err(|e| from_db(&e))
+        let row = db::get_proposal(conn, &app.scope.org, &id).map_err(|e| from_db(&e))?;
+        let mut confirmed = false;
+        if decision == ProposalDecision::Approve && row.tier == 4 {
+            let action_json = row
+                .action_json
+                .as_deref()
+                .ok_or(crate::errors::ApiError::new("action_invalid"))?;
+            let action = actions::Action::parse(action_json)
+                .map_err(|_| crate::errors::ApiError::new("action_invalid"))?;
+            if typed_confirmation.as_deref() != Some(action.target_label()) {
+                return Err(crate::errors::ApiError::new("typed_confirmation_mismatch"));
+            }
+            confirmed = true;
+        }
+        db::decide_proposal_with_details(
+            conn,
+            &app.scope.org,
+            &id,
+            decision,
+            &app.scope.user,
+            confirmed,
+            comment.as_deref(),
+        )
+        .map_err(|e| from_db(&e))
     })
     .await?;
     match outcome {

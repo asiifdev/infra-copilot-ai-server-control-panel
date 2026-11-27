@@ -24,6 +24,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { route: { name: 'overview' }, match: ['overview'], label: 'ui.nav.overview', icon: 'overview' },
       { route: { name: 'nodes' }, match: ['nodes', 'node'], label: 'ui.nav.nodes', icon: 'nodes' },
       { route: { name: 'findings' }, match: ['findings'], label: 'ui.nav.findings', icon: 'findings' },
+      { route: { name: 'monitors' }, match: ['monitors'], label: 'ui.nav.monitors', icon: 'overview' },
     ],
   },
   {

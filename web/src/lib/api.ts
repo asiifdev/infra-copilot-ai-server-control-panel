@@ -5,15 +5,22 @@
 
 import { readSse } from './sse';
 import type {
+  ChannelView,
   ChatMessage,
   Conversation,
   FindingsView,
+  IncidentView,
   InventoryView,
   MemoryNote,
+  MonitorView,
+  NodeLogsView,
   NodeSummary,
   PlanDetail,
+  PlanStepStatus,
   PlanSummary,
+  ProposalDryRun,
   ProposalExecution,
+  ProposalRollback,
   ProposalView,
   ProviderInput,
   ProviderTestResult,
@@ -153,43 +160,66 @@ async function empty(method: string, path: string, options?: RequestOptions): Pr
 }
 
 const enc = encodeURIComponent;
+const get = <T>(path: string, signal?: AbortSignal, query?: Record<string, string | number | undefined>) =>
+  json<T>('GET', path, { query, signal });
+const post = <T>(path: string, body?: unknown, signal?: AbortSignal) =>
+  json<T>('POST', path, { body, signal });
+const del = (path: string) => empty('DELETE', path);
+const prop = (id: string | number, sub: string) => `/api/proposals/${enc(String(id))}/${sub}`;
 
 export const api = {
   exchange: (token: string, signal?: AbortSignal) =>
     empty('POST', '/api/auth/exchange', { body: { token }, signal, quiet401: true }),
   logout: () => empty('POST', '/api/auth/logout'),
-  session: (signal?: AbortSignal) => json<SessionInfo>('GET', '/api/session', { signal }),
-  i18n: (loc: string, signal?: AbortSignal) =>
-    json<Record<string, string>>('GET', `/api/i18n/${enc(loc)}`, { signal }),
-  nodes: (signal?: AbortSignal) => json<NodeSummary[]>('GET', '/api/nodes', { signal }),
+  session: (signal?: AbortSignal) => get<SessionInfo>('/api/session', signal),
+  i18n: (loc: string, signal?: AbortSignal) => get<Record<string, string>>(`/api/i18n/${enc(loc)}`, signal),
+  nodes: (signal?: AbortSignal) => get<NodeSummary[]>('/api/nodes', signal),
   inventory: (name: string, kind?: string, limit?: number, signal?: AbortSignal) =>
-    json<InventoryView>('GET', `/api/nodes/${enc(name)}/inventory`, { query: { kind, limit }, signal }),
+    get<InventoryView>(`/api/nodes/${enc(name)}/inventory`, signal, { kind, limit }),
+  nodeLogs: (id: string, service: string, lines = 50, signal?: AbortSignal) =>
+    get<NodeLogsView>(`/api/nodes/${enc(id)}/logs`, signal, { service, lines }),
   findings: (minSeverity?: string, limit?: number, signal?: AbortSignal) =>
-    json<FindingsView>('GET', '/api/findings', { query: { min_severity: minSeverity, limit }, signal }),
-  plans: (signal?: AbortSignal) => json<PlanSummary[]>('GET', '/api/plans', { signal }),
-  plan: (name: string, signal?: AbortSignal) => json<PlanDetail>('GET', `/api/plans/${enc(name)}`, { signal }),
-  transports: (signal?: AbortSignal) => json<TransportSummary[]>('GET', '/api/transports', { signal }),
-  providers: (signal?: AbortSignal) => json<ProviderView[]>('GET', '/api/providers', { signal }),
-  saveProvider: (input: ProviderInput) => json<ProviderView>('POST', '/api/providers', { body: input }),
-  deleteProvider: (name: string) => empty('DELETE', `/api/providers/${enc(name)}`),
-  testProvider: (name: string, signal?: AbortSignal) =>
-    json<ProviderTestResult>('POST', `/api/providers/${enc(name)}/test`, { signal }),
-  memories: (status: 'pending' | 'active', signal?: AbortSignal) =>
-    json<MemoryNote[]>('GET', '/api/memories', { query: { status }, signal }),
+    get<FindingsView>('/api/findings', signal, { min_severity: minSeverity, limit }),
+  plans: (signal?: AbortSignal) => get<PlanSummary[]>('/api/plans', signal),
+  plan: (name: string, signal?: AbortSignal) => get<PlanDetail>(`/api/plans/${enc(name)}`, signal),
+  approvePlan: (id: string) => post<{ id: string; name: string; status: string }>(`/api/plans/${enc(id)}/approve`),
+  runPlan: (id: string) =>
+    post<{ id: string; name: string; status: string; steps: { seq: number; kind: string; status: PlanStepStatus; reason: string | null }[] }>(`/api/plans/${enc(id)}/run`),
+  transports: (signal?: AbortSignal) => get<TransportSummary[]>('/api/transports', signal),
+  updateTransportCredentials: (id: string, credentials: Record<string, string>) =>
+    post<{ id: string; name: string; updated: boolean; verified_at: null }>(`/api/transports/${enc(id)}/credentials`, { credentials }),
+  providers: (signal?: AbortSignal) => get<ProviderView[]>('/api/providers', signal),
+  saveProvider: (input: ProviderInput) => post<ProviderView>('/api/providers', input),
+  deleteProvider: (name: string) => del(`/api/providers/${enc(name)}`),
+  testProvider: (name: string, signal?: AbortSignal) => post<ProviderTestResult>(`/api/providers/${enc(name)}/test`, undefined, signal),
+  memories: (status: 'pending' | 'active', signal?: AbortSignal) => get<MemoryNote[]>('/api/memories', signal, { status }),
   approveMemory: (id: string | number) => empty('POST', `/api/memories/${enc(String(id))}/approve`),
-  deleteMemory: (id: string | number) => empty('DELETE', `/api/memories/${enc(String(id))}`),
-  proposals: (status?: string, signal?: AbortSignal) =>
-    json<ProposalView[]>('GET', '/api/proposals', { query: { status }, signal }),
-  /** Records the decision only; running is the separate `executeProposal`. */
-  decideProposal: (id: string | number, decision: 'approve' | 'reject') =>
-    json<{ id: string; status: string }>('POST', `/api/proposals/${enc(String(id))}/decision`, { body: { decision } }),
-  /** Runs an approved proposal once, on the server's closed action list; waits for the result. */
+  deleteMemory: (id: string | number) => del(`/api/memories/${enc(String(id))}`),
+  proposals: (status?: string, signal?: AbortSignal) => get<ProposalView[]>('/api/proposals', signal, { status }),
+  decideProposal: (id: string | number, decision: 'approve' | 'reject', typedConfirmation?: string, comment?: string) =>
+    post<{ id: string; status: string }>(prop(id, 'decision'), {
+      decision,
+      ...(typedConfirmation !== undefined ? { typed_confirmation: typedConfirmation } : {}),
+      ...(comment !== undefined ? { comment } : {}),
+    }),
+  dryRunProposal: (id: string | number) => post<{ id: string } & ProposalDryRun>(prop(id, 'dry-run')),
   executeProposal: (id: string | number) =>
-    json<{ id: string; status: string; execution: ProposalExecution }>('POST', `/api/proposals/${enc(String(id))}/execute`),
-  conversations: (signal?: AbortSignal) => json<Conversation[]>('GET', '/api/conversations', { signal }),
-  createConversation: (title?: string) => json<Conversation>('POST', '/api/conversations', { body: { title } }),
-  messages: (id: string | number, signal?: AbortSignal) =>
-    json<ChatMessage[]>('GET', `/api/conversations/${enc(String(id))}/messages`, { signal }),
+    post<{ id: string; status: string; has_backup?: boolean; execution?: ProposalExecution; agent_job?: { id: string; status: string } }>(prop(id, 'execute')),
+  rollbackProposal: (id: string | number) => post<{ id: string; rollback: ProposalRollback }>(prop(id, 'rollback')),
+  conversations: (signal?: AbortSignal) => get<Conversation[]>('/api/conversations', signal),
+  createConversation: (title?: string) => post<Conversation>('/api/conversations', { title }),
+  messages: (id: string | number, signal?: AbortSignal) => get<ChatMessage[]>(`/api/conversations/${enc(String(id))}/messages`, signal),
+  monitors: (signal?: AbortSignal) => get<MonitorView[]>('/api/monitors', signal),
+  createMonitor: (input: { name: string; kind: string; target: string; interval_sec?: number; timeout_sec?: number; allow_private?: boolean }) =>
+    post<MonitorView>('/api/monitors', input),
+  deleteMonitor: (id: string) => del(`/api/monitors/${enc(id)}`),
+  incidents: (signal?: AbortSignal) => get<IncidentView[]>('/api/incidents', signal),
+  ackIncident: (id: string) => post<{ id: string; acknowledged: boolean }>(`/api/incidents/${enc(id)}/ack`),
+  channels: (signal?: AbortSignal) => get<ChannelView[]>('/api/channels', signal),
+  createChannel: (input: { kind: string; name: string; config?: Record<string, unknown>; token?: string }) =>
+    post<ChannelView>('/api/channels', input),
+  deleteChannel: (id: string) => del(`/api/channels/${enc(id)}`),
+  telegramLinkCode: () => post<{ id: string; code: string; command: string }>('/api/channels/telegram/link-code'),
 };
 
 function parseTurnEvent(name: string | null, data: string): TurnEvent | null {

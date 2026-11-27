@@ -1,6 +1,8 @@
 //! `RootFs` against hostile trees: symlink chains and loops, `..` clamping, FIFOs, permissions and
 //! a parent directory swapped for a symlink while it is being read (decision 0017).
 
+#![cfg(unix)]
+
 use std::fs;
 use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::{Path, PathBuf};

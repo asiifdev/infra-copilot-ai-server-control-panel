@@ -113,6 +113,54 @@ id_type!(
     /// Memory identifier.
     MemoryId
 );
+id_type!(
+    /// Approval identifier.
+    ApprovalId
+);
+id_type!(
+    /// Execution backup identifier.
+    ExecutionBackupId
+);
+id_type!(
+    /// Execution rollback identifier.
+    ExecutionRollbackId
+);
+id_type!(
+    /// Monitor target identifier.
+    MonitorId
+);
+id_type!(
+    /// Incident identifier.
+    IncidentId
+);
+id_type!(
+    /// Notification channel identifier.
+    ChannelId
+);
+id_type!(
+    /// Alert rule identifier.
+    AlertRuleId
+);
+id_type!(
+    /// Pending alert identifier.
+    PendingAlertId
+);
+id_type!(
+    /// Telegram chat link identifier.
+    TelegramLinkId
+);
+id_type!(
+    /// Remote agent token identifier.
+    AgentTokenId
+);
+id_type!(
+    /// Remote agent job identifier.
+    AgentJobId
+);
+id_type!(
+    /// Managed `.test` local site identifier.
+    LocalSiteId
+);
 
 #[cfg(test)]
 mod tests {

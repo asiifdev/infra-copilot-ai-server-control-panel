@@ -142,6 +142,9 @@ pub struct Opts {
     pub catalog: Option<i18n::Catalog>,
     pub provider_test_timeout: Option<Duration>,
     pub executor: Option<Arc<dyn actions::Executor>>,
+    pub ssh_runner: Option<Arc<dyn transport::Runner + Send + Sync>>,
+    pub logs_dir: Option<PathBuf>,
+    pub sites_dir: Option<PathBuf>,
 }
 
 impl Default for Opts {
@@ -152,6 +155,9 @@ impl Default for Opts {
             catalog: None,
             provider_test_timeout: None,
             executor: None,
+            ssh_runner: None,
+            logs_dir: None,
+            sites_dir: None,
         }
     }
 }
@@ -187,6 +193,10 @@ pub fn config(
             .provider_test_timeout
             .unwrap_or(server::DEFAULT_PROVIDER_TEST_TIMEOUT),
         executor: opts.executor.clone(),
+        enable_watch: false,
+        ssh_runner: opts.ssh_runner.clone(),
+        logs_dir: opts.logs_dir.clone(),
+        sites_dir: opts.sites_dir.clone(),
     })
 }
 

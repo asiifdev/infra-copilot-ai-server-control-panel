@@ -30,7 +30,10 @@ pub use plan::{
     CommandPlan, CopyOptions, Credentials, EnvValue, MAX_SPEED_BYTES, MAX_TRANSFERS, Operation,
     PlanError, SPEED_LEAF, StdinData, plan,
 };
-pub use policy::{EndpointBlocked, EndpointPolicy, check_host, is_internal_ip};
+pub use policy::{
+    EndpointBlocked, EndpointPolicy, HostResolver, PolicyRunError, SystemResolver, check_host,
+    check_host_resolved, is_internal_ip, run_with_policy,
+};
 pub use runner::{
     ENV_ALLOW_LIST, FakeRunner, ProcessRunner, RecordedCall, RunError, RunOutput, Runner,
 };

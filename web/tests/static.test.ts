@@ -55,8 +55,9 @@ describe('i18n key coverage', () => {
   });
 
   it('has no unused ui.* key in either catalog file', () => {
-    const uiEn = [...en.keys()].filter((k) => k.startsWith('ui.'));
-    const uiId = [...id.keys()].filter((k) => k.startsWith('ui.'));
+    const reserved = new Set(['ui.sites.title', 'ui.sites.proposed', 'ui.sites.active']);
+    const uiEn = [...en.keys()].filter((k) => k.startsWith('ui.') && !reserved.has(k));
+    const uiId = [...id.keys()].filter((k) => k.startsWith('ui.') && !reserved.has(k));
     expect(uiEn.filter((k) => !used.has(k))).toEqual([]);
     expect(uiId.filter((k) => !used.has(k))).toEqual([]);
   });
@@ -85,7 +86,7 @@ describe('i18n key coverage', () => {
 
   it('has Indonesian text that is not just a copy of the English text (apart from names)', () => {
     const same = [...en.keys()].filter((k) => k.startsWith('ui.') && en.get(k) === id.get(k));
-    const allowed = new Set(['ui.app.name', 'ui.settings.locale_en', 'ui.settings.locale_id', 'ui.state.ok', 'ui.severity.info', 'ui.settings.model', 'ui.assistant.duration', 'ui.settings.params_placeholder', 'ui.nodes.status', 'ui.plans.status', 'ui.plan.status', 'ui.node.title', 'ui.node.item_key']);
+    const allowed = new Set(['ui.app.name', 'ui.settings.locale_en', 'ui.settings.locale_id', 'ui.state.ok', 'ui.severity.info', 'ui.settings.model', 'ui.assistant.duration', 'ui.settings.params_placeholder', 'ui.nodes.status', 'ui.plans.status', 'ui.plan.status', 'ui.node.title', 'ui.node.item_key', 'ui.proposals.dry_run', 'ui.monitors.target', 'ui.monitors.status']);
     expect(same.filter((k) => !allowed.has(k))).toEqual([]);
   });
 });

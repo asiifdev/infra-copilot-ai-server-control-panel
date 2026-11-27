@@ -993,13 +993,18 @@ dependencies = [
  "futures-core",
  "i18n",
  "inventory",
+ "monitor",
+ "net",
+ "notifier",
  "parity",
  "plan",
  "ring",
  "rust-embed",
  "serde_json",
  "tokio",
+ "transport",
  "vault",
+ "watch",
 ]
 
 [[package]]

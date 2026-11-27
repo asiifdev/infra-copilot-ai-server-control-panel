@@ -62,6 +62,7 @@
       {disabled}
       {placeholder}
       {autocomplete}
+      {onkeydown}
       spellcheck="false"
       autocapitalize="off"
       aria-invalid={error ? true : undefined}

@@ -15,9 +15,14 @@ core-domain = { path = "../core" }
 db = { path = "../db" }
 i18n = { path = "../i18n" }
 inventory = { path = "../inventory" }
+monitor = { path = "../monitor" }
+net = { path = "../net" }
+notifier = { path = "../notifier" }
 parity = { path = "../parity" }
 plan = { path = "../plan" }
+transport = { path = "../transport" }
 vault = { path = "../vault" }
+watch = { path = "../watch" }
 # HTTP server glue. No JSON/query/form extractors: bodies and queries are read by hand with
 # serde_json, so no serde derive code and no extra features are pulled in (decision 0005).
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }

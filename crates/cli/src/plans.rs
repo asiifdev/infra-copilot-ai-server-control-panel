@@ -10,8 +10,9 @@
 use crate::Ui;
 use crate::args::{Globals, Parsed, parse};
 use agent::{
-    DbPlanSink, DbPlanStore, DbStore, DraftContext, DraftError, DraftRequest, Drafted, PlanStore,
-    StoreError, gates_for_stored,
+    DbPlanSink, DbPlanStore, DbStore, DefaultPlanStepRunner, DraftContext, DraftError,
+    DraftRequest, Drafted, PlanRunError, PlanStore, StoreError, approve_plan, gates_for_stored,
+    run_plan,
 };
 use i18n::MessageKey;
 use plan::{BackupLocation, CutoverMethod, GateReport, render_draft, render_plan};
@@ -45,6 +46,13 @@ const NODE_UNKNOWN: MessageKey = MessageKey::new("cli.collect.node_unknown");
 const NO_INVENTORY: MessageKey = MessageKey::new("cli.compare.no_inventory");
 const WORD_YES: MessageKey = MessageKey::new("cli.word.yes");
 const WORD_NO: MessageKey = MessageKey::new("cli.word.no");
+const APPROVED: MessageKey = MessageKey::new("cli.plan.approved");
+const ERR_NOT_APPROVABLE: MessageKey = MessageKey::new("cli.plan.err_not_approvable");
+const ERR_NOT_APPROVED: MessageKey = MessageKey::new("cli.plan.err_not_approved");
+const ERR_GATE_BLOCKED: MessageKey = MessageKey::new("cli.plan.err_gate_blocked");
+const RUN_DRY: MessageKey = MessageKey::new("cli.plan.run_dry");
+const RUN_DONE: MessageKey = MessageKey::new("cli.plan.run_done");
+const RUN_STEP: MessageKey = MessageKey::new("cli.plan.run_step");
 
 /// Cuts `--name=value` down to `--name`: a usage message must never echo a value that might be a
 /// secret typed in the wrong form.
@@ -76,7 +84,8 @@ impl Ui<'_> {
                 ],
                 &[],
             ),
-            "list" | "show" | "gates" => parse(args, &["--lang"], &[]),
+            "list" | "show" | "gates" | "approve" => parse(args, &["--lang"], &[]),
+            "run" => parse(args, &["--lang"], &["--enable-execution"]),
             other => return self.usage(&safe_detail(other), usage),
         };
         let parsed = match parsed {
@@ -98,6 +107,14 @@ impl Ui<'_> {
             "show" | "gates" => match parsed.positional.as_slice() {
                 [name] if sub == "show" => self.plan_show(globals, name),
                 [name] => self.plan_gates(globals, name),
+                _ => self.usage("-", usage),
+            },
+            "approve" => match parsed.positional.as_slice() {
+                [target] => self.plan_approve(globals, target),
+                _ => self.usage("-", usage),
+            },
+            "run" => match parsed.positional.as_slice() {
+                [target] => self.plan_run(globals, target, !parsed.flag("--enable-execution")),
                 _ => self.usage("-", usage),
             },
             _ => self.usage("-", usage),
@@ -380,5 +397,84 @@ impl Ui<'_> {
             GATES_FINDING,
             &[("rule", rule), ("kind", &kind), ("key", key)],
         )
+    }
+
+    fn plan_approve(&mut self, globals: &Globals, target: &str) -> u8 {
+        let (conn, _) = match self.open_db(globals, false) {
+            Ok(ok) => ok,
+            Err(code) => return code,
+        };
+        let scope = match self.scope(&conn, globals) {
+            Ok(scope) => scope,
+            Err(code) => return code,
+        };
+        match approve_plan(
+            &conn,
+            &scope.org,
+            target,
+            db::ActorKind::User,
+            Some(scope.user.as_str()),
+        ) {
+            Ok(stored) => {
+                let msg = self.tr(APPROVED, &[("name", &stored.summary.name)]);
+                self.write_out(&msg)
+            }
+            Err(PlanRunError::NotFound) => self.fail(UNKNOWN, &[("name", target)]),
+            Err(PlanRunError::NotApprovable) => self.fail(ERR_NOT_APPROVABLE, &[("name", target)]),
+            Err(_) => self.store_reason("plan_approve"),
+        }
+    }
+
+    fn plan_run(&mut self, globals: &Globals, target: &str, dry_run: bool) -> u8 {
+        let (conn, _) = match self.open_db(globals, false) {
+            Ok(ok) => ok,
+            Err(code) => return code,
+        };
+        let scope = match self.scope(&conn, globals) {
+            Ok(scope) => scope,
+            Err(code) => return code,
+        };
+        let runner = DefaultPlanStepRunner;
+        match run_plan(
+            &conn,
+            &self.catalog,
+            self.locale,
+            &scope.org,
+            target,
+            dry_run,
+            &runner,
+            db::ActorKind::User,
+            Some(scope.user.as_str()),
+        ) {
+            Ok(report) => {
+                let mut text = if report.dry_run {
+                    self.tr(RUN_DRY, &[("name", &report.name)])
+                } else {
+                    self.tr(
+                        RUN_DONE,
+                        &[("name", &report.name), ("status", report.status)],
+                    )
+                };
+                for step in &report.steps {
+                    text.push('\n');
+                    text.push_str(&self.tr(
+                        RUN_STEP,
+                        &[
+                            ("seq", &step.seq.to_string()),
+                            ("kind", step.kind),
+                            ("status", step.status),
+                        ],
+                    ));
+                }
+                self.write_out(&text)
+            }
+            Err(PlanRunError::NotFound) => self.fail(UNKNOWN, &[("name", target)]),
+            Err(PlanRunError::NotApproved) => self.fail(ERR_NOT_APPROVED, &[("name", target)]),
+            Err(PlanRunError::GateBlocked(refusal)) => self.fail(
+                ERR_GATE_BLOCKED,
+                &[("name", target), ("reason", &format!("{refusal:?}"))],
+            ),
+            Err(_) => self.store_reason("plan_run"),
+        }
     }
 }

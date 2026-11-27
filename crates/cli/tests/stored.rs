@@ -936,13 +936,20 @@ fn the_database_location_follows_flag_then_environment_then_the_user_data_direct
     let home = dir.0.join("home").to_string_lossy().into_owned();
     let r = run(
         &["init"],
-        &[("HOME", home.as_str()), ("XDG_DATA_HOME", "")],
+        &[
+            ("HOME", home.as_str()),
+            ("XDG_DATA_HOME", ""),
+            ("LOCALAPPDATA", ""),
+            ("USERPROFILE", ""),
+        ],
         "",
     );
     assert_eq!(r.code, 0, "{}", r.stderr);
     let default = if cfg!(target_os = "macos") {
         dir.0
             .join("home/Library/Application Support/Nodivara/nodivara.db")
+    } else if cfg!(target_os = "windows") {
+        dir.0.join("home/.nodivara/nodivara.db")
     } else {
         dir.0.join("home/.local/share/nodivara/nodivara.db")
     };

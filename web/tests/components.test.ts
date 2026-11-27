@@ -1,6 +1,7 @@
 import { createRawSnippet, flushSync } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ConfirmDialog from '../src/components/ConfirmDialog.svelte';
+import ConfirmTyped from '../src/components/ConfirmTyped.svelte';
 import DataTable, { type Column } from '../src/components/DataTable.svelte';
 import ProposalCard from '../src/components/ProposalCard.svelte';
 import StatusBadge from '../src/components/StatusBadge.svelte';
@@ -244,8 +245,12 @@ describe('ProposalCard', () => {
     created_at: '2026-11-22T07:00:00.000Z',
     expires_at: '2026-11-23T07:00:00.000Z',
     action: null,
+    dry_run: null,
+    approval: null,
+    has_backup: false,
     node: null,
     execution: null,
+    rollback: null,
   };
 
   it('shows action, reason, impact and state, and offers no decision without handlers', () => {
@@ -284,7 +289,7 @@ describe('ProposalCard', () => {
 
   it('says "unknown reason" for a reason code it does not know, and shows no Run without a handler', () => {
     const execution = { status: 'failed' as const, verified: false, reason: 'brand_new_code', output: '', started_at: '2026-11-23T10:00:00.000Z', finished_at: null };
-    const action = { kind: 'restart_service' as const, manager: 'systemd' as const, service: 'x.service' };
+    const action = { kind: 'restart_service' as const, manager: 'systemd' as const, service: 'x.service', target_label: 'x.service' };
     const root = render(ProposalCard, { proposal: { ...proposal, status: 'failed', action, node: 'n1', execution } });
     expect(root.textContent).toContain('a reason this version of the interface does not know');
     expect(root.textContent).toContain('Started');
@@ -292,7 +297,7 @@ describe('ProposalCard', () => {
   });
 
   it('offers Run on an approved proposal with an action, enabled only when execution is on', () => {
-    const action = { kind: 'restart_service' as const, manager: 'systemd' as const, service: 'x.service' };
+    const action = { kind: 'restart_service' as const, manager: 'systemd' as const, service: 'x.service', target_label: 'x.service' };
     const approved = { ...proposal, status: 'approved', action, node: 'n1' };
     const run = vi.fn();
     const off = render(ProposalCard, { proposal: approved, onrun: run });
@@ -300,5 +305,91 @@ describe('ProposalCard', () => {
     const on = render(ProposalCard, { proposal: approved, onrun: run, executionEnabled: true });
     (on.querySelector('button') as HTMLButtonElement).click();
     expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows Dry-run button when ondryrun is provided, and renders dry_run preview', () => {
+    const dryRun = vi.fn();
+    const action = { kind: 'update_env_var' as const, path: '/etc/app.env', key: 'API_URL', value: '[REDACTED]' as const, target_label: '/etc/app.env' };
+    const withDryRun = {
+      ...proposal,
+      action,
+      dry_run: {
+        steps: ['Read /etc/app.env', 'Update API_URL'],
+        current_state: 'API_URL=http://old',
+        diff: '--- a/.env\n+++ b/.env\n-old\n+new',
+        dry_run_at: '2026-11-23T09:00:00.000Z',
+      },
+    };
+    const root = render(ProposalCard, { proposal: withDryRun, onapprove: () => {}, onreject: () => {}, ondryrun: dryRun });
+    expect(root.textContent).toContain('Dry-run preview');
+    expect(root.textContent).toContain('API_URL=http://old');
+    expect(root.textContent).toContain('Read /etc/app.env');
+    expect(root.querySelector('pre code')?.textContent).toContain('--- a/.env');
+    const dryBtn = [...root.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Dry-run') as HTMLButtonElement;
+    dryBtn.click();
+    expect(dryRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows backup indicator, Rollback button, and rollback result', () => {
+    const rollback = vi.fn();
+    const action = { kind: 'delete_managed_file' as const, path: '/etc/nginx/old.conf', target_label: '/etc/nginx/old.conf' };
+    const execution = { status: 'succeeded' as const, verified: true, reason: 'ok', output: 'removed', started_at: '2026-11-23T10:00:00.000Z', finished_at: '2026-11-23T10:00:01.000Z' };
+    const ready = { ...proposal, status: 'executed', action, node: 'n1', execution, has_backup: true };
+    const root = render(ProposalCard, { proposal: ready, onrollback: rollback, executionEnabled: true });
+    expect(root.textContent).toContain('Pre-execution backup recorded');
+    const rbBtn = [...root.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Roll back') as HTMLButtonElement;
+    rbBtn.click();
+    expect(rollback).toHaveBeenCalledTimes(1);
+
+    const rolledBack = {
+      ...ready,
+      rollback: { status: 'succeeded', verified: true, reason: 'ok', output: 'restored', started_at: '2026-11-23T10:05:00.000Z', finished_at: '2026-11-23T10:05:01.000Z' },
+    };
+    const doneRoot = render(ProposalCard, { proposal: rolledBack, onrollback: rollback, executionEnabled: true });
+    expect(doneRoot.textContent).toContain('restored');
+    expect([...doneRoot.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Roll back')).toBeUndefined();
+  });
+
+  it('shows queued execution state for remote agent jobs', () => {
+    const execution = { status: 'queued' as const, verified: false, reason: null, output: '', started_at: '2026-11-23T10:00:00.000Z', finished_at: null };
+    const root = render(ProposalCard, { proposal: { ...proposal, status: 'approved', execution } });
+    expect(root.textContent).toContain('Queued for remote agent');
+  });
+});
+
+describe('ConfirmTyped', () => {
+  it('keeps confirm disabled until input matches targetLabel exactly, and supports Escape', () => {
+    const onconfirm = vi.fn();
+    const oncancel = vi.fn();
+    const root = render(ConfirmTyped, {
+      title: 'Approve destructive change?',
+      message: 'Confirm target.',
+      targetLabel: '/etc/nginx/old.conf',
+      confirmLabel: 'Yes, approve',
+      cancelLabel: 'Cancel',
+      onconfirm,
+      oncancel,
+    });
+    const dialog = root.querySelector('[role="alertdialog"]') as HTMLElement;
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    const input = root.querySelector('#confirm-typed-input') as HTMLInputElement;
+    const confirmBtn = [...root.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Yes, approve') as HTMLButtonElement;
+    expect(confirmBtn.disabled).toBe(true);
+
+    input.value = '/etc/nginx/old';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+    expect(confirmBtn.disabled).toBe(true);
+
+    input.value = '/etc/nginx/old.conf';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+    expect(confirmBtn.disabled).toBe(false);
+
+    confirmBtn.click();
+    expect(onconfirm).toHaveBeenCalledWith('/etc/nginx/old.conf');
+
+    dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(oncancel).toHaveBeenCalledTimes(1);
   });
 });

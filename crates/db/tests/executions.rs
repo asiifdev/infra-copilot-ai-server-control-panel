@@ -26,9 +26,19 @@ fn new_proposal(hash: &str) -> NewProposal<'_> {
     }
 }
 
-fn approved(conn: &Connection, t: &Tenant) -> TestResultOf<ProposalId> {
+fn pending(conn: &Connection, t: &Tenant) -> TestResultOf<ProposalId> {
     let hash = sha256_hex(ACTION.as_bytes());
-    let id = create_action_proposal(conn, &t.org, &new_proposal(&hash), &t.node, ACTION)?;
+    Ok(create_action_proposal(
+        conn,
+        &t.org,
+        &new_proposal(&hash),
+        &t.node,
+        ACTION,
+    )?)
+}
+
+fn approved(conn: &Connection, t: &Tenant) -> TestResultOf<ProposalId> {
+    let id = pending(conn, t)?;
     decide_proposal(conn, &t.org, &id, ProposalDecision::Approve, &t.user)?;
     Ok(id)
 }
@@ -247,5 +257,114 @@ fn executions_left_running_are_failed_as_interrupted() -> TestResult {
         get_proposal(&conn, &t.org, &id)?.status,
         ProposalStatus::Failed
     );
+    Ok(())
+}
+
+#[test]
+fn dry_run_update_does_not_trip_immutability_and_respects_tenant() -> TestResult {
+    let conn = open_in_memory()?;
+    let a = populate(&conn, "alpha")?;
+    let b = populate(&conn, "beta")?;
+    let id = pending(&conn, &a)?;
+    let dry_run =
+        r#"{"steps":["systemctl restart nginx.service"],"current_state":"active","diff":null}"#;
+    let at = set_proposal_dry_run(&conn, &a.org, &id, dry_run)?;
+    assert!(!at.is_empty());
+    let row = get_proposal(&conn, &a.org, &id)?;
+    assert_eq!(row.dry_run_json.as_deref(), Some(dry_run));
+    assert_eq!(row.dry_run_at.as_deref(), Some(at.as_str()));
+    assert!(matches!(
+        set_proposal_dry_run(&conn, &b.org, &id, dry_run),
+        Err(Error::NotFound)
+    ));
+    Ok(())
+}
+
+#[test]
+fn approval_records_typed_confirmation_and_is_tenant_isolated() -> TestResult {
+    let conn = open_in_memory()?;
+    let a = populate(&conn, "alpha")?;
+    let b = populate(&conn, "beta")?;
+    let id = pending(&conn, &a)?;
+    decide_proposal_with_details(
+        &conn,
+        &a.org,
+        &id,
+        ProposalDecision::Approve,
+        &a.user,
+        true,
+        Some("confirmed"),
+    )?;
+    let app = get_approval_for_proposal(&conn, &a.org, &id)?.ok_or("missing approval")?;
+    assert_eq!(app.decision, ProposalDecision::Approve);
+    assert!(app.typed_confirmation);
+    assert_eq!(app.comment.as_deref(), Some("confirmed"));
+    assert!(get_approval_for_proposal(&conn, &b.org, &id)?.is_none());
+    Ok(())
+}
+
+#[test]
+fn backup_and_rollback_lifecycle_and_tenant_isolation() -> TestResult {
+    let conn = open_in_memory()?;
+    let a = populate(&conn, "alpha")?;
+    let b = populate(&conn, "beta")?;
+    let id = approved(&conn, &a)?;
+    let BeginOutcome::Started { execution, .. } = begin_execution(&conn, &a.org, &id, &a.user)?
+    else {
+        return Err("expected Started".into());
+    };
+    // Cannot rollback while execution is still running.
+    assert!(matches!(
+        begin_rollback(&conn, &a.org, &id, &a.user)?,
+        BeginRollbackOutcome::ExecutionStillRunning
+    ));
+    finish_execution(&conn, &a.org, &execution, true, true, "ok", "done")?;
+    // Cannot rollback without a backup.
+    assert!(matches!(
+        begin_rollback(&conn, &a.org, &id, &a.user)?,
+        BeginRollbackOutcome::NoBackup
+    ));
+    let sha = "a".repeat(64);
+    assert!(matches!(
+        record_execution_backup(&conn, &b.org, &execution, "/tmp/b.bak", &sha),
+        Err(Error::NotFound)
+    ));
+    record_execution_backup(&conn, &a.org, &execution, "/tmp/a.bak", &sha)?;
+    assert!(get_execution_backup(&conn, &b.org, &execution)?.is_none());
+    assert!(get_execution_backup(&conn, &a.org, &execution)?.is_some());
+
+    // Another org cannot begin rollback.
+    assert!(matches!(
+        begin_rollback(&conn, &b.org, &id, &b.user),
+        Err(Error::NotFound)
+    ));
+
+    let BeginRollbackOutcome::Started {
+        rollback, backup, ..
+    } = begin_rollback(&conn, &a.org, &id, &a.user)?
+    else {
+        return Err("expected Started rollback".into());
+    };
+    assert_eq!(backup.sha256, sha);
+    // Second rollback attempt is refused.
+    assert!(matches!(
+        begin_rollback(&conn, &a.org, &id, &a.user)?,
+        BeginRollbackOutcome::AlreadyRolledBack
+    ));
+    // Another org cannot finish rollback.
+    assert!(matches!(
+        finish_rollback(&conn, &b.org, &rollback, true, true, "ok", ""),
+        Err(Error::NotFound)
+    ));
+    finish_rollback(&conn, &a.org, &rollback, true, true, "ok", "restored")?;
+    let rb = get_rollback_for_execution(&conn, &a.org, &execution)?.ok_or("missing rollback")?;
+    assert_eq!(rb.status, ExecutionStatus::Succeeded);
+    assert!(rb.verified);
+    assert_eq!(rb.output, "restored");
+    assert!(get_rollback_for_execution(&conn, &b.org, &execution)?.is_none());
+    assert!(matches!(
+        verify_audit_chain(&conn, &a.org)?,
+        ChainStatus::Intact { .. }
+    ));
     Ok(())
 }

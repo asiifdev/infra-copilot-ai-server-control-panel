@@ -11,9 +11,11 @@
 //! the name itself and run [`is_internal_ip`] on every answer before connecting (and connect to
 //! that address, not the name again). That runner does not exist yet (milestone M4 and later).
 
+use crate::plan::CommandPlan;
+use crate::runner::{RunError, RunOutput, Runner};
 use crate::spec::{RcloneSpec, RemoteKind, SshTarget, TransportSpec};
 use std::fmt;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
 
 /// Where the commands of a transport run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -225,5 +227,257 @@ impl TransportSpec {
             Self::Rsync(t) | Self::Scp(t) | Self::SshPipe(t) => check_ssh(t, policy),
             Self::Managed => Ok(()),
         }
+    }
+
+    /// Checks every endpoint under `policy` and, under [`EndpointPolicy::SharedInfrastructure`],
+    /// resolves hostnames via `resolver` and rejects any answer where [`is_internal_ip`] is true.
+    ///
+    /// # Errors
+    /// [`EndpointBlocked`] for the first endpoint or resolved IP that the policy refuses.
+    pub fn check_endpoints_with_resolver(
+        &self,
+        policy: EndpointPolicy,
+        resolver: &dyn HostResolver,
+    ) -> Result<(), EndpointBlocked> {
+        if policy == EndpointPolicy::OwnNetwork {
+            return Ok(());
+        }
+        self.check_endpoints(policy)?;
+        match self {
+            Self::Rclone(spec) => check_rclone_resolved(spec, policy, resolver),
+            Self::Rsync(t) | Self::Scp(t) | Self::SshPipe(t) => {
+                check_host_resolved(t.host(), policy, resolver).map(|_| ())
+            }
+            Self::Managed => Ok(()),
+        }
+    }
+
+    /// Convenience wrapper over [`TransportSpec::check_endpoints_with_resolver`] using
+    /// [`SystemResolver`].
+    ///
+    /// # Errors
+    /// [`EndpointBlocked`].
+    pub fn check_endpoints_resolved(&self, policy: EndpointPolicy) -> Result<(), EndpointBlocked> {
+        self.check_endpoints_with_resolver(policy, &SystemResolver)
+    }
+}
+
+/// Resolves a hostname to its IP addresses for [`EndpointPolicy::SharedInfrastructure`] checks.
+pub trait HostResolver {
+    /// Resolves `host` to one or more IP addresses.
+    ///
+    /// # Errors
+    /// [`EndpointBlocked::Ambiguous`] when resolution fails or yields no addresses.
+    fn resolve(&self, host: &str) -> Result<Vec<IpAddr>, EndpointBlocked>;
+}
+
+/// System DNS resolver using `std::net::ToSocketAddrs`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SystemResolver;
+
+impl HostResolver for SystemResolver {
+    fn resolve(&self, host: &str) -> Result<Vec<IpAddr>, EndpointBlocked> {
+        let addrs: Vec<IpAddr> = (host, 0)
+            .to_socket_addrs()
+            .map_err(|_| EndpointBlocked::Ambiguous)?
+            .map(|sa| sa.ip())
+            .collect();
+        if addrs.is_empty() {
+            Err(EndpointBlocked::Ambiguous)
+        } else {
+            Ok(addrs)
+        }
+    }
+}
+
+/// Checks `host` textually and, for non-literal hostnames under
+/// [`EndpointPolicy::SharedInfrastructure`], resolves it via `resolver` and checks every IP with
+/// [`is_internal_ip`].
+///
+/// # Errors
+/// [`EndpointBlocked`].
+pub fn check_host_resolved(
+    host: &str,
+    policy: EndpointPolicy,
+    resolver: &dyn HostResolver,
+) -> Result<Vec<IpAddr>, EndpointBlocked> {
+    if policy == EndpointPolicy::OwnNetwork {
+        return Ok(Vec::new());
+    }
+    check_host(host, policy)?;
+    let bare = host
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim_end_matches('.');
+    if let Ok(ip) = bare.parse::<IpAddr>() {
+        return Ok(vec![ip]);
+    }
+    let addrs = resolver.resolve(bare)?;
+    if addrs.is_empty() {
+        return Err(EndpointBlocked::Ambiguous);
+    }
+    if addrs.iter().any(|ip| is_internal_ip(*ip)) {
+        return Err(EndpointBlocked::Internal);
+    }
+    Ok(addrs)
+}
+
+fn check_rclone_resolved(
+    spec: &RcloneSpec,
+    policy: EndpointPolicy,
+    resolver: &dyn HostResolver,
+) -> Result<(), EndpointBlocked> {
+    let options = spec.options();
+    match spec.kind() {
+        RemoteKind::Sftp => options.get("host").map_or(Ok(()), |h| {
+            check_host_resolved(h, policy, resolver).map(|_| ())
+        }),
+        RemoteKind::Webdav => options.get("url").map_or(Ok(()), |u| {
+            check_host_resolved(https_host(u)?, policy, resolver).map(|_| ())
+        }),
+        RemoteKind::S3 | RemoteKind::B2 => options.get("endpoint").map_or(Ok(()), |e| {
+            let host = if e.contains("://") {
+                https_host(e)?
+            } else {
+                e.split(['/', ':']).next().unwrap_or_default()
+            };
+            check_host_resolved(host, policy, resolver).map(|_| ())
+        }),
+        _ => Ok(()),
+    }
+}
+
+/// Why [`run_with_policy`] did not complete.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PolicyRunError {
+    /// Refused by [`EndpointPolicy`] (including DNS resolution to an internal IP).
+    Blocked(EndpointBlocked),
+    /// The underlying [`Runner`] failed.
+    Run(RunError),
+}
+
+impl fmt::Display for PolicyRunError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Blocked(e) => e.fmt(f),
+            Self::Run(e) => e.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for PolicyRunError {}
+
+/// Checks `spec` against `policy` (resolving hostnames via `resolver` when `SharedInfrastructure`)
+/// before invoking `runner.run(plan)`.
+///
+/// # Errors
+/// [`PolicyRunError::Blocked`] if the endpoint is refused (runner is never called);
+/// [`PolicyRunError::Run`] if the runner fails.
+pub fn run_with_policy(
+    spec: &TransportSpec,
+    command: &CommandPlan,
+    policy: EndpointPolicy,
+    resolver: &dyn HostResolver,
+    runner: &dyn Runner,
+) -> Result<RunOutput, PolicyRunError> {
+    spec.check_endpoints_with_resolver(policy, resolver)
+        .map_err(PolicyRunError::Blocked)?;
+    runner.run(command).map_err(PolicyRunError::Run)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runner::FakeRunner;
+    use std::collections::BTreeMap;
+
+    struct MockResolver(BTreeMap<String, Vec<IpAddr>>);
+
+    impl HostResolver for MockResolver {
+        fn resolve(&self, host: &str) -> Result<Vec<IpAddr>, EndpointBlocked> {
+            self.0.get(host).cloned().ok_or(EndpointBlocked::Ambiguous)
+        }
+    }
+
+    fn ssh_spec(host: &str) -> TransportSpec {
+        TransportSpec::Rsync(
+            SshTarget::new(host, "backup", Some(22), "/srv/bak")
+                .unwrap_or_else(|e| panic!("valid target: {e}")),
+        )
+    }
+
+    #[test]
+    fn shared_policy_blocks_dns_resolving_to_internal_or_loopback() {
+        let mut map = BTreeMap::new();
+        map.insert(
+            "rebind.example.com".to_owned(),
+            vec![IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))],
+        );
+        map.insert(
+            "dual.example.com".to_owned(),
+            vec![
+                IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34)),
+                IpAddr::V4(Ipv4Addr::new(169, 254, 169, 254)),
+            ],
+        );
+        map.insert(
+            "public.example.com".to_owned(),
+            vec![IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34))],
+        );
+        let resolver = MockResolver(map);
+
+        assert_eq!(
+            ssh_spec("rebind.example.com")
+                .check_endpoints_with_resolver(EndpointPolicy::SharedInfrastructure, &resolver),
+            Err(EndpointBlocked::Internal)
+        );
+        assert_eq!(
+            ssh_spec("dual.example.com")
+                .check_endpoints_with_resolver(EndpointPolicy::SharedInfrastructure, &resolver),
+            Err(EndpointBlocked::Internal)
+        );
+        assert_eq!(
+            ssh_spec("missing.example.com")
+                .check_endpoints_with_resolver(EndpointPolicy::SharedInfrastructure, &resolver),
+            Err(EndpointBlocked::Ambiguous)
+        );
+        assert_eq!(
+            ssh_spec("public.example.com")
+                .check_endpoints_with_resolver(EndpointPolicy::SharedInfrastructure, &resolver),
+            Ok(())
+        );
+        // OwnNetwork allows even unresolvable/internal endpoints without calling resolver.
+        assert_eq!(
+            ssh_spec("rebind.example.com")
+                .check_endpoints_with_resolver(EndpointPolicy::OwnNetwork, &resolver),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn run_with_policy_blocks_before_calling_runner() {
+        let mut map = BTreeMap::new();
+        map.insert(
+            "evil.example.com".to_owned(),
+            vec![IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5))],
+        );
+        let resolver = MockResolver(map);
+        let runner = FakeRunner::new();
+        runner.push(Ok(RunOutput::ok("should not run")));
+        let cmd = CommandPlan {
+            program: "rsync",
+            args: vec!["--version".to_owned()],
+            env: Vec::new(),
+            stdin: None,
+        };
+        let res = run_with_policy(
+            &ssh_spec("evil.example.com"),
+            &cmd,
+            EndpointPolicy::SharedInfrastructure,
+            &resolver,
+            &runner,
+        );
+        assert_eq!(res, Err(PolicyRunError::Blocked(EndpointBlocked::Internal)));
+        assert!(runner.calls().is_empty());
     }
 }

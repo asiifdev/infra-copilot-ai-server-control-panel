@@ -506,13 +506,15 @@
      "depends_on": [],
      "kind": "inventory",
      "seq": 0,
-     "side": "source"
+     "side": "source",
+     "status": "pending"
     },
     {
      "depends_on": [],
      "kind": "inventory",
      "seq": 1,
-     "side": "target"
+     "side": "target",
+     "status": "pending"
     },
     {
      "depends_on": [
@@ -520,59 +522,68 @@
       1
      ],
      "kind": "backup",
-     "seq": 2
+     "seq": 2,
+     "status": "pending"
     },
     {
      "depends_on": [
       2
      ],
      "kind": "transfer",
-     "seq": 3
+     "seq": 3,
+     "status": "pending"
     },
     {
      "depends_on": [
       3
      ],
      "kind": "restore",
-     "seq": 4
+     "seq": 4,
+     "status": "pending"
     },
     {
      "depends_on": [
       4
      ],
      "kind": "verify",
-     "seq": 5
+     "seq": 5,
+     "status": "pending"
     },
     {
      "depends_on": [
       5
      ],
      "kind": "delta",
-     "seq": 6
+     "seq": 6,
+     "status": "pending"
     },
     {
      "depends_on": [
       6
      ],
      "kind": "cutover",
-     "seq": 7
+     "seq": 7,
+     "status": "pending"
     },
     {
      "depends_on": [
       7
      ],
      "kind": "post_verify",
-     "seq": 8
+     "seq": 8,
+     "status": "pending"
     },
     {
      "depends_on": [
       8
      ],
      "kind": "decommission_source",
-     "seq": 9
+     "seq": 9,
+     "status": "pending"
     }
    ],
-   "target_node": "new-server"
+   "target_node": "new-server",
+   "id": "00000000-0000-4000-8000-000000000400"
   },
   "content_type": "application/json; charset=utf-8",
   "method": "GET",
@@ -598,7 +609,8 @@
     "name": "demo-plan",
     "source_node": "old-server",
     "status": "draft",
-    "target_node": "new-server"
+    "target_node": "new-server",
+    "id": "00000000-0000-4000-8000-000000000400"
    }
   ],
   "content_type": "application/json; charset=utf-8",
@@ -610,14 +622,18 @@
   "body": [
    {
     "action": null,
+    "approval": null,
     "conversation_id": "2e8d52c6-74bd-4acc-ab06-6a94849e6fd8",
     "created_at": "2026-11-23T18:29:44.418Z",
+    "dry_run": null,
     "execution": null,
     "expires_at": "2026-11-24T18:29:44.418Z",
+    "has_backup": false,
     "id": "356417de-77d6-4bdf-9dce-c21add77b992",
     "impact": "Short downtime.",
     "node": null,
     "rationale": "Because reasons.",
+    "rollback": null,
     "rule_id": "P001",
     "status": "pending",
     "subject_key": "listener:8080",
@@ -630,10 +646,13 @@
     "action": {
      "kind": "restart_service",
      "manager": "systemd",
-     "service": "demo.service"
+     "service": "demo.service",
+     "target_label": "demo.service"
     },
+    "approval": null,
     "conversation_id": "2e8d52c6-74bd-4acc-ab06-6a94849e6fd8",
     "created_at": "2026-11-23T18:29:44.418Z",
+    "dry_run": null,
     "execution": {
      "finished_at": "2026-11-23T18:30:01.000Z",
      "output": "Unit demo.service not found.",
@@ -643,10 +662,12 @@
      "verified": false
     },
     "expires_at": "2026-11-24T18:29:44.418Z",
+    "has_backup": false,
     "id": "c5dd35c3-c177-4f2b-bcae-93a8657baeca",
     "impact": "Short downtime.",
     "node": "demo-local",
     "rationale": "Because reasons.",
+    "rollback": null,
     "rule_id": "P001",
     "status": "failed",
     "subject_key": "listener:8080",
@@ -829,7 +850,8 @@
      "ok": true
     },
     "name": "offsite-demo",
-    "verified_at": "2026-11-23T18:29:43.301Z"
+    "verified_at": "2026-11-23T18:29:43.301Z",
+    "id": "00000000-0000-4000-8000-000000000500"
    }
   ],
   "content_type": "application/json; charset=utf-8",

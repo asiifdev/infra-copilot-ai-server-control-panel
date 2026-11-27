@@ -61,6 +61,7 @@ const SPEED_LEFTOVER: MessageKey = MessageKey::new("cli.transport.speed_leftover
 const UNKNOWN_VALUE: MessageKey = MessageKey::new("cli.transport.unknown_value");
 const CORRUPT: MessageKey = MessageKey::new("cli.transport.corrupt");
 const REPORT: MessageKey = MessageKey::new("cli.transport.report");
+const CREDENTIALS_UPDATED: MessageKey = MessageKey::new("cli.transport.credentials_updated");
 
 /// Most bytes of credentials read from standard input.
 const MAX_CREDENTIAL_BYTES: usize = 64 * 1024;
@@ -155,6 +156,7 @@ impl Ui<'_> {
                 &["--credentials-stdin"],
             ),
             "check" => parse(args, &["--lang"], &["--run"]),
+            "update-credentials" => parse(args, &["--lang"], &["--credentials-stdin"]),
             "list" | "show" | "remove" => parse(args, &["--lang"], &[]),
             other => return self.usage(&safe_detail(other), usage),
         };
@@ -171,6 +173,9 @@ impl Ui<'_> {
             ("show", [name]) => self.transport_show(globals, name),
             ("remove", [name]) => self.transport_remove(globals, name),
             ("check", [name]) => self.transport_check(globals, name, parsed.flag("--run")),
+            ("update-credentials", [target]) if parsed.flag("--credentials-stdin") => {
+                self.transport_update_credentials(globals, target)
+            }
             _ => self.usage("-", usage),
         }
     }
@@ -675,6 +680,64 @@ impl Ui<'_> {
         }
         self.note_err(&text);
         crate::EXIT_ERROR
+    }
+
+    fn transport_update_credentials(&mut self, globals: &Globals, target: &str) -> u8 {
+        let (conn, _) = match self.open_db(globals, false) {
+            Ok(ok) => ok,
+            Err(code) => return code,
+        };
+        let scope = match self.scope(&conn, globals) {
+            Ok(scope) => scope,
+            Err(code) => return code,
+        };
+        let row = if let Ok(id) = db::TransportId::parse(target) {
+            match db::get_transport(&conn, &scope.org, &id) {
+                Ok(r) => r,
+                Err(db::Error::NotFound) => return self.fail(UNKNOWN, &[("name", target)]),
+                Err(_) => return self.store_reason("transport_load"),
+            }
+        } else {
+            match self.find_transport(&conn, &scope.org, target) {
+                Ok(r) => r,
+                Err(code) => return code,
+            }
+        };
+        let vault = match self.vault_from_env() {
+            Ok(v) => v,
+            Err(code) => return code,
+        };
+        let creds = match self.read_credentials() {
+            Ok(c) => c,
+            Err(code) => return code,
+        };
+        match store::update_credentials(&conn, &vault, &scope.org, &row.id, &creds) {
+            Ok(()) => {
+                let subject = format!(
+                    r#"{{"transport":"{}","name":"{}"}}"#,
+                    row.id.as_str(),
+                    row.name
+                );
+                let _ = db::append_audit(
+                    &conn,
+                    &scope.org,
+                    &db::NewAuditEntry {
+                        actor_kind: db::ActorKind::User,
+                        actor_id: Some(scope.user.as_str()),
+                        action: "transport.credentials.update",
+                        node_id: None,
+                        subject_json: &subject,
+                        result: db::AuditOutcome::Success,
+                    },
+                );
+                let msg = self.tr(CREDENTIALS_UPDATED, &[("name", &row.name)]);
+                self.write_out(&msg)
+            }
+            Err(store::StoreError::CredentialsNotAccepted) => self.fail(NO_CREDENTIALS, &[]),
+            Err(store::StoreError::CorruptCredentials) => self.fail(BAD_CREDENTIALS, &[]),
+            Err(store::StoreError::NotFound) => self.fail(UNKNOWN, &[("name", target)]),
+            Err(_) => self.store_reason("transport_update_credentials"),
+        }
     }
 }
 

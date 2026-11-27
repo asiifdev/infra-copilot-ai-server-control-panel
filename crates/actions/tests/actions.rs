@@ -75,7 +75,9 @@ fn only_service_units_can_be_addressed_and_critical_ones_are_tier_three() -> Tes
     ] {
         let action = restart(critical)?;
         assert_eq!(action.tier(), Tier::RiskyChange, "{critical}");
-        assert!(!action.executable_now(), "{critical}");
+        assert!(action.executable_now(), "{critical}");
+        assert!(action.requires_backup(), "{critical}");
+        assert!(!action.requires_typed_confirmation(), "{critical}");
     }
     for ordinary in [
         "nginx",
@@ -228,5 +230,213 @@ fn output_is_bounded() -> TestResult {
     runner.push(Ok(RunOutput::failed(1, &"x".repeat(50_000))));
     let out = LocalExecutor::new(runner).execute(&restart("a")?);
     assert!(out.detail.chars().count() <= 1000);
+    Ok(())
+}
+
+struct TempDir(std::path::PathBuf);
+
+impl TempDir {
+    fn new(prefix: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let base = std::env::temp_dir().canonicalize()?;
+        let dir = base.join(format!("nodivara-{prefix}-{}-{seq}", std::process::id()));
+        std::fs::create_dir_all(&dir)?;
+        Ok(Self(dir))
+    }
+
+    fn path(&self) -> &std::path::Path {
+        &self.0
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+#[test]
+fn update_env_var_validation_and_redaction() -> TestResult {
+    for bad_path in [
+        "",
+        "relative/.env",
+        "/etc/nodivara/../.env",
+        "/etc/nodivara/./.env",
+        "/etc/nodivara/app.conf",
+        "/etc/nodivara/.env/",
+    ] {
+        assert_eq!(
+            Action::update_env_var(bad_path, "APP_KEY", "secret"),
+            Err(ActionError::BadPath),
+            "{bad_path}"
+        );
+    }
+    for bad_key in ["", "1ABC", "A-B", "A B", "A=B"] {
+        assert_eq!(
+            Action::update_env_var("/etc/nodivara/.env", bad_key, "val"),
+            Err(ActionError::BadEnvKey),
+            "{bad_key}"
+        );
+    }
+    for bad_val in ["a\nb", "a\rb", "a\0b"] {
+        assert_eq!(
+            Action::update_env_var("/etc/nodivara/.env", "APP_KEY", bad_val),
+            Err(ActionError::BadEnvValue)
+        );
+    }
+
+    let action =
+        Action::update_env_var("/etc/nodivara/.env.prod", "API_SECRET", "super-secret-42")?;
+    assert_eq!(action.tier(), Tier::RiskyChange);
+    assert!(action.executable_now());
+    assert!(action.requires_backup());
+    assert!(!action.requires_typed_confirmation());
+    assert_eq!(action.target_label(), "/etc/nodivara/.env.prod");
+    assert_eq!(action.tool(), "propose_update_env_var");
+    let dbg = format!("{action:?}");
+    assert!(!dbg.contains("super-secret-42"), "{dbg}");
+
+    let parsed = Action::parse(&action.canonical_json())?;
+    assert_eq!(parsed, action);
+    assert_eq!(parsed.hash(), action.hash());
+    Ok(())
+}
+
+#[test]
+fn update_env_var_dry_run_backup_execute_and_rollback() -> TestResult {
+    let root = TempDir::new("env")?;
+    let backups = TempDir::new("env-bak")?;
+    let env_path = root.path().join(".env");
+    std::fs::write(&env_path, "EXISTING=old-secret-value\nOTHER=1\n")?;
+
+    let action = Action::update_env_var(
+        env_path.to_str().ok_or("utf8")?,
+        "EXISTING",
+        "brand-new-secret-value",
+    )?;
+    let exec =
+        LocalExecutor::with_allowed_roots(FakeRunner::new(), vec![root.path().to_path_buf()]);
+
+    // Dry-run redacts both old and new values.
+    let dry = exec.dry_run(&action);
+    assert_eq!(dry.current_state, "present");
+    let diff = dry.diff.as_deref().ok_or("expected diff")?;
+    assert!(diff.contains("EXISTING=[REDACTED]"), "{diff}");
+    assert!(!diff.contains("old-secret-value"), "{diff}");
+    assert!(!diff.contains("brand-new-secret-value"), "{diff}");
+    assert!(!dry.steps.join(" ").contains("brand-new-secret-value"));
+
+    // Backup, execute, verify.
+    let snap = exec.backup(&action, backups.path())?;
+    assert_eq!(snap.sha256.len(), 64);
+    let out = exec.execute(&action);
+    assert_eq!(
+        (out.status, out.verified, out.reason),
+        (OutcomeStatus::Succeeded, true, "ok")
+    );
+    assert!(!out.detail.contains("brand-new-secret-value"));
+    let now = std::fs::read_to_string(&env_path)?;
+    assert_eq!(now, "EXISTING=brand-new-secret-value\nOTHER=1\n");
+
+    // Corrupted backup sha256 is refused on rollback.
+    let mut bad_snap = snap.clone();
+    bad_snap.sha256 = "0".repeat(64);
+    let bad_rb = exec.rollback(&action, &bad_snap);
+    assert_eq!(
+        (bad_rb.status, bad_rb.reason),
+        (OutcomeStatus::Failed, "backup_corrupted")
+    );
+
+    // Valid rollback restores original bytes.
+    let rb = exec.rollback(&action, &snap);
+    assert_eq!(
+        (rb.status, rb.verified, rb.reason),
+        (OutcomeStatus::Succeeded, true, "ok")
+    );
+    assert_eq!(
+        std::fs::read_to_string(&env_path)?,
+        "EXISTING=old-secret-value\nOTHER=1\n"
+    );
+    Ok(())
+}
+
+#[test]
+fn delete_managed_file_tier_4_backup_execute_rollback_and_symlinks() -> TestResult {
+    let root = TempDir::new("del")?;
+    let backups = TempDir::new("del-bak")?;
+    let target = root.path().join("old-release.tar");
+    std::fs::write(&target, b"archive-bytes-123")?;
+
+    let action = Action::delete_managed_file(target.to_str().ok_or("utf8")?)?;
+    assert_eq!(action.tier(), Tier::Destructive);
+    assert!(action.executable_now());
+    assert!(action.requires_backup());
+    assert!(action.requires_typed_confirmation());
+    assert_eq!(action.target_label(), target.to_str().ok_or("utf8")?);
+    assert_eq!(action.tool(), "propose_delete_managed_file");
+
+    let exec =
+        LocalExecutor::with_allowed_roots(FakeRunner::new(), vec![root.path().to_path_buf()]);
+    let dry = exec.dry_run(&action);
+    assert!(dry.diff.is_some());
+
+    let snap = exec.backup(&action, backups.path())?;
+    let out = exec.execute(&action);
+    assert_eq!(
+        (out.status, out.verified, out.reason),
+        (OutcomeStatus::Succeeded, true, "ok")
+    );
+    assert!(!target.exists());
+
+    let rb = exec.rollback(&action, &snap);
+    assert_eq!(
+        (rb.status, rb.verified, rb.reason),
+        (OutcomeStatus::Succeeded, true, "ok")
+    );
+    assert_eq!(std::fs::read(&target)?, b"archive-bytes-123");
+
+    // Allowlist and symlink traversal are refused.
+    let outside = Action::delete_managed_file("/etc/passwd")?;
+    assert_eq!(exec.execute(&outside).reason, "path_not_allowed");
+
+    #[cfg(unix)]
+    {
+        let link = root.path().join("escape-link");
+        std::os::unix::fs::symlink(&target, &link)?;
+        let sym_action = Action::delete_managed_file(link.to_str().ok_or("utf8")?)?;
+        assert_eq!(exec.execute(&sym_action).reason, "symlink_not_allowed");
+        assert_eq!(
+            exec.backup(&sym_action, backups.path()),
+            Err("symlink_not_allowed")
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn critical_restart_service_backup_and_rollback() -> TestResult {
+    let backups = TempDir::new("svc-bak")?;
+    let action = restart("sshd.service")?;
+    assert_eq!(action.tier(), Tier::RiskyChange);
+    assert!(action.requires_backup());
+    assert_eq!(action.target_label(), "sshd.service");
+
+    let runner = FakeRunner::new();
+    // backup(): is-active -> active
+    runner.push(Ok(RunOutput::ok("active\n")));
+    // execute(): restart -> ok, is-active -> active
+    runner.push(Ok(RunOutput::ok("")));
+    runner.push(Ok(RunOutput::ok("active\n")));
+    // rollback(): restart -> ok, is-active -> active
+    runner.push(Ok(RunOutput::ok("")));
+    runner.push(Ok(RunOutput::ok("active\n")));
+
+    let exec = LocalExecutor::new(runner);
+    let snap = exec.backup(&action, backups.path())?;
+    let out = exec.execute(&action);
+    assert_eq!((out.status, out.verified), (OutcomeStatus::Succeeded, true));
+    let rb = exec.rollback(&action, &snap);
+    assert_eq!((rb.status, rb.verified), (OutcomeStatus::Succeeded, true));
     Ok(())
 }

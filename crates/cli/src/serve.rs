@@ -53,6 +53,7 @@ impl Ui<'_> {
             Err(error) => return self.setup_failure(&error),
         };
         let mut config = config;
+        config.enable_watch = true;
         // Off unless asked for: approving a proposal only records the decision (ADR 0037).
         let execution = parsed.flag("--enable-execution");
         if execution {

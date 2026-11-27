@@ -100,7 +100,7 @@ describe('command palette', () => {
     expect(input.getAttribute('aria-expanded')).toBe('true');
     expect(dialog.querySelector('[role="listbox"]')).not.toBeNull();
     const options = () => [...dialog.querySelectorAll('[role="option"]')];
-    expect(options().length).toBe(12); // nine pages and three actions
+    expect(options().length).toBe(13); // ten pages and three actions
     input.value = 'sett';
     input.dispatchEvent(new Event('input', { bubbles: true }));
     flushSync();

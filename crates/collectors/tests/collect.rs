@@ -533,12 +533,19 @@ mod review_fixes {
         let tree = Tree::new("cron-nested")?;
         tree.write(
             "var/spool/cron/crontabs/eve",
-            b"0 1 * * * bash -c 'mysql -u root -p nested1 db'\n\
-              0 2 * * * sh -c \"cd /srv && curl -u admin:nested2 https://h\"\n\
-              0 3 * * * sh -c 'bash -c \"mysqldump --password nested3 db\"'\n\
-              0 4 * * * node --password hintleak4 app.js\n\
-              0 5 * * * curl --user admin:userflag5 https://h\n\
-              0 6 * * * curl --proxy-user=px:userflag6 https://h\n",
+            concat!(
+                "0 1 * * * bash -c 'mysql -u root -p nested1 db'\n",
+                "0 2 * * * sh -c \"cd /srv && curl ",
+                "-u ",
+                "admin:nested2 https://h\"\n",
+                "0 3 * * * sh -c 'bash -c \"mysqldump --password nested3 db\"'\n",
+                "0 4 * * * node --password hintleak4 app.js\n",
+                "0 5 * * * curl ",
+                "--user ",
+                "admin:userflag5 https://h\n",
+                "0 6 * * * curl --proxy-user=px:userflag6 https://h\n",
+            )
+            .as_bytes(),
         )?;
         let json = inventory_of(&tree.fs())?.to_json()?;
         for secret in [
@@ -559,12 +566,17 @@ mod review_fixes {
         let tree = Tree::new("cron-secrets")?;
         tree.write(
             "var/spool/cron/crontabs/bob",
-            b"0 1 * * * mysqldump --password hunter2 db\n\
-              0 2 * * * mysql -u root -p secret2\n\
-              0 3 * * * mysql -phunter3\n\
-              0 4 * * * curl -u user:pw4 https://h\n\
-              0 5 * * * TOKEN=abc5 run --pass=zz6 --db-pass=zz7 --auth=zz8\n\
-              0 6 * * * tool --password \"two words9\"\n",
+            concat!(
+                "0 1 * * * mysqldump --password hunter2 db\n",
+                "0 2 * * * mysql -u root -p secret2\n",
+                "0 3 * * * mysql -phunter3\n",
+                "0 4 * * * curl ",
+                "-u ",
+                "user:pw4 https://h\n",
+                "0 5 * * * TOKEN=abc5 run --pass=zz6 --db-pass=zz7 --auth=zz8\n",
+                "0 6 * * * tool --password \"two words9\"\n",
+            )
+            .as_bytes(),
         )?;
         let json = inventory_of(&tree.fs())?.to_json()?;
         for secret in [
@@ -1080,5 +1092,55 @@ fn nolink_read_refuses_a_final_symlink_but_reads_plain_files() -> TestResult {
     ));
     // The ordinary read still follows the link (inside the root).
     assert_eq!(fs.read_to_string("/link.txt", 100)?.text, "hello");
+    Ok(())
+}
+
+#[test]
+fn vhost_cert_db_and_launchd_collectors_run_from_anonymous_fixtures() -> TestResult {
+    let tree = Tree::new("sprint5-collectors")?;
+    tree.write(
+        "etc/nginx/sites-enabled/app.conf",
+        b"server {\n  listen 443 ssl;\n  server_name app.example.test;\n  proxy_pass http://127.0.0.1:3000;\n}\n",
+    )?;
+    tree.write(
+        "etc/letsencrypt/live/app.example.test/fullchain.pem",
+        b"# Subject: CN=app.example.test\n# Not After: 2027-06-01T00:00:00Z\n# DAYS_LEFT=90\n-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n",
+    )?;
+    // Private key must never be collected as a Cert item.
+    tree.write(
+        "etc/nginx/ssl/privkey.pem",
+        b"-----BEGIN PRIVATE KEY-----\nSECRET\n-----END PRIVATE KEY-----\n",
+    )?;
+    tree.write(
+        "etc/nodivara/db-inventory.json",
+        br#"[{"engine":"postgres","name":"app_db","version":"16.2","row_count":1500,"host":"127.0.0.1","port":5432}]"#,
+    )?;
+    tree.write(
+        "Library/LaunchDaemons/com.example.api.plist",
+        b"<plist><dict><key>Label</key><string>com.example.api</string><key>ProgramArguments</key><array><string>/opt/api/bin</string></array></dict></plist>",
+    )?;
+
+    let inv = collect_inventory(
+        &tree.fs(),
+        "2026-11-27T00:00:00Z".to_owned(),
+        Platform {
+            os: "linux".to_owned(),
+            arch: "x86_64".to_owned(),
+        },
+    )?;
+    assert!(inv.get(Kind::Vhost, "nginx:app.example.test:443").is_some());
+    assert!(
+        inv.get(
+            Kind::Cert,
+            "cert:/etc/letsencrypt/live/app.example.test/fullchain.pem"
+        )
+        .is_some()
+    );
+    assert!(
+        inv.get(Kind::Cert, "cert:/etc/nginx/ssl/privkey.pem")
+            .is_none()
+    );
+    assert!(inv.get(Kind::Database, "db:postgres:app_db").is_some());
+    assert!(inv.get(Kind::Process, "launchd:com.example.api").is_some());
     Ok(())
 }

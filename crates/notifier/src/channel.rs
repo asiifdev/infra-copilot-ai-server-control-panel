@@ -170,6 +170,16 @@ pub trait HttpTransport: Send + Sync {
     ) -> impl Future<Output = Result<(u16, Vec<u8>), TransportError>> + Send;
 }
 
+impl<T: HttpTransport + ?Sized> HttpTransport for &T {
+    fn post_json(
+        &self,
+        url: &str,
+        body: &[u8],
+    ) -> impl Future<Output = Result<(u16, Vec<u8>), TransportError>> + Send {
+        (*self).post_json(url, body)
+    }
+}
+
 /// A one-way notification channel (Telegram, email, webhook, ...).
 ///
 /// Not object safe (methods return `impl Future`): use generics or an enum for dispatch.

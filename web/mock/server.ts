@@ -276,6 +276,11 @@ export function createMock(options: MockOptions = {}) {
       case 'nodes': {
         if (method !== 'GET') break;
         if (!name) return json(200, state.nodes);
+        if (action === 'logs') {
+          const service = query.get('service') ?? '';
+          if (!service) return fail(req, 400, 'invalid_service');
+          return json(200, { node_id: name, service, line_count: 2, truncated: false, content: `line 1 ${service}\nline 2 ok` });
+        }
         if (action === 'inventory') {
           const view = state.inventory[name];
           if (!view) return fail(req, 404, 'not_found');
@@ -297,19 +302,116 @@ export function createMock(options: MockOptions = {}) {
         });
       }
       case 'plans': {
-        if (method !== 'GET') break;
-        if (!name) {
-          return json(
-            200,
-            state.plans.map(({ name: n, status, source_node, target_node, created_at }) => ({ name: n, status, source_node, target_node, created_at })),
-          );
+        if (method === 'GET') {
+          if (!name) {
+            return json(
+              200,
+              state.plans.map(({ id: pid, name: n, status, source_node, target_node, created_at }) => ({
+                id: pid,
+                name: n,
+                status,
+                source_node,
+                target_node,
+                created_at,
+              })),
+            );
+          }
+          const plan = state.plans.find((p) => p.name === name || p.id === name);
+          return plan ? json(200, plan) : fail(req, 404, 'not_found');
         }
-        const plan = state.plans.find((p) => p.name === name);
-        return plan ? json(200, plan) : fail(req, 404, 'not_found');
-      }
-      case 'transports':
-        if (method === 'GET' && !name) return json(200, state.transports);
+        if (method === 'POST' && name && action === 'approve') {
+          const plan = state.plans.find((p) => p.id === name || p.name === name);
+          if (!plan) return fail(req, 404, 'not_found');
+          if (plan.status !== 'draft' && plan.status !== 'reviewed') return fail(req, 409, 'plan_not_approvable');
+          plan.status = 'approved';
+          return json(200, { id: plan.id, name: plan.name, status: plan.status });
+        }
+        if (method === 'POST' && name && action === 'run') {
+          if (!state.executionEnabled) return fail(req, 409, 'execution_disabled');
+          const plan = state.plans.find((p) => p.id === name || p.name === name);
+          if (!plan) return fail(req, 404, 'not_found');
+          if (plan.status !== 'approved' && plan.status !== 'paused') return fail(req, 409, 'plan_not_approved');
+          if (state.executionFails) {
+            plan.status = 'paused';
+            return fail(req, 409, 'plan_gate_blocked');
+          }
+          plan.status = 'completed';
+          plan.steps = plan.steps.map((s) => ({ ...s, status: 'succeeded' }));
+          return json(200, {
+            id: plan.id,
+            name: plan.name,
+            status: plan.status,
+            steps: plan.steps.map((s) => ({ seq: s.seq, kind: s.kind, status: s.status, reason: null })),
+          });
+        }
         break;
+      }
+      case 'transports': {
+        if (method === 'GET' && !name) return json(200, state.transports);
+        if (method === 'POST' && name && action === 'credentials') {
+          if (!state.masterKey) return fail(req, 409, 'master_key_missing');
+          const transport = state.transports.find((t) => t.id === name || t.name === name);
+          if (!transport) return fail(req, 404, 'not_found');
+          if (transport.kind === 'local') return fail(req, 409, 'credentials_not_accepted');
+          const creds = (body as { credentials?: unknown } | undefined)?.credentials;
+          if (
+            typeof creds !== 'object' ||
+            creds === null ||
+            Array.isArray(creds) ||
+            Object.keys(creds).length === 0 ||
+            Object.values(creds).some((v) => typeof v !== 'string')
+          ) {
+            return fail(req, 400, 'bad_credentials');
+          }
+          transport.verified_at = null;
+          return json(200, { id: transport.id, name: transport.name, updated: true, verified_at: null });
+        }
+        break;
+      }
+      case 'monitors': {
+        if (method === 'GET' && !name) return json(200, state.monitors);
+        if (method === 'POST' && !name) {
+          const inp = (body ?? {}) as { name?: string; kind?: 'http' | 'tcp' | 'tls'; target?: string };
+          if (!inp.name || !inp.kind || !inp.target) return fail(req, 400, 'invalid_input');
+          const m = { id: fakeId(600 + state.monitors.length + 1), name: inp.name, kind: inp.kind, target: inp.target, current_status: 'pending', last_checked_at: null };
+          state.monitors.push(m);
+          return json(201, m);
+        }
+        if (method === 'DELETE' && name) {
+          state.monitors = state.monitors.filter((m) => m.id !== name);
+          return new Response(null, { status: 204 });
+        }
+        break;
+      }
+      case 'incidents': {
+        if (method === 'GET' && !name) return json(200, state.incidents);
+        if (method === 'POST' && name && action === 'ack') {
+          const inc = state.incidents.find((i) => i.id === name);
+          if (!inc) return fail(req, 404, 'not_found');
+          inc.acknowledged_at = new Date().toISOString();
+          return json(200, { id: inc.id, acknowledged: true });
+        }
+        break;
+      }
+      case 'channels': {
+        if (method === 'GET' && !name) return json(200, state.channels);
+        if (method === 'POST' && name === 'telegram' && action === 'link-code') {
+          return json(201, { id: fakeId(850), code: 'ABCD1234EFGH', command: '/link ABCD1234EFGH' });
+        }
+        if (method === 'POST' && !name) {
+          const inp = (body ?? {}) as { kind?: 'telegram' | 'webhook'; name?: string; token?: string };
+          if (!inp.name || !inp.kind) return fail(req, 400, 'invalid_input');
+          if (inp.token && !state.masterKey) return fail(req, 409, 'master_key_missing');
+          const c = { id: fakeId(800 + state.channels.length + 1), kind: inp.kind, name: inp.name, has_secret: Boolean(inp.token), is_active: true };
+          state.channels.push(c);
+          return json(201, c);
+        }
+        if (method === 'DELETE' && name) {
+          state.channels = state.channels.filter((c) => c.id !== name);
+          return new Response(null, { status: 204 });
+        }
+        break;
+      }
       case 'providers': {
         if (method === 'GET' && !name) return json(200, state.providers);
         if (method === 'POST' && !name) {
@@ -387,14 +489,36 @@ export function createMock(options: MockOptions = {}) {
         if (method === 'POST' && name && action === 'decision') {
           const proposal = state.proposals.find((p) => p.id === name);
           if (!proposal) return fail(req, 404, 'not_found');
-          const decision = (body as { decision?: unknown } | undefined)?.decision;
+          const { decision, typed_confirmation } = (body as { decision?: unknown; typed_confirmation?: unknown } | undefined) ?? {};
           if (decision !== 'approve' && decision !== 'reject') return fail(req, 400, 'invalid_input');
           // Only a pending proposal can be decided, and only before it expires. Nothing is executed.
           if (proposal.status === 'pending' && new Date(proposal.expires_at).getTime() < Date.now()) proposal.status = 'expired';
           if (proposal.status === 'expired') return fail(req, 409, 'proposal_expired');
           if (proposal.status !== 'pending') return fail(req, 409, 'proposal_decided');
+          if (decision === 'approve' && proposal.tier === 4) {
+            if (!proposal.action) return fail(req, 409, 'action_invalid');
+            if (typed_confirmation !== proposal.action.target_label) return fail(req, 400, 'typed_confirmation_mismatch');
+          }
           proposal.status = decision === 'approve' ? 'approved' : 'rejected';
+          proposal.approval = {
+            decision: decision === 'approve' ? 'approved' : 'rejected',
+            typed_confirmation: decision === 'approve' && proposal.tier === 4,
+            created_at: new Date().toISOString(),
+          };
           return json(200, { id: proposal.id, status: proposal.status });
+        }
+        if (method === 'POST' && name && action === 'dry-run') {
+          const proposal = state.proposals.find((p) => p.id === name);
+          if (!proposal) return fail(req, 404, 'not_found');
+          if (!proposal.action) return fail(req, 409, 'proposal_no_action');
+          const dry = {
+            steps: [`Inspect ${proposal.action.target_label}`, `Preview ${proposal.action.kind}`],
+            current_state: 'active (mock)',
+            diff: `--- a/${proposal.action.target_label}\n+++ b/${proposal.action.target_label}\n@@ -1 +1 @@\n-old\n+new`,
+            dry_run_at: new Date().toISOString(),
+          };
+          proposal.dry_run = dry;
+          return json(200, { id: proposal.id, ...dry });
         }
         if (method === 'POST' && name && action === 'execute') {
           // The same order of checks as the server: switched off, unknown, then the state.
@@ -412,12 +536,32 @@ export function createMock(options: MockOptions = {}) {
             status: ok ? 'succeeded' : 'failed',
             verified: ok,
             reason: ok ? 'ok' : 'command_failed',
-            output: ok ? 'active' : `Failed to restart ${proposal.action.service}: Unit not found.`,
+            output: ok ? 'active' : `Failed to restart ${proposal.action.target_label}: Unit not found.`,
             started_at: started,
             finished_at: new Date().toISOString(),
           };
+          proposal.has_backup = proposal.tier >= 3;
           proposal.status = ok ? 'executed' : 'failed';
-          return json(200, { id: proposal.id, status: proposal.status, execution: proposal.execution });
+          return json(200, { id: proposal.id, status: proposal.status, has_backup: proposal.has_backup, execution: proposal.execution });
+        }
+        if (method === 'POST' && name && action === 'rollback') {
+          if (!state.executionEnabled) return fail(req, 409, 'execution_disabled');
+          const proposal = state.proposals.find((p) => p.id === name);
+          if (!proposal) return fail(req, 404, 'not_found');
+          if (!proposal.execution) return fail(req, 409, 'proposal_not_executed');
+          if (proposal.execution.status === 'running') return fail(req, 409, 'execution_running');
+          if (!proposal.has_backup) return fail(req, 409, 'backup_missing');
+          if (proposal.rollback) return fail(req, 409, 'already_rolled_back');
+          const ok = !state.executionFails;
+          proposal.rollback = {
+            status: ok ? 'succeeded' : 'failed',
+            verified: ok,
+            reason: ok ? 'ok' : 'command_failed',
+            output: ok ? 'restored' : 'rollback failed',
+            started_at: new Date().toISOString(),
+            finished_at: new Date().toISOString(),
+          };
+          return json(200, { id: proposal.id, rollback: proposal.rollback });
         }
         break;
       }

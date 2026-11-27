@@ -20,6 +20,16 @@ text_enum!(
         Cron => "cron",
         /// A configuration reference to a host and port.
         EnvRef => "env_ref",
+        /// A web virtual host.
+        Vhost => "vhost",
+        /// TLS certificate metadata.
+        Cert => "cert",
+        /// Database metadata.
+        Database => "database",
+        /// Public DNS check.
+        Dns => "dns",
+        /// Functional check result.
+        Check => "check",
     }
 );
 

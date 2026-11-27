@@ -37,27 +37,35 @@
 //!   the documentation and could not be run on the macOS development machine. The walk is tested
 //!   everywhere, and on Linux a contract test compares both branches on the same tree.
 
+#[cfg(unix)]
 use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::fs::File;
 use std::io::{self, Read};
+#[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
 
+#[cfg(unix)]
 use rustix::fd::OwnedFd;
+#[cfg(unix)]
 use rustix::fs::{self, AtFlags, CWD, Dir, FileType, Mode, OFlags};
+#[cfg(unix)]
 use rustix::io::Errno;
 
 /// Most symbolic links followed while resolving one path (Linux uses the same limit).
+#[cfg(unix)]
 const MAX_SYMLINKS: usize = 40;
 
 /// Open flags for a file read: never blocks on a FIFO, never becomes a controlling terminal,
 /// never leaks into children.
+#[cfg(unix)]
 const FILE_FLAGS: OFlags = OFlags::RDONLY
     .union(OFlags::NONBLOCK)
     .union(OFlags::NOCTTY)
     .union(OFlags::CLOEXEC);
 /// Open flags for a directory.
+#[cfg(unix)]
 const DIR_FLAGS: OFlags = OFlags::RDONLY
     .union(OFlags::DIRECTORY)
     .union(OFlags::CLOEXEC);
@@ -105,6 +113,7 @@ impl From<&io::Error> for FsError {
     }
 }
 
+#[cfg(unix)]
 impl From<Errno> for FsError {
     fn from(errno: Errno) -> Self {
         if errno == Errno::LOOP {
@@ -160,6 +169,7 @@ impl RootFs {
     ///
     /// # Errors
     /// [`FsError`] when the root is missing, not a directory, or unreadable.
+    #[cfg(unix)]
     pub fn validate(&self) -> Result<(), FsError> {
         let stat = fs::statat(CWD, &self.base, AtFlags::empty())?;
         if FileType::from_raw_mode(stat.st_mode) == FileType::Directory {
@@ -169,13 +179,29 @@ impl RootFs {
         }
     }
 
+    /// Checks the root itself is an accessible directory (portable fallback for non-Unix).
+    ///
+    /// # Errors
+    /// [`FsError`] when the root is missing, not a directory, or unreadable.
+    #[cfg(not(unix))]
+    pub fn validate(&self) -> Result<(), FsError> {
+        let meta = std::fs::metadata(&self.base).map_err(|e| FsError::from(&e))?;
+        if meta.is_dir() {
+            Ok(())
+        } else {
+            Err(FsError::WrongType)
+        }
+    }
+
     /// Opens the root directory (a new descriptor per call, so `RootFs` stays plain data).
+    #[cfg(unix)]
     fn open_root(&self) -> Result<OwnedFd, FsError> {
         Ok(fs::openat(CWD, &self.base, DIR_FLAGS, Mode::empty())?)
     }
 
     /// Opens `rel` inside the root. With `follow == false` the final component must not be a
     /// symbolic link (the open fails with [`FsError::WrongType`]).
+    #[cfg(unix)]
     fn open_in_root(&self, rel: &str, follow: bool, flags: OFlags) -> Result<OwnedFd, FsError> {
         let names = split_path(rel)?;
         let root = self.open_root()?;
@@ -186,14 +212,42 @@ impl RootFs {
         open_with_walk(root, &names, follow, flags)
     }
 
+    /// Resolves `rel` safely inside `self.base` on non-Unix platforms, refusing any symlink or
+    /// reparse point along the path so nothing can escape `self.base`.
+    #[cfg(not(unix))]
+    fn resolve_portable(&self, rel: &str) -> Result<PathBuf, FsError> {
+        self.validate()?;
+        let names = split_path(rel)?;
+        let mut cur = self.base.clone();
+        for name in names {
+            cur.push(name);
+            let meta = std::fs::symlink_metadata(&cur).map_err(|e| FsError::from(&e))?;
+            if meta.file_type().is_symlink() {
+                return Err(FsError::WrongType);
+            }
+        }
+        Ok(cur)
+    }
+
     /// Reads a regular file (following symlinks inside the root) as text, reading at most
     /// `max_bytes`.
     ///
     /// # Errors
     /// [`FsError`]; non-regular files (directories, FIFOs, devices) are refused so a planted FIFO
     /// cannot block the collector.
+    #[cfg(unix)]
     pub fn read_to_string(&self, rel: &str, max_bytes: usize) -> Result<FileText, FsError> {
         read_file(self.open_in_root(rel, true, FILE_FLAGS)?, max_bytes)
+    }
+
+    /// Reads a regular file inside the root on non-Unix platforms, refusing symlinks/reparse
+    /// points and reading at most `max_bytes`.
+    ///
+    /// # Errors
+    /// [`FsError`].
+    #[cfg(not(unix))]
+    pub fn read_to_string(&self, rel: &str, max_bytes: usize) -> Result<FileText, FsError> {
+        self.read_to_string_nolink(rel, max_bytes)
     }
 
     /// Like [`RootFs::read_to_string`], but the **last** path component must not be a symbolic
@@ -203,8 +257,25 @@ impl RootFs {
     ///
     /// # Errors
     /// [`FsError`]; see [`RootFs::read_to_string`].
+    #[cfg(unix)]
     pub fn read_to_string_nolink(&self, rel: &str, max_bytes: usize) -> Result<FileText, FsError> {
         read_file(self.open_in_root(rel, false, FILE_FLAGS)?, max_bytes)
+    }
+
+    /// Reads a regular file inside the root on non-Unix platforms, refusing symlinks/reparse
+    /// points and reading at most `max_bytes`.
+    ///
+    /// # Errors
+    /// [`FsError`].
+    #[cfg(not(unix))]
+    pub fn read_to_string_nolink(&self, rel: &str, max_bytes: usize) -> Result<FileText, FsError> {
+        let path = self.resolve_portable(rel)?;
+        let meta = std::fs::symlink_metadata(&path).map_err(|e| FsError::from(&e))?;
+        if !meta.is_file() {
+            return Err(FsError::WrongType);
+        }
+        let file = File::open(&path).map_err(|e| FsError::from(&e))?;
+        read_bounded(file, max_bytes)
     }
 
     /// Lists a directory: entry names sorted, at most `max_entries`.
@@ -212,6 +283,7 @@ impl RootFs {
     /// # Errors
     /// [`FsError`]. Entries that vanish while listing are skipped; names that are not valid UTF-8
     /// are counted in [`DirNames::non_utf8`].
+    #[cfg(unix)]
     pub fn read_dir(&self, rel: &str, max_entries: usize) -> Result<DirNames, FsError> {
         let fd = self.open_in_root(rel, true, DIR_FLAGS)?;
         let dir = Dir::read_from(&fd)?;
@@ -240,17 +312,57 @@ impl RootFs {
         })
     }
 
+    /// Lists a directory inside the root on non-Unix platforms.
+    ///
+    /// # Errors
+    /// [`FsError`].
+    #[cfg(not(unix))]
+    pub fn read_dir(&self, rel: &str, max_entries: usize) -> Result<DirNames, FsError> {
+        let path = self.resolve_portable(rel)?;
+        let rd = std::fs::read_dir(&path).map_err(|e| FsError::from(&e))?;
+        let mut names = Vec::new();
+        let mut truncated = false;
+        let mut non_utf8 = 0usize;
+        for entry in rd.flatten() {
+            if names.len() >= max_entries {
+                truncated = true;
+                break;
+            }
+            match entry.file_name().into_string() {
+                Ok(name) => names.push(name),
+                Err(_) => non_utf8 += 1,
+            }
+        }
+        names.sort();
+        Ok(DirNames {
+            names,
+            truncated,
+            non_utf8,
+        })
+    }
+
     /// Reads the target of a symlink without following it. Only the parent components are
     /// resolved (inside the root); the last component's link text is returned as stored.
     ///
     /// # Errors
     /// [`FsError`].
+    #[cfg(unix)]
     pub fn read_link(&self, rel: &str) -> Result<String, FsError> {
         let names = split_path(rel)?;
         let walked = walk(self.open_root()?, &names, false)?;
         let name = walked.last.as_deref().unwrap_or(OsStr::new("."));
         let target = fs::readlinkat(&walked.dir, name, Vec::new())?;
         Ok(String::from_utf8_lossy(target.to_bytes()).into_owned())
+    }
+
+    /// Reads a symlink target on non-Unix platforms (if supported by the filesystem).
+    ///
+    /// # Errors
+    /// [`FsError`].
+    #[cfg(not(unix))]
+    pub fn read_link(&self, rel: &str) -> Result<String, FsError> {
+        let _ = split_path(rel)?;
+        Err(FsError::WrongType)
     }
 }
 
@@ -272,6 +384,7 @@ fn split_path(rel: &str) -> Result<Vec<&str>, FsError> {
 
 /// The final-component error: with `follow == false` a symlink (`ELOOP` from `O_NOFOLLOW`) is the
 /// wrong type; otherwise it is a loop.
+#[cfg(unix)]
 fn final_error(errno: Errno, follow: bool) -> FsError {
     if errno == Errno::LOOP && !follow {
         FsError::WrongType
@@ -357,6 +470,7 @@ fn reopen_regular(path_fd: &OwnedFd, flags: OFlags) -> Option<Result<OwnedFd, Fs
 }
 
 /// The per-component fallback (and the only path off Linux).
+#[cfg(unix)]
 fn open_with_walk(
     root: OwnedFd,
     names: &[&str],
@@ -391,6 +505,7 @@ fn open_with_walk(
 }
 
 /// Where a walk ended: `dir` is open, and `last` (if any) is an entry of it, not yet opened.
+#[cfg(unix)]
 struct Walked {
     dir: OwnedFd,
     last: Option<OsString>,
@@ -406,6 +521,7 @@ enum Step {
 /// `readlinkat` and expanded in place (absolute targets restart at the root, `..` pops a
 /// descriptor and never goes below the root). The last component is returned unopened (and, with
 /// `follow == false`, unexamined).
+#[cfg(unix)]
 fn walk(root: OwnedFd, names: &[&str], follow: bool) -> Result<Walked, FsError> {
     let mut current = root;
     let mut parents: Vec<OwnedFd> = Vec::new();
@@ -479,19 +595,13 @@ fn walk(root: OwnedFd, names: &[&str], follow: bool) -> Result<Walked, FsError> 
     })
 }
 
-/// Reads an opened regular file; the type is checked on the descriptor itself, so a file swapped
-/// for something else after the open cannot matter.
-fn read_file(fd: OwnedFd, max_bytes: usize) -> Result<FileText, FsError> {
-    let stat = fs::fstat(&fd)?;
-    if FileType::from_raw_mode(stat.st_mode) != FileType::RegularFile {
-        return Err(FsError::WrongType);
-    }
+/// Reads at most `max_bytes` from `file`.
+fn read_bounded(file: File, max_bytes: usize) -> Result<FileText, FsError> {
     let limit = u64::try_from(max_bytes)
         .unwrap_or(u64::MAX)
         .saturating_add(1);
     let mut bytes = Vec::new();
-    File::from(fd)
-        .take(limit)
+    file.take(limit)
         .read_to_end(&mut bytes)
         .map_err(|err| FsError::from(&err))?;
     let truncated = bytes.len() > max_bytes;
@@ -500,6 +610,17 @@ fn read_file(fd: OwnedFd, max_bytes: usize) -> Result<FileText, FsError> {
         text: String::from_utf8_lossy(&bytes).into_owned(),
         truncated,
     })
+}
+
+/// Reads an opened regular file; the type is checked on the descriptor itself, so a file swapped
+/// for something else after the open cannot matter.
+#[cfg(unix)]
+fn read_file(fd: OwnedFd, max_bytes: usize) -> Result<FileText, FsError> {
+    let stat = fs::fstat(&fd)?;
+    if FileType::from_raw_mode(stat.st_mode) != FileType::RegularFile {
+        return Err(FsError::WrongType);
+    }
+    read_bounded(File::from(fd), max_bytes)
 }
 
 #[cfg(test)]
@@ -531,6 +652,7 @@ mod tests {
     }
 
     /// Builds a small tree with links of every kind under a unique temporary directory.
+    #[cfg(unix)]
     fn tree(name: &str) -> Result<PathBuf, io::Error> {
         let top = std::env::temp_dir().join(format!("rootfs-unit-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&top);
@@ -550,6 +672,7 @@ mod tests {
 
     /// Both resolution strategies (the walk, and `openat2` on Linux) and the public API must give
     /// the same answer on the same tree, for every kind of path.
+    #[cfg(unix)]
     #[test]
     fn walk_openat2_and_public_api_agree() -> Result<(), io::Error> {
         let root = tree("agree")?;
@@ -594,6 +717,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(unix)]
     fn io_of(err: FsError) -> io::Error {
         io::Error::other(err.to_string())
     }

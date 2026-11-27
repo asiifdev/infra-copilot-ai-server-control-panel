@@ -58,6 +58,7 @@ export interface FindingsView {
 }
 
 export interface PlanSummary {
+  id: string;
   name: string;
   status: string;
   source_node: string;
@@ -65,11 +66,22 @@ export interface PlanSummary {
   created_at: string;
 }
 
+export type PlanStepStatus =
+  | 'pending'
+  | 'proposed'
+  | 'approved'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'skipped'
+  | 'rolled_back';
+
 /** One step of a plan. `seq` counts from 0; `depends_on` lists the `seq` of earlier steps. */
 export interface PlanStep {
   seq: number;
   kind: string;
   depends_on: number[];
+  status: PlanStepStatus;
   /** Inventory steps only: "source" or "target". */
   side?: string;
   /** Restore and verify steps only: the database key from the plan. */
@@ -94,11 +106,14 @@ export interface PlanDetail extends PlanSummary {
 export type TransportCheck = { ok?: boolean; [key: string]: unknown };
 
 export interface TransportSummary {
+  id: string;
   name: string;
   kind: string;
   verified_at: string | null;
   last_check: TransportCheck | null;
 }
+
+export type TransportView = TransportSummary;
 
 export interface ProviderView {
   name: string;
@@ -137,15 +152,51 @@ export interface MemoryNote {
 }
 
 /** The closed action list: the only thing a proposal can run (ADR 0037). */
-export interface ProposalAction {
-  kind: 'restart_service';
-  manager: 'systemd';
-  service: string;
+export type ProposalAction =
+  | {
+      kind: 'restart_service';
+      manager: 'systemd';
+      service: string;
+      target_label: string;
+    }
+  | {
+      kind: 'update_env_var';
+      path: string;
+      key: string;
+      value: '[REDACTED]';
+      target_label: string;
+    }
+  | {
+      kind: 'delete_managed_file';
+      path: string;
+      target_label: string;
+    };
+
+export interface ProposalDryRun {
+  steps: string[];
+  current_state: string;
+  diff: string | null;
+  dry_run_at: string;
+}
+
+export interface ProposalApproval {
+  decision: 'approved' | 'rejected';
+  typed_confirmation: boolean;
+  created_at: string;
+}
+
+export interface ProposalRollback {
+  status: string;
+  verified: boolean;
+  reason: string;
+  output: string;
+  started_at: string;
+  finished_at: string | null;
 }
 
 /** What happened when an approved proposal was run. `output` is untrusted text from the target. */
 export interface ProposalExecution {
-  status: 'running' | 'succeeded' | 'failed';
+  status: 'running' | 'queued' | 'succeeded' | 'failed';
   verified: boolean;
   /** ok | not_installed | timeout | command_failed | not_active_after | io | action_invalid | interrupted */
   reason: string | null;
@@ -172,9 +223,13 @@ export interface ProposalView {
   expires_at: string;
   /** What running would do; null for a recommendation only. */
   action: ProposalAction | null;
+  dry_run: ProposalDryRun | null;
+  approval: ProposalApproval | null;
+  has_backup: boolean;
   /** Name of the target node of the action. */
   node: string | null;
   execution: ProposalExecution | null;
+  rollback: ProposalRollback | null;
 }
 
 export interface Conversation {
@@ -199,3 +254,38 @@ export type TurnEvent =
   | { type: 'tool'; name: string; tier: number | string; status: string; duration_ms?: number }
   | { type: 'done'; rounds?: number; tool_calls?: number; usage?: { estimated?: boolean; tokens?: number } }
   | { type: 'error'; code: string; message: string };
+
+export interface MonitorView {
+  id: string;
+  name: string;
+  kind: 'http' | 'tcp' | 'tls';
+  target: string;
+  current_status: string;
+  last_checked_at: string | null;
+}
+
+export interface IncidentView {
+  id: string;
+  monitor_id: string;
+  started_at: string;
+  resolved_at: string | null;
+  cause: string;
+  severity: string;
+  acknowledged_at: string | null;
+}
+
+export interface ChannelView {
+  id: string;
+  kind: 'telegram' | 'webhook';
+  name: string;
+  has_secret: boolean;
+  is_active: boolean;
+}
+
+export interface NodeLogsView {
+  node_id: string;
+  service: string;
+  line_count: number;
+  truncated: boolean;
+  content: string;
+}

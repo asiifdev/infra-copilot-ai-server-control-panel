@@ -27,10 +27,13 @@
 //!
 //! Not covered yet: databases, service versions beyond Docker image tags, macOS.
 
+mod cert;
 mod cron;
+mod db_meta;
 mod docker;
 mod envref;
 mod exec;
+mod launchd;
 mod listeners;
 mod pm2;
 mod processes;
@@ -39,6 +42,7 @@ mod rootfs;
 mod supervision;
 mod systemd;
 mod util;
+mod vhost;
 
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
@@ -46,14 +50,18 @@ use std::sync::Arc;
 
 use inventory::{CollectError, Collector, Inventory, Item, Kind, Platform};
 
+pub use cert::Cert;
 pub use cron::Cron;
+pub use db_meta::DbMeta;
 pub use docker::Docker;
 pub use exec::{Cmd, CommandRunner, ExecError, FakeRunner, HostRunner};
+pub use launchd::Launchd;
 pub use listeners::Listeners;
 pub use pm2::Pm2;
 pub use processes::Processes;
 pub use rootfs::{DirNames, FileText, FsError, RootFs};
 pub use systemd::Systemd;
+pub use vhost::Vhost;
 
 /// Version of this collector set, recorded in the inventory.
 pub const COLLECTOR_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -87,11 +95,15 @@ pub fn collect_inventory_with(
     taken_at: String,
     platform: Platform,
 ) -> Result<Inventory, CollectError> {
-    let collectors: [Box<dyn Collector>; 6] = [
+    let collectors: [Box<dyn Collector>; 10] = [
         Box::new(Listeners::new(root.clone())),
         Box::new(Processes::new(root.clone())),
         Box::new(Cron::new(root.clone())),
         Box::new(Pm2::new(root.clone())),
+        Box::new(Vhost::new(root.clone())),
+        Box::new(Cert::new(root.clone())),
+        Box::new(DbMeta::new(root.clone())),
+        Box::new(Launchd::new(root.clone())),
         Box::new(Systemd::new(Arc::clone(&runner))),
         Box::new(Docker::new(runner)),
     ];

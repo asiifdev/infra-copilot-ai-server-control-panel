@@ -515,12 +515,12 @@ fn bad_drafts_are_refused_with_localized_errors_and_store_nothing() -> TestResul
 }
 
 #[test]
-fn a_cli_plan_has_no_approve_or_run_command() {
+fn plan_usage_rejects_bad_subcommands_and_flags() {
     let ctx = Ctx::new("unused.db".to_owned());
     for args in [
-        vec!["plan", "approve", "x"],
-        vec!["plan", "run", "x"],
         vec!["plan", "schedule", "x"],
+        vec!["plan", "approve"],
+        vec!["plan", "run"],
         vec!["plan", "draft", "--status", "approved"],
         vec![
             "plan",
@@ -1483,5 +1483,58 @@ fn credential_names_are_refused_as_plain_options_and_never_echoed() -> TestResul
         !contains(&raw_db_bytes(&ctx.db), &secret),
         "the value must not be in the database"
     );
+    Ok(())
+}
+
+#[test]
+fn transport_update_credentials_and_plan_approve_run_work() -> TestResult {
+    let (_dir, ctx) = world("sprint2")?;
+    verified_transport(&ctx, "ssh1")?;
+
+    // 1. Add S3 transport, then rotate its credentials via --credentials-stdin.
+    let add = add_s3(&ctx, "rot-s3");
+    assert_eq!(add.code, 0, "{}", add.stderr);
+    let upd = ctx.run(
+        &[
+            "transport",
+            "update-credentials",
+            "rot-s3",
+            "--credentials-stdin",
+        ],
+        "access_key_id=NEW-KEY-99\nsecret_access_key=NEW-SECRET-99\n",
+    );
+    assert_eq!(upd.code, 0, "{}", upd.stderr);
+    assert!(!upd.stdout.contains("NEW-SECRET-99"));
+    assert!(!upd.stderr.contains("NEW-SECRET-99"));
+
+    // 2. Plan draft, approve, and dry-run.
+    let conn = db::open(Path::new(&ctx.db))?;
+    let org = db::list_orgs(&conn, 5)?.remove(0).id;
+    let draft = ctx.run(
+        &[
+            "plan",
+            "draft",
+            "--source",
+            "old",
+            "--target",
+            "new",
+            "--transport",
+            "ssh1",
+            "--name",
+            "cli-sprint2",
+        ],
+        "",
+    );
+    assert_eq!(draft.code, 0, "{}", draft.stderr);
+    let plans = db::list_plans(&conn, &org, 10)?;
+    let plan = plans
+        .iter()
+        .find(|p| p.name == "cli-sprint2")
+        .ok_or("missing drafted plan")?;
+    let app = ctx.run(&["plan", "approve", plan.id.as_str()], "");
+    assert_eq!(app.code, 0, "{}", app.stderr);
+    let dry = ctx.run(&["plan", "run", plan.id.as_str()], "");
+    assert_eq!(dry.code, 0, "{}", dry.stderr);
+    assert!(dry.stdout.contains("Dry-run"), "{}", dry.stdout);
     Ok(())
 }

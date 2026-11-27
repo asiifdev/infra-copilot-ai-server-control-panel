@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { api, ApiError } from '../lib/api';
+  import { api } from '../lib/api';
   import { approvals } from '../lib/approvals.svelte';
-  import { errorKey } from '../lib/errors';
+  import { toastError } from '../lib/errors';
   import { t } from '../lib/i18n.svelte';
   import { useResource } from '../lib/resource.svelte';
   import { session } from '../lib/session.svelte';
@@ -11,6 +11,7 @@
   import AsyncView from '../components/AsyncView.svelte';
   import Card from '../components/Card.svelte';
   import ConfirmDialog from '../components/ConfirmDialog.svelte';
+  import ConfirmTyped from '../components/ConfirmTyped.svelte';
   import EmptyState from '../components/EmptyState.svelte';
   import Icon from '../components/Icon.svelte';
   import PageHeader from '../components/PageHeader.svelte';
@@ -35,6 +36,7 @@
 
   // The approved action waiting for a second look before it runs.
   let running = $state.raw<ProposalView | null>(null);
+  let rollingBack = $state.raw<ProposalView | null>(null);
   const executionEnabled = $derived(session.info?.execution_enabled === true);
 
   function inFilter(list: ProposalView[], which: Filter): ProposalView[] {
@@ -61,40 +63,66 @@
     else void decide(proposal, 'approve');
   }
 
-  async function decide(proposal: ProposalView, decision: 'approve' | 'reject') {
-    acting = proposal.id;
+  async function withProposal(id: string, fn: () => Promise<void>, clear?: () => void) {
+    acting = id;
     try {
-      await api.decideProposal(proposal.id, decision);
-      toasts.push('success', t(decision === 'approve' ? 'ui.proposals.approved_toast' : 'ui.proposals.rejected_toast'));
+      await fn();
     } catch (cause) {
-      // A 409 means someone else got there first, or the time ran out: say so, then show the truth.
-      toasts.push('error', t(errorKey(cause instanceof ApiError ? cause.code : 'internal')));
+      toastError(cause);
     } finally {
       acting = null;
-      confirming = null;
+      clear?.();
       proposals.reload();
       void approvals.refresh();
     }
   }
 
-  async function run(proposal: ProposalView) {
-    acting = proposal.id;
-    try {
-      // No optimism: the card changes only when the server has answered.
-      const result = await api.executeProposal(proposal.id);
-      if (result.execution.status === 'succeeded') {
-        toasts.push(result.execution.verified ? 'success' : 'info', t(result.execution.verified ? 'ui.proposals.run_ok_toast' : 'ui.proposals.run_unverified_toast'));
-      } else {
-        toasts.push('error', t('ui.proposals.run_failed_toast'));
-      }
-    } catch (cause) {
-      toasts.push('error', t(errorKey(cause instanceof ApiError ? cause.code : 'internal')));
-    } finally {
-      acting = null;
-      running = null;
-      proposals.reload();
-      void approvals.refresh();
-    }
+  function decide(proposal: ProposalView, decision: 'approve' | 'reject', typedConfirmation?: string) {
+    return withProposal(
+      proposal.id,
+      async () => {
+        await api.decideProposal(proposal.id, decision, typedConfirmation);
+        toasts.push('success', t(decision === 'approve' ? 'ui.proposals.approved_toast' : 'ui.proposals.rejected_toast'));
+      },
+      () => (confirming = null),
+    );
+  }
+
+  function dryRun(proposal: ProposalView) {
+    return withProposal(proposal.id, () => api.dryRunProposal(proposal.id).then(() => {}));
+  }
+
+  function run(proposal: ProposalView) {
+    return withProposal(
+      proposal.id,
+      async () => {
+        const res = await api.executeProposal(proposal.id);
+        const ex = res.execution;
+        if (ex?.status === 'succeeded') {
+          toasts.push(ex.verified ? 'success' : 'info', t(ex.verified ? 'ui.proposals.run_ok_toast' : 'ui.proposals.run_unverified_toast'));
+        } else if (res.status === 'queued' || ex?.status === 'queued' || res.agent_job) {
+          toasts.push('info', t('ui.execution.queued'));
+        } else {
+          toasts.push('error', t('ui.proposals.run_failed_toast'));
+        }
+      },
+      () => (running = null),
+    );
+  }
+
+  function rollback(proposal: ProposalView) {
+    return withProposal(
+      proposal.id,
+      async () => {
+        const result = await api.rollbackProposal(proposal.id);
+        if (result.rollback.status === 'succeeded') {
+          toasts.push(result.rollback.verified ? 'success' : 'info', t('ui.proposals.rollback_ok_toast'));
+        } else {
+          toasts.push('error', t('ui.proposals.rollback_failed_toast'));
+        }
+      },
+      () => (rollingBack = null),
+    );
   }
 </script>
 
@@ -127,6 +155,8 @@
                 onreject={() => (confirming = { proposal, decision: 'reject' })}
                 {executionEnabled}
                 onrun={() => (running = proposal)}
+                ondryrun={() => dryRun(proposal)}
+                onrollback={() => (rollingBack = proposal)}
               />
             </li>
           {/each}
@@ -139,16 +169,30 @@
 {#if confirming}
   {@const { proposal, decision } = confirming}
   {@const approving = decision === 'approve'}
-  <ConfirmDialog
-    title={t(approving ? 'ui.proposals.risky_title' : 'ui.proposals.reject_title')}
-    message={t(approving ? 'ui.proposals.risky_message' : 'ui.proposals.reject_message', { title: inlineText(proposal.title, 80) })}
-    confirmLabel={t(approving ? 'ui.proposals.risky_confirm' : 'ui.proposals.reject')}
-    cancelLabel={t('ui.common.cancel')}
-    tone={approving ? 'primary' : 'danger'}
-    busy={acting === proposal.id}
-    onconfirm={() => decide(proposal, decision)}
-    oncancel={() => (confirming = null)}
-  />
+  {#if approving && proposal.tier === 4}
+    <ConfirmTyped
+      title={t('ui.proposals.risky_title')}
+      message={t('ui.proposals.risky_message', { title: inlineText(proposal.title, 80) })}
+      targetLabel={proposal.action?.target_label ?? proposal.title}
+      confirmLabel={t('ui.proposals.risky_confirm')}
+      cancelLabel={t('ui.common.cancel')}
+      tone="primary"
+      busy={acting === proposal.id}
+      onconfirm={(typed) => decide(proposal, decision, typed)}
+      oncancel={() => (confirming = null)}
+    />
+  {:else}
+    <ConfirmDialog
+      title={t(approving ? 'ui.proposals.risky_title' : 'ui.proposals.reject_title')}
+      message={t(approving ? 'ui.proposals.risky_message' : 'ui.proposals.reject_message', { title: inlineText(proposal.title, 80) })}
+      confirmLabel={t(approving ? 'ui.proposals.risky_confirm' : 'ui.proposals.reject')}
+      cancelLabel={t('ui.common.cancel')}
+      tone={approving ? 'primary' : 'danger'}
+      busy={acting === proposal.id}
+      onconfirm={() => decide(proposal, decision)}
+      oncancel={() => (confirming = null)}
+    />
+  {/if}
 {/if}
 
 {#if running}
@@ -156,8 +200,8 @@
   <ConfirmDialog
     title={t('ui.proposals.run_title')}
     message={t('ui.proposals.run_message', {
-      service: inlineText(target.action?.service, 100),
-      manager: inlineText(target.action?.manager, 20),
+      service: inlineText(target.action?.kind === 'restart_service' ? target.action.service : target.action?.target_label, 100),
+      manager: inlineText(target.action?.kind === 'restart_service' ? target.action.manager : target.action?.kind, 20),
       node: inlineText(target.node, 80) || t('ui.proposal.node_unknown'),
     })}
     confirmLabel={t('ui.proposals.run_confirm')}
@@ -166,6 +210,20 @@
     busy={acting === target.id}
     onconfirm={() => run(target)}
     oncancel={() => (running = null)}
+  />
+{/if}
+
+{#if rollingBack}
+  {@const target = rollingBack}
+  <ConfirmDialog
+    title={t('ui.proposals.rollback_title')}
+    message={t('ui.proposals.rollback_message')}
+    confirmLabel={t('ui.proposals.rollback_confirm')}
+    cancelLabel={t('ui.common.cancel')}
+    tone="danger"
+    busy={acting === target.id}
+    onconfirm={() => rollback(target)}
+    oncancel={() => (rollingBack = null)}
   />
 {/if}
 

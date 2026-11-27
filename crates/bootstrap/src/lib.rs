@@ -155,6 +155,16 @@ pub fn db_path(
     let home = env.get("HOME").filter(|h| !h.is_empty());
     let dir = if cfg!(target_os = "macos") {
         home.map(|h| PathBuf::from(h).join("Library/Application Support/Nodivara"))
+    } else if cfg!(target_os = "windows") {
+        env.get("LOCALAPPDATA")
+            .filter(|d| !d.is_empty())
+            .map(|d| PathBuf::from(d).join("Nodivara"))
+            .or_else(|| {
+                env.get("USERPROFILE")
+                    .or(home)
+                    .filter(|h| !h.is_empty())
+                    .map(|h| PathBuf::from(h).join(".nodivara"))
+            })
     } else {
         env.get("XDG_DATA_HOME")
             .filter(|d| !d.is_empty())

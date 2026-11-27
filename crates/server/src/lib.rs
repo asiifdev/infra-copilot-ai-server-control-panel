@@ -21,6 +21,7 @@ mod guard;
 mod stream;
 mod turn;
 mod util;
+pub(crate) mod watch_loop;
 
 pub use app::{Config, DEFAULT_PORT, DEFAULT_PROVIDER_TEST_TIMEOUT};
 pub use clock::Clock;
@@ -102,10 +103,24 @@ fn router(app: &Arc<App>) -> Router {
         .route("/api/i18n/{locale}", get(api::i18n_catalog))
         .route("/api/nodes", get(api::nodes))
         .route("/api/nodes/{name}/inventory", get(api::inventory))
+        .route(
+            "/api/nodes/{id}/agent-token",
+            post(api::node_agent_token_rotate),
+        )
+        .route("/api/nodes/{id}/logs", get(api::node_logs))
+        .route("/api/agents/poll", post(api::agent_poll))
+        .route("/api/agents/result", post(api::agent_result))
+        .route("/api/sites", get(api::sites_list).post(api::sites_create))
         .route("/api/findings", get(api::findings))
         .route("/api/plans", get(api::plans))
         .route("/api/plans/{name}", get(api::plan_detail))
+        .route("/api/plans/{id}/approve", post(api::plan_approve))
+        .route("/api/plans/{id}/run", post(api::plan_run))
         .route("/api/transports", get(api::transports))
+        .route(
+            "/api/transports/{id}/credentials",
+            post(api::transport_credentials),
+        )
         .route(
             "/api/providers",
             get(api::providers_list).post(api::provider_add),
@@ -117,7 +132,25 @@ fn router(app: &Arc<App>) -> Router {
         .route("/api/memories/{id}", delete(api::memory_delete))
         .route("/api/proposals", get(api::proposals_list))
         .route("/api/proposals/{id}/decision", post(api::proposal_decide))
+        .route("/api/proposals/{id}/dry-run", post(api::proposal_dry_run))
         .route("/api/proposals/{id}/execute", post(api::proposal_execute))
+        .route("/api/proposals/{id}/rollback", post(api::proposal_rollback))
+        .route(
+            "/api/monitors",
+            get(api::monitors_list).post(api::monitor_create),
+        )
+        .route("/api/monitors/{id}", delete(api::monitor_delete))
+        .route("/api/incidents", get(api::incidents_list))
+        .route("/api/incidents/{id}/ack", post(api::incident_ack))
+        .route(
+            "/api/channels",
+            get(api::channels_list).post(api::channel_create),
+        )
+        .route("/api/channels/{id}", delete(api::channel_delete))
+        .route(
+            "/api/channels/telegram/link-code",
+            post(api::telegram_link_code),
+        )
         .route(
             "/api/conversations",
             get(api::conversations_list).post(api::conversations_create),
@@ -208,6 +241,13 @@ impl Server {
         shutdown: impl Future<Output = ()> + Send + 'static,
     ) -> Result<(), ServeError> {
         let stop = Arc::new(Notify::new());
+        let (watch_tx, watch_rx) = tokio::sync::watch::channel(false);
+        if self.app.enable_watch {
+            tokio::spawn(watch_loop::run_background_loop(
+                Arc::clone(&self.app),
+                watch_rx,
+            ));
+        }
         let graceful = {
             let stop = Arc::clone(&stop);
             async move { stop.notified().await }
@@ -216,14 +256,16 @@ impl Server {
             .with_graceful_shutdown(graceful)
             .into_future();
         tokio::pin!(serve);
-        tokio::select! {
+        let res = tokio::select! {
             result = &mut serve => result.map_err(|error| ServeError::Io(error.to_string())),
             () = async {
                 shutdown.await;
                 stop.notify_one();
                 tokio::time::sleep(SHUTDOWN_GRACE).await;
             } => Ok(()),
-        }
+        };
+        let _ = watch_tx.send(true);
+        res
     }
 }
 

@@ -9,8 +9,10 @@
 //! What the read seam never returns: a transport's configuration, its secret reference, or any id
 //! of a secret. Machines are named, not addressed.
 
+use crate::gates_for_stored;
 use crate::store::{StoreError, finding_from_row};
 use db::{Connection, FindingStatus, InventoryStatus, NodeId, OrgId};
+use i18n::{Catalog, Locale};
 use inventory::Finding;
 use plan::{FindingKey, Plan, StoredStep};
 use std::fmt;
@@ -47,6 +49,8 @@ pub struct ResolvedTransport {
 /// One plan in a listing.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PlanSummary {
+    /// Plan UUID.
+    pub id: String,
     /// Name.
     pub name: String,
     /// `draft`, `reviewed`, `approved`, ...
@@ -255,6 +259,7 @@ impl<'a> DbPlanStore<'a> {
 
     fn summarize(&self, org: &OrgId, row: &db::PlanRow) -> Result<PlanSummary, StoreError> {
         Ok(PlanSummary {
+            id: row.id.as_str().to_owned(),
             name: row.name.clone(),
             status: row.status.as_str(),
             source_node: self.node_name(org, &row.source_node_id)?,
@@ -300,7 +305,10 @@ impl PlanStore for DbPlanStore<'_> {
     }
 
     fn plan(&self, org: &OrgId, name: &str) -> Result<StoredPlan, StoreError> {
-        let row = db::find_plan_by_name(self.conn, org, name)?;
+        let row = db::PlanId::parse(name)
+            .ok()
+            .and_then(|id| db::get_plan(self.conn, org, &id).ok())
+            .map_or_else(|| db::find_plan_by_name(self.conn, org, name), Ok)?;
         let steps = db::list_plan_steps(self.conn, org, &row.id)?;
         let stored: Vec<StoredStep> = steps
             .into_iter()
@@ -427,4 +435,318 @@ impl PlanSink for DbPlanSink<'_> {
         })?;
         Ok(id.as_str().to_owned())
     }
+}
+
+/// Runs one step of a migration plan (or simulates it when `dry_run` is true).
+pub trait PlanStepRunner {
+    /// Executes or simulates `step` of `plan`.
+    ///
+    /// # Errors
+    /// Returns a fixed short reason code if the step fails.
+    fn run_step(&self, plan: &Plan, step: &plan::Step, dry_run: bool) -> Result<(), &'static str>;
+}
+
+/// Default step runner that simulates or performs local no-op verification when no external
+/// runner is wired (used for dry-run previews and local plan orchestration).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DefaultPlanStepRunner;
+
+impl PlanStepRunner for DefaultPlanStepRunner {
+    fn run_step(
+        &self,
+        _plan: &Plan,
+        _step: &plan::Step,
+        _dry_run: bool,
+    ) -> Result<(), &'static str> {
+        Ok(())
+    }
+}
+
+/// Outcome of a single step in a [`PlanRunReport`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlanStepOutcome {
+    /// Step number.
+    pub seq: u32,
+    /// Wire kind (`inventory`, `backup`, ...).
+    pub kind: &'static str,
+    /// Resulting status (`succeeded`, `failed`, `skipped`, `dry_run_ok`, `dry_run_blocked`).
+    pub status: &'static str,
+    /// Fixed reason code on failure or gate block.
+    pub reason: Option<&'static str>,
+}
+
+/// Summary of a plan run (or dry-run).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlanRunReport {
+    /// Plan UUID.
+    pub plan_id: String,
+    /// Plan name.
+    pub name: String,
+    /// Whether this was a dry-run (no DB or target changes).
+    pub dry_run: bool,
+    /// Plan status after the run (`done`, `paused`, or the current status for dry-run).
+    pub status: &'static str,
+    /// Per-step outcomes in execution order.
+    pub steps: Vec<PlanStepOutcome>,
+}
+
+/// Why approving or running a plan failed.
+#[derive(Debug)]
+pub enum PlanRunError {
+    /// Plan not found in this org.
+    NotFound,
+    /// Plan cannot be approved in its current state or failed validation.
+    NotApprovable,
+    /// Plan must be `approved` (or `paused`) before running.
+    NotApproved,
+    /// Plan gate refused cutover or decommission.
+    GateBlocked(plan::ScheduleRefusal),
+    /// Underlying store or database error.
+    Store(StoreError),
+}
+
+impl From<StoreError> for PlanRunError {
+    fn from(e: StoreError) -> Self {
+        match e {
+            StoreError::NotFound => Self::NotFound,
+            other => Self::Store(other),
+        }
+    }
+}
+
+impl From<db::Error> for PlanRunError {
+    fn from(e: db::Error) -> Self {
+        match e {
+            db::Error::NotFound => Self::NotFound,
+            db::Error::Invalid(_) => Self::NotApprovable,
+            other => Self::Store(StoreError::from(other)),
+        }
+    }
+}
+
+/// Approves a `draft` or `reviewed` plan (`id` or `name`), validating it first and recording
+/// `plan.approve` in the audit chain.
+///
+/// # Errors
+/// [`PlanRunError::NotFound`], [`PlanRunError::NotApprovable`], or [`PlanRunError::Store`].
+pub fn approve_plan(
+    conn: &Connection,
+    org: &OrgId,
+    id_or_name: &str,
+    actor_kind: db::ActorKind,
+    actor_id: Option<&str>,
+) -> Result<StoredPlan, PlanRunError> {
+    let store = DbPlanStore::new(conn);
+    let stored = store.plan(org, id_or_name)?;
+    let plan_id = db::PlanId::parse(&stored.summary.id).map_err(|_| PlanRunError::NotApprovable)?;
+    if !matches!(stored.summary.status, "draft" | "reviewed") {
+        return Err(PlanRunError::NotApprovable);
+    }
+    db::approve_plan(conn, org, &plan_id, actor_kind, actor_id)?;
+    Ok(store.plan(org, &stored.summary.id)?)
+}
+
+fn refusal_reason(refusal: &plan::ScheduleRefusal) -> &'static str {
+    match refusal {
+        plan::ScheduleRefusal::UnknownStep => "unknown_step",
+        plan::ScheduleRefusal::AlreadyCompleted => "already_completed",
+        plan::ScheduleRefusal::DependenciesPending(_) => "dependencies_pending",
+        plan::ScheduleRefusal::GatesUnknown => "gates_unknown",
+        plan::ScheduleRefusal::GatesNotSatisfied => "gates_not_satisfied",
+        plan::ScheduleRefusal::SourceNotVerified => "source_not_verified",
+    }
+}
+
+/// Runs (or dry-runs) a plan (`id` or `name`), checking gates before `cutover` and
+/// `decommission_source` and tracking each `migration_steps` row atomically with audit entries.
+///
+/// # Errors
+/// [`PlanRunError`].
+#[allow(clippy::too_many_arguments)]
+pub fn run_plan(
+    conn: &Connection,
+    catalog: &Catalog,
+    locale: Locale,
+    org: &OrgId,
+    id_or_name: &str,
+    dry_run: bool,
+    runner: &dyn PlanStepRunner,
+    actor_kind: db::ActorKind,
+    actor_id: Option<&str>,
+) -> Result<PlanRunReport, PlanRunError> {
+    let store = DbPlanStore::new(conn);
+    let stored = store.plan(org, id_or_name)?;
+    let plan_id = db::PlanId::parse(&stored.summary.id).map_err(|_| PlanRunError::NotApproved)?;
+    if !dry_run && !matches!(stored.summary.status, "approved" | "paused") {
+        return Err(PlanRunError::NotApproved);
+    }
+    let (gates, _) = gates_for_stored(&store, catalog, locale, org, &stored)?;
+    let existing_steps = db::list_plan_steps(conn, org, &plan_id)?;
+
+    let mut completed = std::collections::BTreeSet::new();
+    for s in &existing_steps {
+        if matches!(
+            s.status,
+            db::PlanStepStatus::Succeeded | db::PlanStepStatus::Skipped
+        ) {
+            completed.insert(s.seq);
+        }
+    }
+
+    if dry_run {
+        let mut outcomes = Vec::with_capacity(stored.plan.steps().len());
+        for step in stored.plan.steps() {
+            if completed.contains(&step.seq) {
+                outcomes.push(PlanStepOutcome {
+                    seq: step.seq,
+                    kind: step.kind.as_str(),
+                    status: "succeeded",
+                    reason: None,
+                });
+                continue;
+            }
+            if let Err(refusal) = stored
+                .plan
+                .check_schedulable(step.seq, &completed, Some(&gates))
+            {
+                outcomes.push(PlanStepOutcome {
+                    seq: step.seq,
+                    kind: step.kind.as_str(),
+                    status: "dry_run_blocked",
+                    reason: Some(refusal_reason(&refusal)),
+                });
+                continue;
+            }
+            match runner.run_step(&stored.plan, step, true) {
+                Ok(()) => {
+                    completed.insert(step.seq);
+                    outcomes.push(PlanStepOutcome {
+                        seq: step.seq,
+                        kind: step.kind.as_str(),
+                        status: "dry_run_ok",
+                        reason: None,
+                    });
+                }
+                Err(reason) => {
+                    outcomes.push(PlanStepOutcome {
+                        seq: step.seq,
+                        kind: step.kind.as_str(),
+                        status: "failed",
+                        reason: Some(reason),
+                    });
+                }
+            }
+        }
+        return Ok(PlanRunReport {
+            plan_id: stored.summary.id,
+            name: stored.summary.name,
+            dry_run: true,
+            status: stored.summary.status,
+            steps: outcomes,
+        });
+    }
+
+    db::begin_plan_run(conn, org, &plan_id, actor_kind, actor_id)?;
+    let mut outcomes = Vec::with_capacity(stored.plan.steps().len());
+    for step in stored.plan.steps() {
+        if completed.contains(&step.seq) {
+            outcomes.push(PlanStepOutcome {
+                seq: step.seq,
+                kind: step.kind.as_str(),
+                status: "succeeded",
+                reason: None,
+            });
+            continue;
+        }
+        if let Err(refusal) = stored
+            .plan
+            .check_schedulable(step.seq, &completed, Some(&gates))
+        {
+            let _ = db::finish_plan_run(
+                conn,
+                org,
+                &plan_id,
+                db::PlanStatus::Paused,
+                actor_kind,
+                actor_id,
+            );
+            return Err(PlanRunError::GateBlocked(refusal));
+        }
+        db::transition_plan_step(
+            conn,
+            org,
+            &plan_id,
+            step.seq,
+            db::PlanStepStatus::Running,
+            actor_kind,
+            actor_id,
+        )?;
+        match runner.run_step(&stored.plan, step, false) {
+            Ok(()) => {
+                db::transition_plan_step(
+                    conn,
+                    org,
+                    &plan_id,
+                    step.seq,
+                    db::PlanStepStatus::Succeeded,
+                    actor_kind,
+                    actor_id,
+                )?;
+                completed.insert(step.seq);
+                outcomes.push(PlanStepOutcome {
+                    seq: step.seq,
+                    kind: step.kind.as_str(),
+                    status: "succeeded",
+                    reason: None,
+                });
+            }
+            Err(reason) => {
+                db::transition_plan_step(
+                    conn,
+                    org,
+                    &plan_id,
+                    step.seq,
+                    db::PlanStepStatus::Failed,
+                    actor_kind,
+                    actor_id,
+                )?;
+                db::finish_plan_run(
+                    conn,
+                    org,
+                    &plan_id,
+                    db::PlanStatus::Paused,
+                    actor_kind,
+                    actor_id,
+                )?;
+                outcomes.push(PlanStepOutcome {
+                    seq: step.seq,
+                    kind: step.kind.as_str(),
+                    status: "failed",
+                    reason: Some(reason),
+                });
+                return Ok(PlanRunReport {
+                    plan_id: stored.summary.id,
+                    name: stored.summary.name,
+                    dry_run: false,
+                    status: "paused",
+                    steps: outcomes,
+                });
+            }
+        }
+    }
+    db::finish_plan_run(
+        conn,
+        org,
+        &plan_id,
+        db::PlanStatus::Done,
+        actor_kind,
+        actor_id,
+    )?;
+    Ok(PlanRunReport {
+        plan_id: stored.summary.id,
+        name: stored.summary.name,
+        dry_run: false,
+        status: "done",
+        steps: outcomes,
+    })
 }

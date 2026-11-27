@@ -51,6 +51,21 @@ fn keys_for(rule_id: &str) -> RuleKeys {
             explanation: MessageKey::new("parity.par002.explanation"),
             advice: MessageKey::new("parity.par002.advice"),
         },
+        "PAR-003" => RuleKeys {
+            title: MessageKey::new("parity.par003.title"),
+            explanation: MessageKey::new("parity.par003.explanation"),
+            advice: MessageKey::new("parity.par003.advice"),
+        },
+        "PAR-004" => RuleKeys {
+            title: MessageKey::new("parity.par004.title"),
+            explanation: MessageKey::new("parity.par004.explanation"),
+            advice: MessageKey::new("parity.par004.advice"),
+        },
+        "PAR-005" => RuleKeys {
+            title: MessageKey::new("parity.par005.title"),
+            explanation: MessageKey::new("parity.par005.explanation"),
+            advice: MessageKey::new("parity.par005.advice"),
+        },
         "PAR-006" => RuleKeys {
             title: MessageKey::new("parity.par006.title"),
             explanation: MessageKey::new("parity.par006.explanation"),
@@ -75,6 +90,11 @@ fn keys_for(rule_id: &str) -> RuleKeys {
             title: MessageKey::new("parity.par010.title"),
             explanation: MessageKey::new("parity.par010.explanation"),
             advice: MessageKey::new("parity.par010.advice"),
+        },
+        "PAR-011" => RuleKeys {
+            title: MessageKey::new("parity.par011.title"),
+            explanation: MessageKey::new("parity.par011.explanation"),
+            advice: MessageKey::new("parity.par011.advice"),
         },
         // A rule id this build has no text for (for example from a newer rule set).
         _ => RuleKeys {

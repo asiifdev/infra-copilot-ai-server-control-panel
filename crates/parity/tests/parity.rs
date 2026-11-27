@@ -14,7 +14,8 @@
 use i18n::{Catalog, Locale};
 use inventory::{Finding, Inventory, ParityRule, RuleContext, Severity};
 use parity::{
-    Par001, Par002, Par006, Par007, Par008, Par009, Par010, UNKNOWN_ARG, all_rules, compare, render,
+    Par001, Par002, Par003, Par004, Par005, Par006, Par007, Par008, Par009, Par010, Par011,
+    UNKNOWN_ARG, all_rules, compare, render,
 };
 use std::error::Error;
 
@@ -262,11 +263,15 @@ fn report_order_and_rules_are_deterministic() -> TestResult {
         [
             ("PAR-001", 1),
             ("PAR-002", 1),
+            ("PAR-003", 1),
+            ("PAR-004", 1),
+            ("PAR-005", 1),
             ("PAR-006", 1),
             ("PAR-007", 1),
             ("PAR-008", 1),
             ("PAR-009", 1),
-            ("PAR-010", 1)
+            ("PAR-010", 1),
+            ("PAR-011", 1)
         ]
     );
     Ok(())
@@ -318,11 +323,27 @@ fn rule_metadata_matches_the_documents() {
         [
             ("PAR-001", 1, Severity::Critical, "coverage", None),
             ("PAR-002", 1, Severity::Important, "configuration", None),
+            (
+                "PAR-003",
+                1,
+                Severity::Critical,
+                "config",
+                Some(core_domain::tier::Tier::RiskyChange)
+            ),
+            (
+                "PAR-004",
+                1,
+                Severity::Critical,
+                "dns",
+                Some(core_domain::tier::Tier::RiskyChange)
+            ),
+            ("PAR-005", 1, Severity::Critical, "data", None),
             ("PAR-006", 1, Severity::Important, "runtime", None),
             ("PAR-007", 1, Severity::Important, "configuration", None),
             ("PAR-008", 1, Severity::Important, "scheduling", None),
             ("PAR-009", 1, Severity::Important, "versions", None),
             ("PAR-010", 1, Severity::Important, "security", None),
+            ("PAR-011", 1, Severity::Critical, "functional", None),
         ]
     );
 }
@@ -763,4 +784,153 @@ fn cleaning_keeps_the_unknown_marker_and_cleans_everything_else() {
         finding.args["bind"], "10.0.0.1\u{1b}[2J",
         "the original is untouched"
     );
+}
+
+#[test]
+fn all_eleven_parity_rules_are_registered() {
+    let rules = all_rules();
+    let ids: Vec<&str> = rules.iter().map(|r| r.id()).collect();
+    for expected in [
+        "PAR-001", "PAR-002", "PAR-003", "PAR-004", "PAR-005", "PAR-006", "PAR-007", "PAR-008",
+        "PAR-009", "PAR-010", "PAR-011",
+    ] {
+        assert!(ids.contains(&expected), "missing {expected} in all_rules()");
+    }
+    assert_eq!(rules.len(), 11);
+}
+
+fn inv_from(status: &str, items_json: &str) -> Result<Inventory, Box<dyn Error>> {
+    let json = format!(
+        r#"{{
+            "schema_version": 1,
+            "taken_at": "2026-01-01T00:00:00Z",
+            "collector_version": "test",
+            "platform": {{"os": "linux", "arch": "x86_64"}},
+            "status": "{status}",
+            "warnings": [],
+            "items": {items_json}
+        }}"#
+    );
+    load(&json)
+}
+
+#[test]
+fn par003_flags_mismatched_queue_endpoints_and_passes_when_aligned() -> TestResult {
+    let empty = inv_from("complete", "[]")?;
+    let mismatched_items = r#"[
+        {"kind":"env_ref","key":"web:REDIS_URL","seen_via":"config","data":{"app":"web","name":"REDIS_URL","target_host":"10.0.0.2","target_port":6379}},
+        {"kind":"env_ref","key":"worker:REDIS_URL","seen_via":"config","data":{"app":"worker","name":"REDIS_URL","target_host":"10.0.0.3","target_port":6380}}
+    ]"#;
+    let mismatched = inv_from("complete", mismatched_items)?;
+    let findings = run(&Par003, &empty, &mismatched);
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].rule_id, "PAR-003");
+    assert_eq!(findings[0].severity, Severity::Critical);
+    assert!(findings[0].args["endpoints"].contains("10.0.0.2:6379"));
+    assert!(findings[0].args["endpoints"].contains("10.0.0.3:6380"));
+
+    let catalog = Catalog::builtin()?;
+    let en = render(&findings[0], &catalog, Locale::En);
+    let id = render(&findings[0], &catalog, Locale::Id);
+    assert!(!en.title.is_empty() && !id.title.is_empty());
+    assert!(en.explanation.contains("10.0.0.2:6379"));
+
+    let aligned = inv_from(
+        "complete",
+        r#"[
+            {"kind":"env_ref","key":"web:REDIS_URL","seen_via":"config","data":{"app":"web","name":"REDIS_URL","target_host":"10.0.0.2","target_port":6379}},
+            {"kind":"env_ref","key":"worker:REDIS_URL","seen_via":"config","data":{"app":"worker","name":"REDIS_URL","target_host":"10.0.0.2","target_port":6379}}
+        ]"#,
+    )?;
+    assert!(run(&Par003, &empty, &aligned).is_empty());
+
+    let partial = inv_from("partial", mismatched_items)?;
+    let partial_findings = run(&Par003, &empty, &partial);
+    assert_eq!(partial_findings[0].severity, Severity::Info);
+    Ok(())
+}
+
+#[test]
+fn par004_flags_dns_mismatch_and_renders_both_locales() -> TestResult {
+    let empty = inv_from("complete", "[]")?;
+    let target = inv_from(
+        "complete",
+        r#"[
+            {"kind":"dns","key":"app.example.test","seen_via":"config","data":{"domain":"app.example.test","expected_ip":"203.0.113.10","points_to_target":false}},
+            {"kind":"dns","key":"ok.example.test","seen_via":"config","data":{"domain":"ok.example.test","expected_ip":"203.0.113.10","points_to_target":true}}
+        ]"#,
+    )?;
+    let findings = run(&Par004, &empty, &target);
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].rule_id, "PAR-004");
+    assert_eq!(findings[0].severity, Severity::Critical);
+    assert_eq!(findings[0].args["domain"], "app.example.test");
+    assert_eq!(findings[0].args["expected_ip"], "203.0.113.10");
+
+    let catalog = Catalog::builtin()?;
+    let en = render(&findings[0], &catalog, Locale::En);
+    let id = render(&findings[0], &catalog, Locale::Id);
+    assert!(en.explanation.contains("app.example.test"));
+    assert!(id.explanation.contains("203.0.113.10"));
+    Ok(())
+}
+
+#[test]
+fn par005_flags_empty_or_mismatched_databases_and_silent_when_equal() -> TestResult {
+    let src_items = r#"[
+        {"kind":"database","key":"postgres:app_db","seen_via":"config","data":{"name":"app_db","version":"16.2","row_count":1200}},
+        {"kind":"database","key":"postgres:logs_db","seen_via":"config","data":{"name":"logs_db","version":"16.2","row_count":50}}
+    ]"#;
+    let src = inv_from("complete", src_items)?;
+    let tgt = inv_from(
+        "complete",
+        r#"[
+            {"kind":"database","key":"postgres:app_db","seen_via":"config","data":{"name":"app_db","version":"16.2","row_count":0}},
+            {"kind":"database","key":"postgres:logs_db","seen_via":"config","data":{"name":"logs_db","version":"16.2","row_count":50}}
+        ]"#,
+    )?;
+
+    let findings = run(&Par005, &src, &tgt);
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].rule_id, "PAR-005");
+    assert_eq!(findings[0].severity, Severity::Critical);
+    assert_eq!(findings[0].args["name"], "app_db");
+    assert_eq!(findings[0].args["source_rows"], "1200");
+    assert_eq!(findings[0].args["target_rows"], "0");
+
+    let catalog = Catalog::builtin()?;
+    let en = render(&findings[0], &catalog, Locale::En);
+    let id = render(&findings[0], &catalog, Locale::Id);
+    assert!(en.explanation.contains("1200"));
+    assert!(id.explanation.contains("app_db"));
+
+    let equal_tgt = inv_from("complete", src_items)?;
+    assert!(run(&Par005, &src, &equal_tgt).is_empty());
+    Ok(())
+}
+
+#[test]
+fn par011_flags_failed_functional_checks_and_ignores_passed() -> TestResult {
+    let empty = inv_from("complete", "[]")?;
+    let target = inv_from(
+        "complete",
+        r#"[
+            {"kind":"check","key":"api:db_connect","seen_via":"config","data":{"process":"api","check_kind":"db_connect","passed":false}},
+            {"kind":"check","key":"web:login","seen_via":"config","data":{"process":"web","check_kind":"login","passed":true}}
+        ]"#,
+    )?;
+
+    let findings = run(&Par011, &empty, &target);
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].rule_id, "PAR-011");
+    assert_eq!(findings[0].severity, Severity::Critical);
+    assert_eq!(findings[0].args["process"], "api");
+    assert_eq!(findings[0].args["check_kind"], "db_connect");
+
+    let catalog = Catalog::builtin()?;
+    let en = render(&findings[0], &catalog, Locale::En);
+    let id = render(&findings[0], &catalog, Locale::Id);
+    assert!(en.explanation.contains("db_connect"));
+    assert!(id.explanation.contains("api"));
+    Ok(())
 }

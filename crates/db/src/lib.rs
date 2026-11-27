@@ -11,6 +11,7 @@
 
 #[macro_use]
 mod enums;
+mod agents;
 mod audit;
 mod conversations;
 mod error;
@@ -19,6 +20,7 @@ mod identity;
 mod ids;
 mod memories;
 mod migrate;
+mod monitors;
 mod nodes;
 mod orgs;
 mod plan_support;
@@ -33,23 +35,30 @@ mod transports;
 use std::path::Path;
 use std::time::Duration;
 
+pub use agents::{
+    AgentJobResult, AgentJobRow, AgentJobStatus, AuthenticatedAgent, LocalSiteRow, LocalSiteStatus,
+    authenticate_agent_token, claim_next_agent_job, complete_agent_job, create_local_site,
+    enqueue_agent_job, get_agent_job_for_execution, list_local_sites, rotate_agent_token,
+};
 pub use audit::{
     ActorKind, AuditEntry, AuditOutcome, ChainBreak, ChainStatus, NewAuditEntry, append_audit,
     list_audit, verify_audit_chain,
 };
 pub use conversations::{
-    ClaimOutcome, ConversationRow, DecisionOutcome, MessageRole, MessageRow, NewMessage,
-    NewProposal, NewToolCall, ProposalDecision, ProposalRow, ProposalStatus, ToolCallRow,
-    TurnClaim, append_messages, archive_conversation, claim_turn, count_pending_proposals,
-    create_conversation, create_proposal, decide_proposal, delete_conversation, get_conversation,
+    ApprovalRow, ClaimOutcome, ConversationRow, DecisionOutcome, MessageRole, MessageRow,
+    NewMessage, NewProposal, NewToolCall, ProposalDecision, ProposalRow, ProposalStatus,
+    ToolCallRow, TurnClaim, append_messages, archive_conversation, claim_turn,
+    count_pending_proposals, create_conversation, create_proposal, decide_proposal,
+    decide_proposal_with_details, delete_conversation, get_approval_for_proposal, get_conversation,
     get_proposal, list_conversations, list_messages, list_proposals, list_tool_calls, release_turn,
-    retitle_conversation, touch_turn,
+    retitle_conversation, set_proposal_dry_run, touch_turn,
 };
 pub use error::{Error, Result};
 pub use executions::{
-    BeginOutcome, ExecutionRow, ExecutionStatus, MAX_OUTPUT_CHARS, begin_execution,
-    create_action_proposal, fail_interrupted_executions, finish_execution,
-    get_execution_for_proposal,
+    BeginOutcome, BeginRollbackOutcome, ExecutionBackupRow, ExecutionRollbackRow, ExecutionRow,
+    ExecutionStatus, MAX_OUTPUT_CHARS, begin_execution, begin_rollback, create_action_proposal,
+    fail_interrupted_executions, finish_execution, finish_rollback, get_execution_backup,
+    get_execution_for_proposal, get_rollback_for_execution, record_execution_backup,
 };
 pub use identity::{
     ApiToken, Member, NewApiToken, Org, Role, User, add_member, create_api_token, create_org,
@@ -57,9 +66,10 @@ pub use identity::{
     list_members, remove_member, revoke_api_token, set_member_role,
 };
 pub use ids::{
-    AgentId, AiProviderId, ApiTokenId, AuditId, ComparisonId, ConversationId, ExecutionId,
-    InventoryId, MembershipId, MemoryId, NodeId, OrgId, PlanId, ProposalId, SecretId, TransportId,
-    UserId,
+    AgentId, AgentJobId, AgentTokenId, AiProviderId, AlertRuleId, ApiTokenId, ApprovalId, AuditId,
+    ChannelId, ComparisonId, ConversationId, ExecutionBackupId, ExecutionId, ExecutionRollbackId,
+    IncidentId, InventoryId, LocalSiteId, MembershipId, MemoryId, MonitorId, NodeId, OrgId,
+    PendingAlertId, PlanId, ProposalId, SecretId, TelegramLinkId, TransportId, UserId,
 };
 pub use memories::{
     MAX_MEMORIES_PER_ORG, MAX_MEMORY_CHARS, MemoryKind, MemoryRow, MemorySource, MemoryStatus,
@@ -67,6 +77,16 @@ pub use memories::{
     list_memories, prompt_memories, save_memory,
 };
 pub use migrate::{LATEST_VERSION, migrate, schema_version};
+pub use monitors::{
+    AlertRuleRow, AlertSeverity, ChannelKind, ChannelRow, IncidentRow, MonitorKind, MonitorRow,
+    MonitorStatus, NewAlertRule, NewChannel, NewMonitor, PendingAlertRow, TelegramLinkRow,
+    TelegramLinkStatus, acknowledge_incident, create_alert_rule, create_channel, create_monitor,
+    create_telegram_link, delete_channel, delete_monitor, enqueue_pending_alert, get_channel,
+    get_monitor, get_telegram_link_by_chat, list_alert_rules, list_channels, list_incidents,
+    list_monitors, list_unflushed_alerts, mark_alert_flushed, open_incident,
+    resolve_open_incidents, set_telegram_link_language, update_monitor_status,
+    verify_telegram_link,
+};
 pub use nodes::{
     Agent, NewAgent, NewNode, Node, NodeAccess, NodeKind, NodeSecretMeta, NodeStatus, create_node,
     delete_node, delete_node_secret, get_node, get_node_secret, list_agents, list_node_secrets,
@@ -78,8 +98,8 @@ pub use plan_support::{
 };
 pub use plans::{
     NewPlan, NewPlanStep, PlanRow, PlanStatus, PlanStepKind, PlanStepRow, PlanStepStatus,
-    create_plan, get_plan, list_plan_steps, list_plans, replace_plan_content, set_plan_status,
-    set_plan_step_status,
+    approve_plan, begin_plan_run, create_plan, finish_plan_run, get_plan, list_plan_steps,
+    list_plans, replace_plan_content, set_plan_status, set_plan_step_status, transition_plan_step,
 };
 pub use providers::{
     AiProvider, NewAiProvider, create_ai_provider, default_ai_provider, delete_ai_provider,
@@ -98,7 +118,7 @@ pub use snapshots::{
 };
 pub use transports::{
     NewTransport, TransportRow, create_transport, delete_transport, get_transport, list_transports,
-    record_transport_check,
+    record_transport_check, update_transport_secret,
 };
 
 /// The SQLite connection type returned by [`open`], re-exported so dependents need no direct

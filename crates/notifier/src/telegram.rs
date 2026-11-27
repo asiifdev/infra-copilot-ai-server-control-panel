@@ -208,6 +208,100 @@ impl<T: HttpTransport> NotificationChannel for Telegram<T> {
     }
 }
 
+fn bot_url(token: &Secret, method: &str) -> Result<String, SendError> {
+    let raw = token.expose_secret();
+    if !valid_token(raw) {
+        return Err(SendError::Unauthorized);
+    }
+    Ok(format!("{API_BASE}{raw}/{method}"))
+}
+
+impl<T: HttpTransport> Telegram<T> {
+    /// Sends a plain-text reply to `chat_id`.
+    ///
+    /// # Errors
+    /// [`SendError`].
+    pub async fn send_text(
+        &self,
+        token: &Secret,
+        chat_id: i64,
+        text: &str,
+    ) -> Result<SendReceipt, SendError> {
+        let url = bot_url(token, "sendMessage")?;
+        let body = serde_json::to_vec(&json!({
+            "chat_id": chat_id,
+            "text": text,
+            "disable_web_page_preview": true,
+        }))
+        .map_err(|_| SendError::BadRequest)?;
+        let (status, reply) = self
+            .transport
+            .post_json(&url, &body)
+            .await
+            .map_err(SendError::Transport)?;
+        classify(status, &reply)
+    }
+
+    /// Sends a proposal prompt with inline Approve / Reject buttons (used only for tier 0–2
+    /// proposals).
+    ///
+    /// # Errors
+    /// [`SendError`].
+    pub async fn send_proposal_prompt(
+        &self,
+        token: &Secret,
+        chat_id: i64,
+        text: &str,
+        proposal_id: &str,
+        approve_label: &str,
+        reject_label: &str,
+    ) -> Result<SendReceipt, SendError> {
+        let url = bot_url(token, "sendMessage")?;
+        let body = serde_json::to_vec(&json!({
+            "chat_id": chat_id,
+            "text": text,
+            "disable_web_page_preview": true,
+            "reply_markup": {
+                "inline_keyboard": [[
+                    { "text": approve_label, "callback_data": format!("approve:{proposal_id}") },
+                    { "text": reject_label, "callback_data": format!("reject:{proposal_id}") }
+                ]]
+            }
+        }))
+        .map_err(|_| SendError::BadRequest)?;
+        let (status, reply) = self
+            .transport
+            .post_json(&url, &body)
+            .await
+            .map_err(SendError::Transport)?;
+        classify(status, &reply)
+    }
+
+    /// Acknowledges an inline keyboard callback query.
+    ///
+    /// # Errors
+    /// [`SendError`].
+    pub async fn answer_callback(
+        &self,
+        token: &Secret,
+        callback_id: &str,
+        text: &str,
+    ) -> Result<(), SendError> {
+        let url = bot_url(token, "answerCallbackQuery")?;
+        let body = serde_json::to_vec(&json!({
+            "callback_query_id": callback_id,
+            "text": text,
+        }))
+        .map_err(|_| SendError::BadRequest)?;
+        let (status, reply) = self
+            .transport
+            .post_json(&url, &body)
+            .await
+            .map_err(SendError::Transport)?;
+        classify(status, &reply).map(|_| ())
+    }
+}
+
 /// A request to link a private chat, parsed from `/start <code>`.
 #[derive(Clone, PartialEq, Eq)]
 pub struct LinkCommand {
@@ -260,6 +354,208 @@ pub fn parse_update(json: &[u8]) -> Option<LinkCommand> {
         chat_id,
         code: code.to_owned(),
     })
+}
+
+/// Decision from an inline keyboard callback.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BotDecision {
+    /// Approve a tier 0–2 proposal.
+    Approve,
+    /// Reject a proposal.
+    Reject,
+}
+
+/// An interactive command or callback parsed from a Telegram Bot API update (private chats only).
+#[derive(Clone, PartialEq, Eq)]
+pub enum BotEvent {
+    /// `/start <code>` or `/link <code>`.
+    Link {
+        /// Private chat id.
+        chat_id: i64,
+        /// One-time code (redacted in `Debug`).
+        code: String,
+    },
+    /// `/status`.
+    Status {
+        /// Private chat id.
+        chat_id: i64,
+    },
+    /// `/log [target]`.
+    Log {
+        /// Private chat id.
+        chat_id: i64,
+        /// Optional target name.
+        target: Option<String>,
+    },
+    /// `/bahasa <en|id>` or `/lang <en|id>`.
+    Language {
+        /// Private chat id.
+        chat_id: i64,
+        /// Language code (`en` or `id`).
+        lang: String,
+    },
+    /// `/restart <service>`.
+    Restart {
+        /// Private chat id.
+        chat_id: i64,
+        /// Service name.
+        service: String,
+    },
+    /// Inline button callback `approve:<proposal_id>` or `reject:<proposal_id>`.
+    ProposalCallback {
+        /// Private chat id.
+        chat_id: i64,
+        /// Telegram `callback_query.id`.
+        callback_id: String,
+        /// Proposal UUID.
+        proposal_id: String,
+        /// Decision.
+        decision: BotDecision,
+    },
+}
+
+impl fmt::Debug for BotEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Link { chat_id, .. } => f
+                .debug_struct("Link")
+                .field("chat_id", chat_id)
+                .field("code", &"***")
+                .finish(),
+            Self::Status { chat_id } => f.debug_struct("Status").field("chat_id", chat_id).finish(),
+            Self::Log { chat_id, target } => f
+                .debug_struct("Log")
+                .field("chat_id", chat_id)
+                .field("target", target)
+                .finish(),
+            Self::Language { chat_id, lang } => f
+                .debug_struct("Language")
+                .field("chat_id", chat_id)
+                .field("lang", lang)
+                .finish(),
+            Self::Restart { chat_id, service } => f
+                .debug_struct("Restart")
+                .field("chat_id", chat_id)
+                .field("service", service)
+                .finish(),
+            Self::ProposalCallback {
+                chat_id,
+                callback_id,
+                proposal_id,
+                decision,
+            } => f
+                .debug_struct("ProposalCallback")
+                .field("chat_id", chat_id)
+                .field("callback_id", callback_id)
+                .field("proposal_id", proposal_id)
+                .field("decision", decision)
+                .finish(),
+        }
+    }
+}
+
+fn is_valid_code(code: &str) -> bool {
+    (6..=64).contains(&code.len())
+        && code
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
+}
+
+/// Parses an interactive Telegram update (`message` or `callback_query`) from a private chat.
+pub fn parse_bot_event(json: &[u8]) -> Option<BotEvent> {
+    if json.len() > MAX_UPDATE_BYTES {
+        return None;
+    }
+    let v: Value = serde_json::from_slice(json).ok()?;
+    if let Some(cb) = v.get("callback_query") {
+        let callback_id = cb.get("id")?.as_str()?.to_owned();
+        let message = cb.get("message")?;
+        let chat = message.get("chat")?;
+        if chat.get("type")?.as_str()? != "private" {
+            return None;
+        }
+        let chat_id = chat.get("id")?.as_i64().filter(|id| *id > 0)?;
+        let data = cb.get("data")?.as_str()?;
+        let (decision, proposal_id) = if let Some(id) = data.strip_prefix("approve:") {
+            (BotDecision::Approve, id)
+        } else {
+            let id = data.strip_prefix("reject:")?;
+            (BotDecision::Reject, id)
+        };
+        if proposal_id.len() != 36 {
+            return None;
+        }
+        return Some(BotEvent::ProposalCallback {
+            chat_id,
+            callback_id,
+            proposal_id: proposal_id.to_owned(),
+            decision,
+        });
+    }
+
+    let message = v.get("message")?;
+    let chat = message.get("chat")?;
+    if chat.get("type")?.as_str()? != "private" {
+        return None;
+    }
+    let chat_id = chat.get("id")?.as_i64().filter(|id| *id > 0)?;
+    let text = message.get("text")?.as_str()?;
+    let mut parts = text.split_whitespace();
+    let command = parts.next()?;
+    let (name, bot) = command.split_once('@').unwrap_or((command, ""));
+    if bot.len() > 64 {
+        return None;
+    }
+    match name {
+        "/start" | "/link" => {
+            let code = parts.next()?;
+            if parts.next().is_some() || !is_valid_code(code) {
+                return None;
+            }
+            Some(BotEvent::Link {
+                chat_id,
+                code: code.to_owned(),
+            })
+        }
+        "/status" => {
+            if parts.next().is_some() {
+                return None;
+            }
+            Some(BotEvent::Status { chat_id })
+        }
+        "/log" => {
+            let target = parts.next().map(|s| s.chars().take(120).collect());
+            if parts.next().is_some() {
+                return None;
+            }
+            Some(BotEvent::Log { chat_id, target })
+        }
+        "/bahasa" | "/lang" => {
+            let lang = parts.next()?;
+            if parts.next().is_some() {
+                return None;
+            }
+            let norm = lang.to_ascii_lowercase();
+            if norm != "en" && norm != "id" {
+                return None;
+            }
+            Some(BotEvent::Language {
+                chat_id,
+                lang: norm,
+            })
+        }
+        "/restart" => {
+            let service = parts.next()?;
+            if parts.next().is_some() || service.len() > 100 {
+                return None;
+            }
+            Some(BotEvent::Restart {
+                chat_id,
+                service: service.to_owned(),
+            })
+        }
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -548,5 +844,72 @@ mod tests {
         let tg = Telegram::new(FakeTransport::default());
         let secret = Secret::new(fake_token());
         testing::contract_suite(&tg, &cfg(), &secret, &catalog()?)
+    }
+
+    #[test]
+    fn bot_event_parses_commands_and_callbacks_from_private_chats_only() {
+        let link =
+            br#"{"message":{"chat":{"id":42,"type":"private"},"text":"/link SECRET-CODE-99"}}"#;
+        let ev = parse_bot_event(link);
+        assert_eq!(
+            ev,
+            Some(BotEvent::Link {
+                chat_id: 42,
+                code: "SECRET-CODE-99".to_owned(),
+            })
+        );
+        assert!(!format!("{ev:?}").contains("SECRET-CODE-99"));
+
+        assert_eq!(
+            parse_bot_event(br#"{"message":{"chat":{"id":42,"type":"private"},"text":"/status"}}"#),
+            Some(BotEvent::Status { chat_id: 42 })
+        );
+        assert_eq!(
+            parse_bot_event(
+                br#"{"message":{"chat":{"id":42,"type":"private"},"text":"/log api-health"}}"#
+            ),
+            Some(BotEvent::Log {
+                chat_id: 42,
+                target: Some("api-health".to_owned()),
+            })
+        );
+        assert_eq!(
+            parse_bot_event(
+                br#"{"message":{"chat":{"id":42,"type":"private"},"text":"/bahasa id"}}"#
+            ),
+            Some(BotEvent::Language {
+                chat_id: 42,
+                lang: "id".to_owned(),
+            })
+        );
+        assert_eq!(
+            parse_bot_event(
+                br#"{"message":{"chat":{"id":42,"type":"private"},"text":"/restart nginx"}}"#
+            ),
+            Some(BotEvent::Restart {
+                chat_id: 42,
+                service: "nginx".to_owned(),
+            })
+        );
+
+        let pid = "123e4567-e89b-42d3-a456-426614174000";
+        let cb = format!(
+            r#"{{"callback_query":{{"id":"cb1","data":"approve:{pid}","message":{{"chat":{{"id":42,"type":"private"}}}}}}}}"#
+        );
+        assert_eq!(
+            parse_bot_event(cb.as_bytes()),
+            Some(BotEvent::ProposalCallback {
+                chat_id: 42,
+                callback_id: "cb1".to_owned(),
+                proposal_id: pid.to_owned(),
+                decision: BotDecision::Approve,
+            })
+        );
+
+        // Group chat is refused.
+        assert_eq!(
+            parse_bot_event(br#"{"message":{"chat":{"id":-100,"type":"group"},"text":"/status"}}"#),
+            None
+        );
     }
 }

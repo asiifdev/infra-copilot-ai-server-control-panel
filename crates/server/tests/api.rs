@@ -379,7 +379,17 @@ fn nodes_list_their_latest_inventory_and_nothing_of_the_rival() -> TestResult {
     assert_eq!(old["latest_inventory"]["taken_at"], "2026-11-19T10:00:00Z");
     assert_eq!(
         old["latest_inventory"]["counts"],
-        json!({"listener": 2, "process": 1, "cron": 0, "env_ref": 0})
+        json!({
+            "listener": 2,
+            "process": 1,
+            "cron": 0,
+            "env_ref": 0,
+            "vhost": 0,
+            "cert": 0,
+            "database": 0,
+            "dns": 0,
+            "check": 0
+        })
     );
     assert_eq!(body[0]["latest_inventory"], Value::Null);
     Ok(())
@@ -592,7 +602,8 @@ fn transports_show_no_settings_no_credentials_and_no_text_from_a_check() -> Test
     assert_eq!(body[0]["kind"], "rclone");
     assert!(body[0]["verified_at"].is_string());
     assert_eq!(body[0]["last_check"], json!({"free": 5, "ok": true}));
-    assert_eq!(body[0].as_object().map(Map::len), Some(4));
+    assert!(body[0]["id"].is_string());
+    assert_eq!(body[0].as_object().map(Map::len), Some(5));
     let text = r.text();
     assert!(
         !text.contains(CONFIG_MARK) && !text.contains("a-string"),

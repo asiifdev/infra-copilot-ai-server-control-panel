@@ -32,10 +32,21 @@ pub enum Kind {
     /// container itself), `resolves_to` (`listener:tcp:<port>` of the same inventory, or null).
     /// Never contains the variable's value, a user name, a password or a path (decision 0015).
     EnvRef,
+    /// A web virtual host (`nginx` or `caddy`), read-only from configuration.
+    Vhost,
+    /// TLS certificate metadata (path, subject, expiry); never a private key.
+    Cert,
+    /// Database metadata (engine, version, name, row count); never credentials.
+    Database,
+    /// Public DNS resolution check for a domain against a target address.
+    Dns,
+    /// Functional check result (e.g. process DB connection or test login).
+    Check,
 }
 
 impl Kind {
-    /// The wire name (`listener`, `process`, `cron`, `env_ref`).
+    /// The wire name (`listener`, `process`, `cron`, `env_ref`, `vhost`, `cert`, `database`,
+    /// `dns`, `check`).
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -43,6 +54,11 @@ impl Kind {
             Self::Process => "process",
             Self::Cron => "cron",
             Self::EnvRef => "env_ref",
+            Self::Vhost => "vhost",
+            Self::Cert => "cert",
+            Self::Database => "database",
+            Self::Dns => "dns",
+            Self::Check => "check",
         }
     }
 }
@@ -85,5 +101,11 @@ impl Item {
     #[must_use]
     pub fn u64_field(&self, name: &str) -> Option<u64> {
         self.data.get(name).and_then(Value::as_u64)
+    }
+
+    /// A boolean field of `data`, if present.
+    #[must_use]
+    pub fn bool_field(&self, name: &str) -> Option<bool> {
+        self.data.get(name).and_then(Value::as_bool)
     }
 }

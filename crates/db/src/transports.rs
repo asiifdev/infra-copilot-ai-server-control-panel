@@ -160,6 +160,34 @@ pub fn record_transport_check(
     if n == 0 { Err(Error::NotFound) } else { Ok(()) }
 }
 
+/// Updates the sealed credential reference of a transport and optionally clears its verification
+/// state so it must be re-verified with the new credentials.
+///
+/// # Errors
+/// [`Error::NotFound`] if it is not in this org; constraint violation if the secret belongs to
+/// another org.
+pub fn update_transport_secret(
+    conn: &Connection,
+    org: &OrgId,
+    id: &TransportId,
+    secret: Option<&SecretId>,
+    reset_verified: bool,
+) -> Result<()> {
+    let n = if reset_verified {
+        conn.execute(
+            "UPDATE transports SET secret_id = ?3, verified_at = NULL, last_check = NULL \
+             WHERE org_id = ?1 AND id = ?2",
+            params![org.as_str(), id.as_str(), secret.map(SecretId::as_str)],
+        )?
+    } else {
+        conn.execute(
+            "UPDATE transports SET secret_id = ?3 WHERE org_id = ?1 AND id = ?2",
+            params![org.as_str(), id.as_str(), secret.map(SecretId::as_str)],
+        )?
+    };
+    if n == 0 { Err(Error::NotFound) } else { Ok(()) }
+}
+
 /// Deletes a transport (its secret is left; delete it separately).
 ///
 /// # Errors

@@ -21,3 +21,23 @@ export function trapTab(event: KeyboardEvent, container: HTMLElement): void {
     first.focus();
   }
 }
+
+export function dialogFocus(skipReturn?: () => boolean) {
+  return (dialog: HTMLElement) => {
+    const opener = document.activeElement;
+    dialog.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+    return () => {
+      if (!skipReturn?.() && opener instanceof HTMLElement && opener.isConnected) opener.focus();
+      else document.getElementById('page-title')?.focus();
+    };
+  };
+}
+
+export function dialogKey(event: KeyboardEvent & { currentTarget: HTMLElement }, onCancel: () => void): void {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    onCancel();
+    return;
+  }
+  trapTab(event, event.currentTarget);
+}

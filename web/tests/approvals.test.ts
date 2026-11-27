@@ -323,4 +323,54 @@ describe('Running an approved action', () => {
       expect(group.textContent?.replace(/\s+/g, ' ')).toContain('Approved 4');
     });
   });
+
+  it('runs a dry-run on a pending proposal with an action and displays the preview', async () => {
+    const mock = installMock();
+    await readyApp(mock);
+    (mock.state.proposals[0] as ProposalView).action = { kind: 'restart_service', manager: 'systemd', service: 'web.service', target_label: 'web.service' };
+    const root = render(Proposals);
+    await eventually(() => expect(root.querySelectorAll('section h2').length).toBeGreaterThan(0));
+    press(card(root, 'Restart the web service'), 'button', 'Dry-run');
+    await eventually(() => expect(card(root, 'Restart the web service').textContent).toContain('Dry-run preview'));
+    expect(card(root, 'Restart the web service').textContent).toContain('active (mock)');
+    expect(mock.state.requests.some((r) => r.method === 'POST' && r.path.endsWith('/dry-run'))).toBe(true);
+  });
+
+  it('requires typed confirmation for tier 4 approval and sends typed_confirmation', async () => {
+    const mock = installMock();
+    await readyApp(mock);
+    const risky = mock.state.proposals[2] as ProposalView;
+    risky.tier = 4;
+    risky.action = { kind: 'delete_managed_file', path: '/etc/nginx/site.conf', target_label: '/etc/nginx/site.conf' };
+    const root = render(Proposals);
+    await eventually(() => expect(root.querySelectorAll('section h2').length).toBeGreaterThan(0));
+    press(card(root, 'Move traffic'), 'button', 'Approve');
+    const dialog = document.querySelector('[role="alertdialog"]') as HTMLElement;
+    const confirmBtn = [...dialog.querySelectorAll('button')].find((b) => b.textContent?.includes('Yes, approve')) as HTMLButtonElement;
+    expect(confirmBtn.disabled).toBe(true);
+    const input = dialog.querySelector('input') as HTMLInputElement;
+    input.value = '/etc/nginx/site.conf';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+    expect(confirmBtn.disabled).toBe(false);
+    confirmBtn.click();
+    await eventually(() => expect(decisions(mock).length).toBe(1));
+    expect(decisions(mock)[0]?.body).toEqual({ decision: 'approve', typed_confirmation: '/etc/nginx/site.conf' });
+  });
+
+  it('executes a tier 3 proposal with backup and allows rolling back once', async () => {
+    const { mock, root } = await openApproved({ executionEnabled: true });
+    const target = mock.state.proposals[5] as ProposalView;
+    target.tier = 3;
+    press(card(root, 'Restart nginx'), 'button', 'Run');
+    press(document.querySelector('[role="alertdialog"]') as HTMLElement, 'button', 'Yes, run it now');
+    await eventually(() => expect(card(root, 'Restart nginx').textContent).toContain('Pre-execution backup recorded'));
+    press(card(root, 'Restart nginx'), 'button', 'Roll back');
+    const rbDialog = document.querySelector('[role="alertdialog"]') as HTMLElement;
+    expect(rbDialog.textContent).toContain('Roll back this execution?');
+    press(rbDialog, 'button', 'Yes, roll back now');
+    await eventually(() => expect(toasts.items.some((x) => x.kind === 'success' && x.text.includes('Rollback succeeded'))).toBe(true));
+    expect(mock.state.requests.some((r) => r.method === 'POST' && r.path.endsWith('/rollback'))).toBe(true);
+    await eventually(() => expect(card(root, 'Restart nginx').textContent).toContain('restored'));
+  });
 });

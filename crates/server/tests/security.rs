@@ -568,17 +568,20 @@ fn unknown_paths_and_methods_are_json_errors() -> TestResult {
         assert_eq!(r.code(), "method_not_allowed");
         assert_security_headers(&r, true);
     }
-    // There is no way to approve or run a proposal or a plan.
+    // Unimplemented action/plan routes still answer 404.
     for path in [
         "/api/proposals/x/approve",
         "/api/proposals/x/run",
         "/api/plans/x/approve",
-        "/api/plans/x/run",
         "/api/plans/x/schedule",
     ] {
         let r = session.post(path, &json!({}));
         assert_eq!(r.status, 404, "{path}");
     }
+    // `/api/plans/x/run` is refused when execution is switched off.
+    let r = session.post("/api/plans/x/run", &json!({}));
+    assert_eq!(r.status, 409);
+    assert_eq!(r.code(), "execution_disabled");
     Ok(())
 }
 

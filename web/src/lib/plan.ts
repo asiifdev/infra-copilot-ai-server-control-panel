@@ -5,7 +5,7 @@
 // tests/contract.test.ts fails when the server sends a gate key that has no label here.
 
 import { describeData } from './format';
-import type { GateFinding, PlanStep } from './types';
+import type { GateFinding, PlanStep, PlanStepStatus } from './types';
 
 // Literal keys on purpose: the key-coverage test finds them.
 export const STEP_LABELS: Record<string, string> = {
@@ -41,6 +41,7 @@ export interface StepRow {
   number: number;
   seq: number;
   kind: string;
+  status: PlanStepStatus;
   side: string | null;
   database: string | null;
   /** Numbers (as shown) of the steps this one waits for. */
@@ -59,6 +60,7 @@ export function stepRows(steps: unknown): StepRow[] {
     number: index + 1,
     seq: typeof step.seq === 'number' ? step.seq : index,
     kind: typeof step.kind === 'string' ? step.kind : '',
+    status: typeof step.status === 'string' ? step.status : 'pending',
     side: typeof step.side === 'string' ? step.side : null,
     database: typeof step.database === 'string' ? step.database : null,
     after: (Array.isArray(step.depends_on) ? step.depends_on : [])

@@ -44,6 +44,14 @@ pub struct Config {
     /// Runs approved actions on this machine. `None` (the default) means execution is switched
     /// off: approving a proposal records the decision and nothing can run it.
     pub executor: Option<Arc<dyn actions::Executor>>,
+    /// Whether the background monitor/alert loop runs (`false` in tests unless explicitly enabled).
+    pub enable_watch: bool,
+    /// Optional runner used for SSH remote actions and log reads (defaults to `ProcessRunner`).
+    pub ssh_runner: Option<Arc<dyn transport::Runner + Send + Sync>>,
+    /// Optional managed log directory for `GET /api/nodes/{id}/logs`.
+    pub logs_dir: Option<PathBuf>,
+    /// Optional managed `.test` site directory for `POST /api/sites`.
+    pub sites_dir: Option<PathBuf>,
 }
 
 impl Config {
@@ -78,6 +86,10 @@ impl Config {
             catalog,
             provider_test_timeout: DEFAULT_PROVIDER_TEST_TIMEOUT,
             executor: None,
+            enable_watch: false,
+            ssh_runner: None,
+            logs_dir: None,
+            sites_dir: None,
         })
     }
 }
@@ -95,6 +107,10 @@ pub(crate) struct App {
     pub(crate) clock: Clock,
     pub(crate) provider_test_timeout: Duration,
     pub(crate) executor: Option<Arc<dyn actions::Executor>>,
+    pub(crate) enable_watch: bool,
+    pub(crate) ssh_runner: Option<Arc<dyn transport::Runner + Send + Sync>>,
+    pub(crate) logs_dir: Option<PathBuf>,
+    pub(crate) sites_dir: Option<PathBuf>,
     pub(crate) auth: Mutex<Auth>,
     /// Conversations with a turn running in this process.
     pub(crate) turns: Mutex<HashSet<String>>,
@@ -115,6 +131,10 @@ impl App {
                 .provider_test_timeout
                 .min(crate::guard::REQUEST_TIMEOUT.saturating_sub(Duration::from_secs(5))),
             executor: config.executor,
+            enable_watch: config.enable_watch,
+            ssh_runner: config.ssh_runner,
+            logs_dir: config.logs_dir,
+            sites_dir: config.sites_dir,
             auth: Mutex::new(Auth::default()),
             turns: Mutex::new(HashSet::new()),
         }
@@ -128,5 +148,12 @@ impl App {
 
     pub(crate) fn turns(&self) -> MutexGuard<'_, HashSet<String>> {
         self.turns.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    pub(crate) fn backup_dir(&self) -> PathBuf {
+        self.db_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join("execution-backups")
     }
 }

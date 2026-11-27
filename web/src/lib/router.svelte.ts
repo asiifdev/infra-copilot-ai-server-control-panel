@@ -6,6 +6,7 @@ export type Route =
   | { name: 'nodes' }
   | { name: 'node'; node: string }
   | { name: 'findings' }
+  | { name: 'monitors' }
   | { name: 'assistant'; conversation: string | null }
   | { name: 'proposals' }
   | { name: 'plans' }
@@ -41,6 +42,8 @@ export function parseHash(hash: string): Route {
     }
     case 'findings':
       return { name: 'findings' };
+    case 'monitors':
+      return { name: 'monitors' };
     case 'assistant':
       return { name: 'assistant', conversation: decode(param) };
     case 'plans': {
