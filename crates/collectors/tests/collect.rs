@@ -115,6 +115,7 @@ mod listeners {
         Ok(())
     }
 
+    #[cfg(unix)]
     #[test]
     fn maps_inode_to_process_and_leaves_unknown_null() -> TestResult {
         let inv = inventory_of(&fixture("full"))?;
@@ -147,6 +148,7 @@ mod listeners {
 mod processes {
     use super::*;
 
+    #[cfg(unix)]
     #[test]
     fn merges_same_name_and_skips_kernel_threads() -> TestResult {
         let inv = inventory_of(&fixture("full"))?;
@@ -373,6 +375,7 @@ mod rootfs {
         }
     }
 
+    #[cfg(unix)]
     #[test]
     fn reads_are_bounded_and_links_not_followed() -> TestResult {
         let root = fixture("full");

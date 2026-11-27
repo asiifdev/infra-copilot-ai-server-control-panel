@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Quick pre-push gate: runs the fast checks (fmt, clippy, test, docs).
-# Skips web build and gitleaks for speed — the full suite is ./scripts/check-ci.sh.
+# Skips web build and gitleaks for speed.
 
 cd "$(git rev-parse --show-toplevel)"
 
