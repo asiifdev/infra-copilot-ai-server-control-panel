@@ -270,16 +270,39 @@ fn node_logs_and_test_sites_endpoints_enforce_bounds_and_validation() -> TestRes
     // Sites: valid .test domain creates config inside managed sites_dir and lists it.
     let ok_site = session.post(
         "/api/sites",
-        &json!({"domain": "shop.test", "upstream_port": 4000}),
+        &json!({
+            "domain": "shop.test",
+            "upstream_port": 4000,
+            "php_version": "8.3",
+            "tls_enabled": true
+        }),
     );
     assert_eq!(ok_site.status, 201);
     let ok_json = ok_site.json();
     assert_eq!(ok_json["site"]["domain"], "shop.test");
     assert_eq!(ok_json["site"]["status"], "active");
+    assert_eq!(ok_json["site"]["php_version"], "8.3");
+    assert_eq!(ok_json["site"]["tls_enabled"], true);
     assert!(sites_dir.0.join("shop.test.conf").exists());
+
+    // Sites: invalid php_version is refused.
+    let bad_php = session.post(
+        "/api/sites",
+        &json!({"domain": "badphp.test", "upstream_port": 4000, "php_version": "7.4"}),
+    );
+    assert_eq!(bad_php.status, 400);
 
     let list = session.get("/api/sites");
     assert_eq!(list.status, 200);
     assert_eq!(list.json()["sites"].as_array().map(Vec::len), Some(1));
+    assert_eq!(list.json()["sites"][0]["php_version"], "8.3");
+    assert_eq!(list.json()["sites"][0]["tls_enabled"], true);
+
+    let ent = session.get("/api/entitlements");
+    assert_eq!(ent.status, 200);
+    let ent_json = ent.json();
+    assert_eq!(ent_json["tier"], "community");
+    assert_eq!(ent_json["require_two_approvers_tier4"], false);
+    assert_eq!(ent_json["allow_managed_transport"], false);
     Ok(())
 }

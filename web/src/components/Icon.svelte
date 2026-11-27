@@ -49,7 +49,7 @@
 </script>
 
 <svg
-  class={['icon', size]}
+  class={['nv-icon', `nv-icon-${size}`]}
   data-icon={name}
   viewBox="0 0 24 24"
   fill="none"
@@ -62,27 +62,3 @@
 >
   <path d={ICONS[name]} />
 </svg>
-
-<style>
-  .icon {
-    flex: none;
-    display: inline-block;
-    vertical-align: middle;
-  }
-  .sm {
-    width: 1rem;
-    height: 1rem;
-  }
-  .md {
-    width: 1.25rem;
-    height: 1.25rem;
-  }
-  .lg {
-    width: 1.5rem;
-    height: 1.5rem;
-  }
-  .xl {
-    width: 2rem;
-    height: 2rem;
-  }
-</style>

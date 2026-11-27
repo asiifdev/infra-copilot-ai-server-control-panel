@@ -167,7 +167,8 @@ const get = <T>(path: string, signal?: AbortSignal, query?: Record<string, strin
 const post = <T>(path: string, body?: unknown, signal?: AbortSignal) =>
   json<T>('POST', path, { body, signal });
 const del = (path: string) => empty('DELETE', path);
-const prop = (id: string | number, sub: string) => `/api/proposals/${enc(String(id))}/${sub}`;
+const idPath = (base: string, id: string | number, sub = '') => `/api/${base}/${enc(String(id))}${sub}`;
+const prop = (id: string | number, sub: string) => idPath('proposals', id, `/${sub}`);
 
 export const api = {
   exchange: (token: string, signal?: AbortSignal) =>
@@ -182,8 +183,13 @@ export const api = {
     get<NodeLogsView>(`/api/nodes/${enc(id)}/logs`, signal, { service, lines }),
   rotateAgentToken: (id: string) => post<AgentTokenResult>(`/api/nodes/${enc(id)}/agent-token`),
   sites: (signal?: AbortSignal) => get<{ sites: LocalSite[] }>('/api/sites', signal),
-  createSite: (domain: string, upstream_port: number) =>
-    post<{ site: LocalSite; config_preview: string }>('/api/sites', { domain, upstream_port }),
+  createSite: (domain: string, upstream_port: number, opts?: { php_version?: string; tls_enabled?: boolean }) =>
+    post<{ site: LocalSite; config_preview: string }>('/api/sites', {
+      domain,
+      upstream_port,
+      ...(opts?.php_version ? { php_version: opts.php_version } : {}),
+      ...(opts?.tls_enabled !== undefined ? { tls_enabled: opts.tls_enabled } : {}),
+    }),
   findings: (minSeverity?: string, limit?: number, signal?: AbortSignal) =>
     get<FindingsView>('/api/findings', signal, { min_severity: minSeverity, limit }),
   plans: (signal?: AbortSignal) => get<PlanSummary[]>('/api/plans', signal),
@@ -199,8 +205,8 @@ export const api = {
   deleteProvider: (name: string) => del(`/api/providers/${enc(name)}`),
   testProvider: (name: string, signal?: AbortSignal) => post<ProviderTestResult>(`/api/providers/${enc(name)}/test`, undefined, signal),
   memories: (status: 'pending' | 'active', signal?: AbortSignal) => get<MemoryNote[]>('/api/memories', signal, { status }),
-  approveMemory: (id: string | number) => empty('POST', `/api/memories/${enc(String(id))}/approve`),
-  deleteMemory: (id: string | number) => del(`/api/memories/${enc(String(id))}`),
+  approveMemory: (id: string | number) => empty('POST', idPath('memories', id, '/approve')),
+  deleteMemory: (id: string | number) => del(idPath('memories', id)),
   proposals: (status?: string, signal?: AbortSignal) => get<ProposalView[]>('/api/proposals', signal, { status }),
   decideProposal: (id: string | number, decision: 'approve' | 'reject', typedConfirmation?: string, comment?: string) =>
     post<{ id: string; status: string }>(prop(id, 'decision'), {
@@ -214,7 +220,7 @@ export const api = {
   rollbackProposal: (id: string | number) => post<{ id: string; rollback: ProposalRollback }>(prop(id, 'rollback')),
   conversations: (signal?: AbortSignal) => get<Conversation[]>('/api/conversations', signal),
   createConversation: (title?: string) => post<Conversation>('/api/conversations', { title }),
-  messages: (id: string | number, signal?: AbortSignal) => get<ChatMessage[]>(`/api/conversations/${enc(String(id))}/messages`, signal),
+  messages: (id: string | number, signal?: AbortSignal) => get<ChatMessage[]>(idPath('conversations', id, '/messages'), signal),
   monitors: (signal?: AbortSignal) => get<MonitorView[]>('/api/monitors', signal),
   createMonitor: (input: { name: string; kind: string; target: string; interval_sec?: number; timeout_sec?: number; allow_private?: boolean }) =>
     post<MonitorView>('/api/monitors', input),
@@ -228,45 +234,26 @@ export const api = {
   telegramLinkCode: () => post<{ id: string; code: string; command: string }>('/api/channels/telegram/link-code'),
 };
 
+const num = (v: unknown) => (typeof v === 'number' ? v : undefined);
+const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
+
 function parseTurnEvent(name: string | null, data: string): TurnEvent | null {
-  let value: Record<string, unknown>;
+  let v: Record<string, unknown>;
   try {
-    const parsed: unknown = JSON.parse(data);
-    if (typeof parsed !== 'object' || parsed === null) return null;
-    value = parsed as Record<string, unknown>;
+    const p: unknown = JSON.parse(data);
+    if (typeof p !== 'object' || p === null) return null;
+    v = p as Record<string, unknown>;
   } catch {
     return null;
   }
-  switch (name) {
-    case 'delta':
-      return typeof value.text === 'string' ? { type: 'delta', text: value.text } : null;
-    case 'tool':
-      return {
-        type: 'tool',
-        name: String(value.name ?? ''),
-        tier: typeof value.tier === 'number' || typeof value.tier === 'string' ? value.tier : 0,
-        status: String(value.status ?? ''),
-        duration_ms: typeof value.duration_ms === 'number' ? value.duration_ms : undefined,
-      };
-    case 'done':
-      return {
-        type: 'done',
-        rounds: typeof value.rounds === 'number' ? value.rounds : undefined,
-        tool_calls: typeof value.tool_calls === 'number' ? value.tool_calls : undefined,
-        usage:
-          typeof value.usage === 'object' && value.usage !== null
-            ? (value.usage as { estimated?: boolean; tokens?: number })
-            : undefined,
-      };
-    case 'error':
-      return {
-        type: 'error',
-        code: typeof value.code === 'string' && CODE_PATTERN.test(value.code) ? value.code : 'internal',
-        message: typeof value.message === 'string' ? value.message.slice(0, 500) : '',
-      };
-    default:
-      return null;
+  if (name === 'delta') return typeof v.text === 'string' ? { type: 'delta', text: v.text } : null;
+  if (name === 'tool') return { type: 'tool', name: String(v.name ?? ''), tier: typeof v.tier === 'number' || typeof v.tier === 'string' ? v.tier : 0, status: String(v.status ?? ''), duration_ms: num(v.duration_ms) };
+  if (name === 'done') return { type: 'done', rounds: num(v.rounds), tool_calls: num(v.tool_calls), usage: typeof v.usage === 'object' && v.usage !== null ? (v.usage as { estimated?: boolean; tokens?: number }) : undefined };
+  if (name === 'error') {
+    const code = str(v.code);
+    return { type: 'error', code: code && CODE_PATTERN.test(code) ? code : 'internal', message: (str(v.message) ?? '').slice(0, 500) };
   }
+  return null;
 }
 
 /**
@@ -280,7 +267,7 @@ export async function streamTurn(
   onEvent: (event: TurnEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const response = await send('POST', `/api/conversations/${enc(String(conversationId))}/turn`, {
+  const response = await send('POST', idPath('conversations', conversationId, '/turn'), {
     body: { message },
     signal,
     stream: true,

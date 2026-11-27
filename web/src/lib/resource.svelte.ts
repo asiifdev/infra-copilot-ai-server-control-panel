@@ -22,15 +22,15 @@ export class Resource<T> {
   status = $state<ResourceStatus>('idle');
   data = $state.raw<T | null>(null);
   error = $state.raw<ApiError | null>(null);
-  #controller: AbortController | null = null;
-  #fetcher: ((signal: AbortSignal) => Promise<T>) | null = null;
+  #c: AbortController | null = null;
+  #f: ((signal: AbortSignal) => Promise<T>) | null = null;
 
   /** Starts (or restarts) loading; an older request in flight is aborted and ignored. */
   load(fetcher: (signal: AbortSignal) => Promise<T>): void {
-    this.#fetcher = fetcher;
-    this.#controller?.abort();
+    this.#f = fetcher;
+    this.#c?.abort();
     const controller = new AbortController();
-    this.#controller = controller;
+    this.#c = controller;
     this.status = 'loading';
     this.error = null;
     fetcher(controller.signal).then(
@@ -48,10 +48,10 @@ export class Resource<T> {
   }
 
   reload(): void {
-    if (this.#fetcher) this.load(this.#fetcher);
+    if (this.#f) this.load(this.#f);
   }
 
   abort(): void {
-    this.#controller?.abort();
+    this.#c?.abort();
   }
 }

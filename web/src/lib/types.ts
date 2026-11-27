@@ -23,6 +23,7 @@ export interface NodeSummary {
   name: string;
   kind: string;
   status: string;
+  access?: string;
   latest_inventory: { taken_at: string; status: string; counts: InventoryCounts } | null;
 }
 
@@ -35,6 +36,7 @@ export interface InventoryItem {
 export interface InventoryView {
   taken_at: string;
   status: string;
+  access?: string;
   warnings: string[];
   items: InventoryItem[];
 }
@@ -230,6 +232,9 @@ export interface ProposalView {
   node: string | null;
   execution: ProposalExecution | null;
   rollback: ProposalRollback | null;
+  approvals_count?: number;
+  required_approvals?: number;
+  user_has_approved?: boolean;
 }
 
 export interface Conversation {
@@ -303,4 +308,6 @@ export interface LocalSite {
   config_path: string;
   status: string;
   created_at: string;
+  php_version?: string | null;
+  tls_enabled?: boolean;
 }

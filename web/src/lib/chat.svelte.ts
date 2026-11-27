@@ -30,12 +30,21 @@ export interface DisplayMessage {
  * assistant row of its own with empty text; those names are shown as chips on the answer that
  * follows (or on their own when the turn never produced one).
  */
+const msg = (role: 'user' | 'assistant', text = '', tools: ToolChip[] = []): DisplayMessage => ({
+  role,
+  text,
+  tools,
+  error: null,
+  stopped: false,
+  truncated: false,
+});
+
 export function fromHistory(history: ChatMessage[]): DisplayMessage[] {
   const out: DisplayMessage[] = [];
   let carried: ToolChip[] = [];
   const flush = () => {
     if (carried.length === 0) return;
-    out.push({ role: 'assistant', text: '', tools: carried, error: null, stopped: false, truncated: false });
+    out.push(msg('assistant', '', carried));
     carried = [];
   };
   for (const message of history) {
@@ -47,7 +56,7 @@ export function fromHistory(history: ChatMessage[]): DisplayMessage[] {
       continue;
     }
     if (message.role === 'user') flush();
-    out.push({ role: message.role, text, tools: [...carried, ...tools], error: null, stopped: false, truncated: false });
+    out.push(msg(message.role, text, [...carried, ...tools]));
     carried = [];
   }
   flush();
@@ -59,7 +68,7 @@ export class ChatSession {
   streaming = $state(false);
   /** True once this view sent a turn: only then is the end of a reply announced. */
   live = $state(false);
-  #controller: AbortController | null = null;
+  #c: AbortController | null = null;
 
   reset(history: ChatMessage[] = []): void {
     this.stop();
@@ -69,17 +78,16 @@ export class ChatSession {
 
   /** Aborts the turn in flight, if any. */
   stop(): void {
-    this.#controller?.abort();
+    this.#c?.abort();
   }
 
   async send(conversationId: string | number, text: string): Promise<void> {
     if (this.streaming) return;
     const controller = new AbortController();
-    this.#controller = controller;
+    this.#c = controller;
     this.streaming = true;
     this.live = true;
-    this.messages.push({ role: 'user', text, tools: [], error: null, stopped: false, truncated: false });
-    this.messages.push({ role: 'assistant', text: '', tools: [], error: null, stopped: false, truncated: false });
+    this.messages.push(msg('user', text), msg('assistant'));
     const reply = this.messages[this.messages.length - 1]!;
     const onEvent = (event: TurnEvent) => {
       switch (event.type) {
@@ -122,7 +130,7 @@ export class ChatSession {
       }
     } finally {
       this.streaming = false;
-      if (this.#controller === controller) this.#controller = null;
+      if (this.#c === controller) this.#c = null;
     }
   }
 }

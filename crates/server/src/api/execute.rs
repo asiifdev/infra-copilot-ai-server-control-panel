@@ -47,6 +47,41 @@ pub(crate) fn action_view(row: &ProposalRow) -> Value {
             "path": clean_text(path.as_str()),
             "target_label": clean_text(path.as_str()),
         }),
+        Ok(Action::ConfigureSite {
+            domain,
+            upstream_port,
+            php_version,
+            tls_enabled,
+            root_dir,
+        }) => json!({
+            "kind": "configure_site",
+            "domain": clean_text(domain.as_str()),
+            "upstream_port": upstream_port,
+            "php_version": php_version.map(|v| v.as_str()),
+            "tls_enabled": tls_enabled,
+            "root_dir": clean_text(root_dir.as_str()),
+            "target_label": clean_text(domain.as_str()),
+        }),
+        Ok(Action::IssueTlsCert {
+            domain,
+            acme_provider,
+        }) => json!({
+            "kind": "issue_tls_cert",
+            "domain": clean_text(domain.as_str()),
+            "acme_provider": acme_provider.as_str(),
+            "target_label": clean_text(domain.as_str()),
+        }),
+        Ok(Action::BackupDatabase {
+            engine,
+            db_name,
+            output_path,
+        }) => json!({
+            "kind": "backup_database",
+            "engine": engine.as_str(),
+            "db_name": clean_text(db_name.as_str()),
+            "output_path": clean_text(output_path.as_str()),
+            "target_label": clean_text(db_name.as_str()),
+        }),
         Err(_) => Value::Null,
     }
 }
@@ -211,6 +246,19 @@ fn verify_tier_approval(
 ) -> Result<(), ApiError> {
     if !action.requires_backup() {
         return Ok(());
+    }
+    let two_approvers =
+        db::org_requires_two_approvers(conn, &app.scope.org).map_err(|e| from_db(&e))?;
+    let required_approvals: u32 = if two_approvers && action.requires_typed_confirmation() {
+        2
+    } else {
+        1
+    };
+    let (approved_count, _) =
+        db::count_approvals_for_proposal(conn, &app.scope.org, &row.id, &app.scope.user)
+            .map_err(|e| from_db(&e))?;
+    if approved_count < required_approvals {
+        return Err(ApiError::new("approval_required"));
     }
     let approval = db::get_approval_for_proposal(conn, &app.scope.org, &row.id)
         .map_err(|e| from_db(&e))?

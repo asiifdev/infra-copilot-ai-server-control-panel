@@ -104,6 +104,29 @@ pub(crate) async fn session(
     Ok(json_ok(&Value::Object(map)))
 }
 
+/// `GET /api/entitlements`: returns the organization's effective entitlement tier and limits.
+pub(crate) async fn entitlements(State(app): State<Arc<App>>) -> Reply {
+    use core_domain::entitlements::{EntitlementProvider, LocalCommunityEntitlements};
+
+    let body = with_db(&app, |conn, app| {
+        let provider = LocalCommunityEntitlements;
+        let tier = provider.tier(app.scope.org.as_str());
+        let mut limits = provider.limits(app.scope.org.as_str());
+        let require_two =
+            db::org_requires_two_approvers(conn, &app.scope.org).map_err(|e| from_db(&e))?;
+        limits.require_two_approvers_tier4 = require_two;
+        Ok(json!({
+            "tier": tier.as_str(),
+            "max_nodes": limits.max_nodes,
+            "max_orgs": limits.max_orgs,
+            "require_two_approvers_tier4": limits.require_two_approvers_tier4,
+            "allow_managed_transport": limits.allow_managed_transport,
+        }))
+    })
+    .await?;
+    Ok(json_ok(&body))
+}
+
 /// `GET /api/i18n/{locale}`: the `ui.*` texts as a flat map of raw templates (placeholders are
 /// `{name}` and `{{` `}}` are literal braces). A key missing in the locale falls back to English,
 /// as everywhere else.

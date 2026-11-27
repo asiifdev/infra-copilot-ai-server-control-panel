@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '../lib/api';
-  import { toastError } from '../lib/errors';
+  import { withBusy } from '../lib/errors';
   import { dateText, formatBytes } from '../lib/format';
   import { i18n, t } from '../lib/i18n.svelte';
   import { useResource } from '../lib/resource.svelte';
@@ -32,14 +32,8 @@
   let credsError = $state<string | undefined>(undefined);
   let saving = $state(false);
 
-  function openCredentials(item: TransportSummary) {
+  function setEditing(item: TransportSummary | null) {
     editing = item;
-    credsJson = '';
-    credsError = undefined;
-  }
-
-  function closeCredentials() {
-    editing = null;
     credsJson = '';
     credsError = undefined;
   }
@@ -69,17 +63,12 @@
     const target = editing;
     credsJson = '';
     credsError = undefined;
-    saving = true;
-    try {
+    await withBusy((b) => (saving = b), async () => {
       await api.updateTransportCredentials(target.id, parsed);
       toasts.push('success', t('ui.transports.credentials_updated_toast'));
       editing = null;
       transports.reload();
-    } catch (cause) {
-      toastError(cause);
-    } finally {
-      saving = false;
-    }
+    });
   }
 
   // Never checked sorts first, then failed, then passed.
@@ -104,12 +93,12 @@
       <StatusBadge kind="state" value={view.ok ? 'passed' : 'failed'} />
     {/if}
     {#if view.freeBytes !== null && view.totalBytes !== null}
-      <span class="muted detail">{t('ui.transports.check_free', { free: formatBytes(view.freeBytes, i18n.locale), total: formatBytes(view.totalBytes, i18n.locale) })}</span>
+      <span class="muted nv-detail">{t('ui.transports.check_free', { free: formatBytes(view.freeBytes, i18n.locale), total: formatBytes(view.totalBytes, i18n.locale) })}</span>
     {:else if view.freeBytes !== null}
-      <span class="muted detail">{t('ui.transports.check_free_only', { free: formatBytes(view.freeBytes, i18n.locale) })}</span>
+      <span class="muted nv-detail">{t('ui.transports.check_free_only', { free: formatBytes(view.freeBytes, i18n.locale) })}</span>
     {/if}
     {#if view.speedBytesPerSec !== null}
-      <span class="muted detail">{t('ui.transports.check_speed', { speed: formatBytes(view.speedBytesPerSec, i18n.locale) })}</span>
+      <span class="muted nv-detail">{t('ui.transports.check_speed', { speed: formatBytes(view.speedBytesPerSec, i18n.locale) })}</span>
     {/if}
   {/if}
 {/snippet}
@@ -127,7 +116,6 @@
           {columns}
           rows={list}
           rowKey={(x) => x.name}
-          empty={t('ui.transports.empty')}
         >
           {#snippet cell(item, column)}
             {#if column.id === 'name'}
@@ -139,7 +127,7 @@
             {:else if column.id === 'check'}
               {@render check(item)}
             {:else}
-              <Button variant="secondary" onclick={() => openCredentials(item)}>{t('ui.transports.update_credentials')}</Button>
+              <Button variant="secondary" onclick={() => setEditing(item)}>{t('ui.transports.update_credentials')}</Button>
             {/if}
           {/snippet}
         </DataTable>
@@ -159,7 +147,7 @@
     tone="primary"
     busy={saving}
     onconfirm={submitCredentials}
-    oncancel={closeCredentials}
+    oncancel={() => setEditing(null)}
   >
     <TextField
       id="transport-credentials-json"
@@ -171,10 +159,3 @@
     />
   </ConfirmDialog>
 {/if}
-
-<style>
-  .detail {
-    display: block;
-    font-size: var(--nv-text-sm);
-  }
-</style>

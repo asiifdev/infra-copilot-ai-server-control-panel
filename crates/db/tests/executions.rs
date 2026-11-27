@@ -368,3 +368,87 @@ fn backup_and_rollback_lifecycle_and_tenant_isolation() -> TestResult {
     ));
     Ok(())
 }
+
+#[test]
+fn two_approvers_tier4_requires_two_distinct_users() -> TestResult {
+    let conn = open_in_memory()?;
+    let a = populate(&conn, "alpha")?;
+    let second_user = create_user(&conn, "second@alpha.example", "Second", None)?.id;
+    add_member(&conn, &a.org, &second_user, Role::Admin)?;
+    set_org_require_two_approvers(&conn, &a.org, true)?;
+    assert!(org_requires_two_approvers(&conn, &a.org)?);
+
+    let hash = sha256_hex(ACTION.as_bytes());
+    let prop_id = create_action_proposal(
+        &conn,
+        &a.org,
+        &NewProposal {
+            tier: 4,
+            ..new_proposal(&hash)
+        },
+        &a.node,
+        ACTION,
+    )?;
+
+    // First distinct user approves -> stays pending with count = 1.
+    let first = decide_proposal_with_details(
+        &conn,
+        &a.org,
+        &prop_id,
+        ProposalDecision::Approve,
+        &a.user,
+        true,
+        None,
+    )?;
+    match first {
+        DecisionOutcome::Decided(row) => assert_eq!(row.status, ProposalStatus::Pending),
+        other => return Err(format!("expected Decided(Pending), got {other:?}").into()),
+    }
+    assert_eq!(
+        count_approvals_for_proposal(&conn, &a.org, &prop_id, &a.user)?,
+        (1, true)
+    );
+    assert_eq!(
+        count_approvals_for_proposal(&conn, &a.org, &prop_id, &second_user)?,
+        (1, false)
+    );
+
+    // Same user approving twice is rejected cleanly and does not double-count.
+    let dup = decide_proposal_with_details(
+        &conn,
+        &a.org,
+        &prop_id,
+        ProposalDecision::Approve,
+        &a.user,
+        true,
+        None,
+    )?;
+    assert!(matches!(
+        dup,
+        DecisionOutcome::AlreadyDecided(ProposalStatus::Pending)
+    ));
+    assert_eq!(
+        count_approvals_for_proposal(&conn, &a.org, &prop_id, &a.user)?,
+        (1, true)
+    );
+
+    // Second distinct user approves -> flips to approved with count = 2.
+    let second = decide_proposal_with_details(
+        &conn,
+        &a.org,
+        &prop_id,
+        ProposalDecision::Approve,
+        &second_user,
+        true,
+        None,
+    )?;
+    match second {
+        DecisionOutcome::Decided(row) => assert_eq!(row.status, ProposalStatus::Approved),
+        other => return Err(format!("expected Decided(Approved), got {other:?}").into()),
+    }
+    assert_eq!(
+        count_approvals_for_proposal(&conn, &a.org, &prop_id, &second_user)?,
+        (2, true)
+    );
+    Ok(())
+}

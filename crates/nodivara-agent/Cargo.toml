@@ -1,0 +1,25 @@
+[package]
+name = "nodivara-agent"
+description = "Standalone pull-only remote agent that polls the Nodivara control plane over outbound HTTPS and executes approved actions locally."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "nodivara-agent"
+path = "src/main.rs"
+
+[dependencies]
+actions = { path = "../actions" }
+core-domain = { path = "../core" }
+net = { path = "../net" }
+transport = { path = "../transport" }
+serde = { version = "1.0.229", default-features = false, features = ["std", "derive"] }
+serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
+thiserror = "2"
+tokio = { version = "1", default-features = false, features = ["rt", "time", "signal", "macros"] }
+tracing = { version = "0.1", default-features = false }
+
+[lints]
+workspace = true

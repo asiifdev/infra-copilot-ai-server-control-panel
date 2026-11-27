@@ -824,6 +824,61 @@ pub struct ApprovalRow {
     pub created_at: String,
 }
 
+/// Returns whether `org` requires two distinct approvers for tier-4 proposals.
+///
+/// # Errors
+/// [`Error::NotFound`] when `org` does not exist; database failure.
+pub fn org_requires_two_approvers(conn: &Connection, org: &OrgId) -> Result<bool> {
+    let raw: i64 = conn
+        .query_row(
+            "SELECT require_two_approvers FROM organizations WHERE id = ?1",
+            params![org.as_str()],
+            |row| row.get(0),
+        )
+        .optional()?
+        .ok_or(Error::NotFound)?;
+    Ok(raw != 0)
+}
+
+/// Sets whether `org` requires two distinct approvers for tier-4 proposals.
+///
+/// # Errors
+/// [`Error::NotFound`] when `org` does not exist; database failure.
+pub fn set_org_require_two_approvers(conn: &Connection, org: &OrgId, required: bool) -> Result<()> {
+    let changed = conn.execute(
+        "UPDATE organizations SET require_two_approvers = ?2 WHERE id = ?1",
+        params![org.as_str(), i64::from(required)],
+    )?;
+    if changed == 0 {
+        return Err(Error::NotFound);
+    }
+    Ok(())
+}
+
+/// Counts `'approved'` rows in `approvals` for `(org, proposal)` and reports whether `user` has
+/// already approved.
+///
+/// # Errors
+/// Database failure.
+pub fn count_approvals_for_proposal(
+    conn: &Connection,
+    org: &OrgId,
+    proposal: &ProposalId,
+    user: &UserId,
+) -> Result<(u32, bool)> {
+    let (count_i, user_approved_i): (i64, i64) = conn.query_row(
+        "SELECT \
+            COUNT(*), \
+            COALESCE(MAX(CASE WHEN user_id = ?3 THEN 1 ELSE 0 END), 0) \
+         FROM approvals \
+         WHERE org_id = ?1 AND proposal_id = ?2 AND decision = 'approved'",
+        params![org.as_str(), proposal.as_str(), user.as_str()],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    let count = u32::try_from(count_i).map_err(|_| Error::Config("approval count overflow"))?;
+    Ok((count, user_approved_i != 0))
+}
+
 /// Returns the approval record for a proposal, if any.
 ///
 /// # Errors
@@ -936,10 +991,16 @@ pub fn decide_proposal_with_details(
         ProposalDecision::Approve => (ProposalStatus::Approved, "proposal.approve"),
         ProposalDecision::Reject => (ProposalStatus::Rejected, "proposal.reject"),
     };
-    tx.execute(
-        "UPDATE proposals SET status = ?3 WHERE org_id = ?1 AND id = ?2 AND status = 'pending'",
-        params![org.as_str(), id.as_str(), status.as_str()],
+    let already_by_user: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM approvals WHERE org_id = ?1 AND proposal_id = ?2 AND user_id = ?3)",
+        params![org.as_str(), id.as_str(), user.as_str()],
+        |row| row.get(0),
     )?;
+    if already_by_user {
+        return Ok(DecisionOutcome::AlreadyDecided(current.status));
+    }
+    let two_approvers = org_requires_two_approvers(&tx, org)?;
+    let requires_two = two_approvers && current.tier == 4 && decision == ProposalDecision::Approve;
     let approval_id = new_uuid(&tx)?;
     tx.execute(
         "INSERT INTO approvals (id, org_id, proposal_id, user_id, decision, typed_confirmation, comment) \
@@ -954,6 +1015,22 @@ pub fn decide_proposal_with_details(
             comment,
         ],
     )?;
+    let should_transition = if requires_two {
+        let approved_count: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM approvals WHERE org_id = ?1 AND proposal_id = ?2 AND decision = 'approved'",
+            params![org.as_str(), id.as_str()],
+            |row| row.get(0),
+        )?;
+        approved_count >= 2
+    } else {
+        true
+    };
+    if should_transition {
+        tx.execute(
+            "UPDATE proposals SET status = ?3 WHERE org_id = ?1 AND id = ?2 AND status = 'pending'",
+            params![org.as_str(), id.as_str(), status.as_str()],
+        )?;
+    }
     // Only an id, a number, a boolean and a hex digest: nothing that needs JSON escaping.
     let subject = format!(
         r#"{{"proposal":"{}","tier":{},"args_hash":"{}","typed_confirmation":{}}}"#,

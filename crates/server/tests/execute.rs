@@ -43,6 +43,7 @@ impl Executor for Recording {
                 current_state: "active".to_owned(),
                 diff: None,
             },
+            other => actions::dry_run_readonly(other),
         }
     }
 
@@ -802,5 +803,117 @@ fn monitors_incidents_channels_and_telegram_link_code_api() -> TestResult {
         session.delete(&format!("/api/channels/{ch_id}")).status,
         204
     );
+    Ok(())
+}
+
+#[test]
+fn two_approvers_tier4_enforced_in_decide_list_and_execute() -> TestResult {
+    let world = World::new()?;
+    let rec = Arc::new(Recording {
+        ran: Mutex::new(Vec::new()),
+        rolled_back: Mutex::new(Vec::new()),
+        succeed: true,
+        backup_succeed: true,
+    });
+    let id = {
+        let conn = world.conn()?;
+        db::set_org_require_two_approvers(&conn, &world.org, true)?;
+        let node = db::create_node(
+            &conn,
+            &world.org,
+            &NewNode {
+                name: "box",
+                kind: NodeKind::Local,
+                access: NodeAccess::Local,
+                labels_json: "{}",
+            },
+        )?;
+        let action = Action::delete_managed_file("/etc/nodivara/two.tar")?;
+        db::create_action_proposal(
+            &conn,
+            &world.org,
+            &NewProposal {
+                conversation: None,
+                tool: action.tool(),
+                tier: 4,
+                title: "Delete two.tar",
+                rationale: "old",
+                suggested_action: "rm",
+                impact: "assistant.proposal.impact",
+                rule_id: None,
+                subject_key: None,
+                args_hash: &action.hash(),
+            },
+            &node,
+            &action.canonical_json(),
+        )?
+    };
+    let server = TestServer::start_with(
+        &world,
+        Opts {
+            executor: Some(rec as Arc<dyn Executor>),
+            ..Opts::default()
+        },
+    )?;
+    let session = server.sign_in()?;
+
+    // Entitlements endpoint reflects require_two_approvers_tier4 = true.
+    let ent = session.get("/api/entitlements");
+    assert_eq!(ent.status, 200);
+    assert_eq!(ent.json()["require_two_approvers_tier4"], true);
+
+    // First user approves -> stays pending with approvals_count = 1 / required_approvals = 2.
+    let d1 = session.post(
+        &format!("/api/proposals/{}/decision", id.as_str()),
+        &json!({"decision": "approve", "typed_confirmation": "/etc/nodivara/two.tar"}),
+    );
+    assert_eq!(d1.status, 200, "{}", d1.text());
+    let d1j = d1.json();
+    assert_eq!(d1j["status"], "pending");
+    assert_eq!(d1j["approvals_count"], 1);
+    assert_eq!(d1j["required_approvals"], 2);
+    assert_eq!(d1j["user_has_approved"], true);
+
+    // List includes governance metadata.
+    let list = session.get("/api/proposals");
+    assert_eq!(list.status, 200);
+    let item = list
+        .json()
+        .as_array()
+        .and_then(|a| a.first())
+        .cloned()
+        .ok_or("missing proposal")?;
+    assert_eq!(item["approvals_count"], 1);
+    assert_eq!(item["required_approvals"], 2);
+    assert_eq!(item["user_has_approved"], true);
+
+    // Same user cannot approve twice.
+    let d_dup = session.post(
+        &format!("/api/proposals/{}/decision", id.as_str()),
+        &json!({"decision": "approve", "typed_confirmation": "/etc/nodivara/two.tar"}),
+    );
+    assert_eq!(d_dup.status, 409);
+    assert_eq!(d_dup.json()["error"]["code"], "proposal_decided");
+
+    // Second distinct user approves directly in DB -> flips to approved, then execute succeeds.
+    {
+        let conn = world.conn()?;
+        let user2_email = format!("second-{}@example.test", world.org.as_str());
+        let user2 = db::create_user(&conn, &user2_email, "Second", None)?.id;
+        db::add_member(&conn, &world.org, &user2, db::Role::Admin)?;
+        db::decide_proposal_with_details(
+            &conn,
+            &world.org,
+            &id,
+            db::ProposalDecision::Approve,
+            &user2,
+            true,
+            None,
+        )?;
+    }
+
+    let exec = session.post_empty(&format!("/api/proposals/{}/execute", id.as_str()));
+    assert_eq!(exec.status, 200, "{}", exec.text());
+    assert_eq!(exec.json()["execution"]["status"], "succeeded");
     Ok(())
 }

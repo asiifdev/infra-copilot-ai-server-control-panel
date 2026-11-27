@@ -35,7 +35,6 @@
           {columns}
           rows={list}
           rowKey={(p) => p.name}
-          empty={t('ui.plans.empty')}
         >
           {#snippet cell(plan, column)}
             {#if column.id === 'name'}

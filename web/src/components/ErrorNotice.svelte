@@ -20,37 +20,12 @@
   const cleanDetail = $derived(detail ? inlineText(detail, 300) : '');
 </script>
 
-<div class="notice" role="alert">
-  <p class="title"><Icon name="alert" />{t(errorKey(code))}</p>
+<div class="nv-err" role="alert">
+  <p class="nv-err-title"><Icon name="alert" />{t(errorKey(code))}</p>
   {#if advice}<p>{t(advice)}</p>{/if}
-  {#if cleanDetail}<p class="muted detail">{t('ui.error.detail', { detail: cleanDetail })}</p>{/if}
+  {#if cleanDetail}<p class="muted nv-err-detail">{t('ui.error.detail', { detail: cleanDetail })}</p>{/if}
   <div class="row">
     {#if pointsToSettings(code)}<a href={hrefFor({ name: 'settings' })}>{t('ui.error.open_settings')}</a>{/if}
     {#if onretry}<Button onclick={onretry}>{t('ui.common.retry')}</Button>{/if}
   </div>
 </div>
-
-<style>
-  .notice {
-    display: flex;
-    flex-direction: column;
-    gap: var(--nv-space-2);
-    padding: var(--nv-space-4);
-    border: var(--nv-border-width) solid var(--nv-danger);
-    border-inline-start-width: var(--nv-space-1);
-    border-radius: var(--nv-radius);
-    background: var(--nv-tint-danger);
-    box-shadow: var(--nv-shadow-1);
-  }
-  .title {
-    display: flex;
-    align-items: center;
-    gap: var(--nv-space-2);
-    font-weight: 700;
-    color: var(--nv-danger);
-  }
-  .detail {
-    font-size: var(--nv-text-sm);
-    overflow-wrap: anywhere;
-  }
-</style>

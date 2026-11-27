@@ -1,7 +1,10 @@
 //! The action list, its canonical form and the executor, run against a fake runner: no real
 //! service is ever touched.
 
-use actions::{Action, ActionError, Executor, LocalExecutor, OutcomeStatus, ServiceManagerKind};
+use actions::{
+    AcmeProvider, Action, ActionError, DbEngine, Executor, LocalExecutor, OutcomeStatus,
+    PhpVersion, ServiceManagerKind,
+};
 use core_domain::tier::Tier;
 use transport::{FakeRunner, RunError, RunOutput};
 
@@ -440,5 +443,199 @@ fn critical_restart_service_backup_and_rollback() -> TestResult {
     assert_eq!((out.status, out.verified), (OutcomeStatus::Succeeded, true));
     let rb = exec.rollback(&action, &snap);
     assert_eq!((rb.status, rb.verified), (OutcomeStatus::Succeeded, true));
+    Ok(())
+}
+
+#[test]
+fn configure_site_tiers_canonical_json_parse_and_validation() -> TestResult {
+    let local_site = Action::configure_site(
+        "MyApp.Test",
+        3000,
+        Some(PhpVersion::V8_3),
+        false,
+        "/srv/myapp",
+    )?;
+    assert_eq!(local_site.tier(), Tier::LightChange);
+    assert_eq!(local_site.tool(), "propose_configure_site");
+    assert_eq!(local_site.target_label(), "myapp.test");
+    assert_eq!(Action::parse(&local_site.canonical_json())?, local_site);
+
+    let local_tls = Action::configure_site("myapp.test", 3000, None, true, "/srv/myapp")?;
+    assert_eq!(local_tls.tier(), Tier::RiskyChange);
+
+    let prod_site = Action::configure_site(
+        "app.example.com",
+        8080,
+        Some(PhpVersion::V8_4),
+        true,
+        "/var/www/app",
+    )?;
+    assert_eq!(prod_site.tier(), Tier::RiskyChange);
+    assert!(prod_site.requires_backup());
+    assert_eq!(Action::parse(&prod_site.canonical_json())?, prod_site);
+
+    // Reject bad domain, port 0, bad path, unknown php version.
+    assert_eq!(
+        Action::configure_site("-bad.com", 8080, None, false, "/srv/app"),
+        Err(ActionError::BadDomain)
+    );
+    assert_eq!(
+        Action::configure_site("app.example.com", 0, None, false, "/srv/app"),
+        Err(ActionError::BadPort)
+    );
+    assert_eq!(
+        Action::configure_site("app.example.com", 8080, None, false, "/srv/../etc"),
+        Err(ActionError::BadPath)
+    );
+    let bad_php = r#"{"action":"configure_site","domain":"app.example.com","php_version":"7.4","root_dir":"/srv/app","tls_enabled":false,"upstream_port":8080}"#;
+    assert_eq!(Action::parse(bad_php), Err(ActionError::UnknownPhpVersion));
+    Ok(())
+}
+
+#[test]
+fn configure_site_dry_run_backup_execute_and_rollback() -> TestResult {
+    let dir = TempDir::new("site-cfg")?;
+    let backups = TempDir::new("site-bak")?;
+    let root_dir = dir.path().join("www");
+    std::fs::create_dir_all(&root_dir)?;
+
+    let action = Action::configure_site(
+        "portal.example.com",
+        4000,
+        Some(PhpVersion::V8_2),
+        true,
+        &root_dir.to_string_lossy(),
+    )?;
+    let exec = LocalExecutor::with_allowed_roots(FakeRunner::new(), vec![dir.path().to_path_buf()]);
+
+    let dry = exec.dry_run(&action);
+    assert_eq!(dry.current_state, "absent");
+    let diff = dry.diff.unwrap_or_default();
+    assert!(diff.contains("server_name portal.example.com;"));
+    assert!(diff.contains("php8.2-fpm.sock"));
+    assert!(diff.contains("proxy_pass http://127.0.0.1:4000;"));
+
+    let snap = exec.backup(&action, backups.path())?;
+    let out = exec.execute(&action);
+    assert_eq!((out.status, out.verified), (OutcomeStatus::Succeeded, true));
+
+    let vhost_file = dir.path().join("sites").join("portal.example.com.conf");
+    assert!(vhost_file.exists());
+    let written = std::fs::read_to_string(&vhost_file)?;
+    assert!(written.contains("listen 443 ssl http2;"));
+
+    let rb = exec.rollback(&action, &snap);
+    assert_eq!((rb.status, rb.verified), (OutcomeStatus::Succeeded, true));
+    assert!(!vhost_file.exists());
+    Ok(())
+}
+
+#[test]
+fn issue_tls_cert_validation_argv_dry_run_backup_execute_and_rollback() -> TestResult {
+    // Reject local/reserved TLDs and flag-injection.
+    for bad in [
+        "app.test",
+        "dev.localhost",
+        "printer.local",
+        "-d evil.com",
+        "bad;rm.com",
+    ] {
+        assert_eq!(
+            Action::issue_tls_cert(bad, AcmeProvider::LetsEncrypt),
+            Err(ActionError::BadDomain),
+            "{bad}"
+        );
+    }
+    let bad_provider =
+        r#"{"acme_provider":"selfsigned","action":"issue_tls_cert","domain":"app.example.com"}"#;
+    assert_eq!(
+        Action::parse(bad_provider),
+        Err(ActionError::UnknownAcmeProvider)
+    );
+
+    let backups = TempDir::new("tls-bak")?;
+    let action = Action::issue_tls_cert("app.example.com", AcmeProvider::LetsEncrypt)?;
+    assert_eq!(action.tier(), Tier::RiskyChange);
+    assert!(action.requires_backup());
+    assert_eq!(action.tool(), "propose_issue_tls_cert");
+    assert_eq!(Action::parse(&action.canonical_json())?, action);
+
+    let runner = FakeRunner::new();
+    // dry_run: status check -> absent (exit 1)
+    runner.push(Ok(RunOutput::failed(1, "")));
+    // backup: status check -> absent (exit 1)
+    runner.push(Ok(RunOutput::failed(1, "")));
+    // execute: certbot certonly -> ok, certbot certificates -> ok
+    runner.push(Ok(RunOutput::ok("Successfully received certificate.")));
+    runner.push(Ok(RunOutput::ok("Certificate Name: app.example.com")));
+    // rollback (existed == false): certbot delete -> ok
+    runner.push(Ok(RunOutput::ok("Deleted")));
+
+    let exec = LocalExecutor::new(runner);
+    let dry = exec.dry_run(&action);
+    assert_eq!(dry.current_state, "absent");
+    assert_eq!(
+        dry.steps[0],
+        r#"certbot "certonly" "--non-interactive" "--agree-tos" "--nginx" "--dry-run" "-d" "app.example.com""#
+    );
+    assert_eq!(
+        dry.steps[1],
+        r#"certbot "certonly" "--non-interactive" "--agree-tos" "--nginx" "-d" "app.example.com""#
+    );
+
+    let snap = exec.backup(&action, backups.path())?;
+    let out = exec.execute(&action);
+    assert_eq!((out.status, out.verified), (OutcomeStatus::Succeeded, true));
+    let rb = exec.rollback(&action, &snap);
+    assert_eq!((rb.status, rb.verified), (OutcomeStatus::Succeeded, true));
+    Ok(())
+}
+
+#[test]
+fn backup_database_validation_argv_dry_run_backup_execute_and_rollback() -> TestResult {
+    // Reject flag-injection and unsafe DB names.
+    for bad in ["--all-databases", "-h", "db;drop", "db name", "db.name", ""] {
+        assert_eq!(
+            Action::backup_database(DbEngine::Mysql, bad, "/var/backups/nodivara/db.sql"),
+            Err(ActionError::BadDbName),
+            "{bad}"
+        );
+    }
+    let bad_engine = r#"{"action":"backup_database","db_name":"app_prod","engine":"sqlite","output_path":"/var/backups/nodivara/app.sql"}"#;
+    assert_eq!(Action::parse(bad_engine), Err(ActionError::UnknownDbEngine));
+
+    let dir = TempDir::new("db-dump")?;
+    let backups = TempDir::new("db-bak")?;
+    let dump_path = dir.path().join("app_prod.dump");
+    let action = Action::backup_database(
+        DbEngine::Postgres,
+        "app_prod_01",
+        &dump_path.to_string_lossy(),
+    )?;
+    assert_eq!(action.tier(), Tier::LightChange);
+    assert_eq!(action.tool(), "propose_backup_database");
+    assert_eq!(Action::parse(&action.canonical_json())?, action);
+
+    let runner = FakeRunner::new();
+    // execute: pg_dump -> ok, test -s -> ok
+    runner.push(Ok(RunOutput::ok("")));
+    runner.push(Ok(RunOutput::ok("")));
+
+    let exec = LocalExecutor::with_allowed_roots(runner, vec![dir.path().to_path_buf()]);
+    let dry = exec.dry_run(&action);
+    assert_eq!(dry.current_state, "absent");
+    assert!(dry.steps[0].starts_with(r#"pg_dump "--format=custom""#));
+    assert!(dry.steps[0].contains(r#""--" "app_prod_01""#));
+    assert!(!dry.steps[0].contains("password") && !dry.steps[0].contains(" -p "));
+
+    let snap = exec.backup(&action, backups.path())?;
+    let out = exec.execute(&action);
+    assert_eq!((out.status, out.verified), (OutcomeStatus::Succeeded, true));
+
+    // Simulate the created dump file on disk and verify rollback removes it.
+    std::fs::write(&dump_path, b"PGDMP")?;
+    let rb = exec.rollback(&action, &snap);
+    assert_eq!((rb.status, rb.verified), (OutcomeStatus::Succeeded, true));
+    assert!(!dump_path.exists());
     Ok(())
 }

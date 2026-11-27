@@ -123,38 +123,45 @@ pub(crate) async fn proposals_list(
     let limit = limit_param(query.as_deref(), "limit", 200, 500).map_err(|()| INVALID_INPUT)?;
     let body = with_db(&app, move |conn, app| {
         let locale = lang.0;
-        let rows = db::list_proposals(conn, &app.scope.org, status, limit)
-            .map_err(|e| from_db(&e))?;
-        Ok(Value::Array(
-            rows.iter()
-                .map(|p| {
-                    json!({
-                        "id": p.id.as_str(),
-                        "conversation_id": p.conversation_id.as_ref().map(db::ConversationId::as_str),
-                        "tool": clean_text(&p.tool),
-                        "tier": p.tier,
-                        "title": clean_text(&p.title),
-                        "rationale": clean_text(&p.rationale),
-                        "suggested_action": clean_text(&p.suggested_action),
-                        "impact": impact_text(app, locale, &p.impact),
-                        "rule_id": p.rule_id,
-                        "subject_key": p.subject_key.as_deref().map(clean_text),
-                        "status": p.status.as_str(),
-                        "created_at": p.created_at,
-                        "expires_at": p.expires_at,
-                        "action": super::execute::action_view(p),
-                        "dry_run": super::execute::dry_run_view(p),
-                        "approval": super::execute::approval_view(conn, app, p),
-                        "has_backup": super::execute::has_backup_view(conn, app, p),
-                        "node": p.node_id.as_ref().and_then(|n| {
-                            db::get_node(conn, &app.scope.org, n).ok().map(|n| clean_text(&n.name))
-                        }),
-                        "execution": super::execute::execution_view(conn, app, p),
-                        "rollback": super::execute::rollback_view(conn, app, p),
-                    })
-                })
-                .collect(),
-        ))
+        let two_approvers =
+            db::org_requires_two_approvers(conn, &app.scope.org).map_err(|e| from_db(&e))?;
+        let rows =
+            db::list_proposals(conn, &app.scope.org, status, limit).map_err(|e| from_db(&e))?;
+        let mut items = Vec::with_capacity(rows.len());
+        for p in &rows {
+            let required_approvals: u32 = if two_approvers && p.tier == 4 { 2 } else { 1 };
+            let (approvals_count, user_has_approved) =
+                db::count_approvals_for_proposal(conn, &app.scope.org, &p.id, &app.scope.user)
+                    .map_err(|e| from_db(&e))?;
+            items.push(json!({
+                "id": p.id.as_str(),
+                "conversation_id": p.conversation_id.as_ref().map(db::ConversationId::as_str),
+                "tool": clean_text(&p.tool),
+                "tier": p.tier,
+                "title": clean_text(&p.title),
+                "rationale": clean_text(&p.rationale),
+                "suggested_action": clean_text(&p.suggested_action),
+                "impact": impact_text(app, locale, &p.impact),
+                "rule_id": p.rule_id,
+                "subject_key": p.subject_key.as_deref().map(clean_text),
+                "status": p.status.as_str(),
+                "created_at": p.created_at,
+                "expires_at": p.expires_at,
+                "action": super::execute::action_view(p),
+                "dry_run": super::execute::dry_run_view(p),
+                "approval": super::execute::approval_view(conn, app, p),
+                "approvals_count": approvals_count,
+                "required_approvals": required_approvals,
+                "user_has_approved": user_has_approved,
+                "has_backup": super::execute::has_backup_view(conn, app, p),
+                "node": p.node_id.as_ref().and_then(|n| {
+                    db::get_node(conn, &app.scope.org, n).ok().map(|n| clean_text(&n.name))
+                }),
+                "execution": super::execute::execution_view(conn, app, p),
+                "rollback": super::execute::rollback_view(conn, app, p),
+            }));
+        }
+        Ok(Value::Array(items))
     })
     .await?;
     Ok(json_ok(&body))
@@ -192,37 +199,54 @@ pub(crate) async fn proposal_decide(
         return Err(INVALID_INPUT);
     }
     let id = ProposalId::parse(&id).map_err(|_| NOT_FOUND)?;
-    let outcome = with_db(&app, move |conn, app| {
-        let row = db::get_proposal(conn, &app.scope.org, &id).map_err(|e| from_db(&e))?;
-        let mut confirmed = false;
-        if decision == ProposalDecision::Approve && row.tier == 4 {
-            let action_json = row
-                .action_json
-                .as_deref()
-                .ok_or(crate::errors::ApiError::new("action_invalid"))?;
-            let action = actions::Action::parse(action_json)
-                .map_err(|_| crate::errors::ApiError::new("action_invalid"))?;
-            if typed_confirmation.as_deref() != Some(action.target_label()) {
-                return Err(crate::errors::ApiError::new("typed_confirmation_mismatch"));
+    let (outcome, approvals_count, required_approvals, user_has_approved) =
+        with_db(&app, move |conn, app| {
+            let row = db::get_proposal(conn, &app.scope.org, &id).map_err(|e| from_db(&e))?;
+            let mut confirmed = false;
+            if decision == ProposalDecision::Approve && row.tier == 4 {
+                let action_json = row
+                    .action_json
+                    .as_deref()
+                    .ok_or(crate::errors::ApiError::new("action_invalid"))?;
+                let action = actions::Action::parse(action_json)
+                    .map_err(|_| crate::errors::ApiError::new("action_invalid"))?;
+                if typed_confirmation.as_deref() != Some(action.target_label()) {
+                    return Err(crate::errors::ApiError::new("typed_confirmation_mismatch"));
+                }
+                confirmed = true;
             }
-            confirmed = true;
-        }
-        db::decide_proposal_with_details(
-            conn,
-            &app.scope.org,
-            &id,
-            decision,
-            &app.scope.user,
-            confirmed,
-            comment.as_deref(),
-        )
-        .map_err(|e| from_db(&e))
-    })
-    .await?;
+            let two_approvers =
+                db::org_requires_two_approvers(conn, &app.scope.org).map_err(|e| from_db(&e))?;
+            let required_approvals: u32 = if two_approvers && row.tier == 4 { 2 } else { 1 };
+            let outcome = db::decide_proposal_with_details(
+                conn,
+                &app.scope.org,
+                &id,
+                decision,
+                &app.scope.user,
+                confirmed,
+                comment.as_deref(),
+            )
+            .map_err(|e| from_db(&e))?;
+            let (approvals_count, user_has_approved) =
+                db::count_approvals_for_proposal(conn, &app.scope.org, &id, &app.scope.user)
+                    .map_err(|e| from_db(&e))?;
+            Ok((
+                outcome,
+                approvals_count,
+                required_approvals,
+                user_has_approved,
+            ))
+        })
+        .await?;
     match outcome {
-        DecisionOutcome::Decided(row) => Ok(json_ok(
-            &json!({"id": row.id.as_str(), "status": row.status.as_str()}),
-        )),
+        DecisionOutcome::Decided(row) => Ok(json_ok(&json!({
+            "id": row.id.as_str(),
+            "status": row.status.as_str(),
+            "approvals_count": approvals_count,
+            "required_approvals": required_approvals,
+            "user_has_approved": user_has_approved,
+        }))),
         DecisionOutcome::AlreadyDecided(_) => Err(crate::errors::ApiError::new("proposal_decided")),
         DecisionOutcome::Expired => Err(crate::errors::ApiError::new("proposal_expired")),
     }

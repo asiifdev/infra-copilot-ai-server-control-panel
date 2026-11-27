@@ -48,10 +48,11 @@ pub use conversations::{
     ApprovalRow, ClaimOutcome, ConversationRow, DecisionOutcome, MessageRole, MessageRow,
     NewMessage, NewProposal, NewToolCall, ProposalDecision, ProposalRow, ProposalStatus,
     ToolCallRow, TurnClaim, append_messages, archive_conversation, claim_turn,
-    count_pending_proposals, create_conversation, create_proposal, decide_proposal,
-    decide_proposal_with_details, delete_conversation, get_approval_for_proposal, get_conversation,
-    get_proposal, list_conversations, list_messages, list_proposals, list_tool_calls, release_turn,
-    retitle_conversation, set_proposal_dry_run, touch_turn,
+    count_approvals_for_proposal, count_pending_proposals, create_conversation, create_proposal,
+    decide_proposal, decide_proposal_with_details, delete_conversation, get_approval_for_proposal,
+    get_conversation, get_proposal, list_conversations, list_messages, list_proposals,
+    list_tool_calls, org_requires_two_approvers, release_turn, retitle_conversation,
+    set_org_require_two_approvers, set_proposal_dry_run, touch_turn,
 };
 pub use error::{Error, Result};
 pub use executions::{

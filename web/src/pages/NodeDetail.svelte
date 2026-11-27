@@ -1,11 +1,12 @@
 <script lang="ts">
   import { api } from '../lib/api';
-  import { withBusy } from '../lib/errors';
+  import { toastError, withBusy } from '../lib/errors';
   import { dateText, describeData } from '../lib/format';
   import { i18n, t } from '../lib/i18n.svelte';
   import { hrefFor } from '../lib/router.svelte';
   import { useResource } from '../lib/resource.svelte';
   import { inlineText } from '../lib/text';
+  import { toasts } from '../lib/toast.svelte';
   import type { InventoryItem, NodeLogsView } from '../lib/types';
   import AsyncView from '../components/AsyncView.svelte';
   import Button from '../components/Button.svelte';
@@ -44,6 +45,22 @@
   }
 
   const inventory = useResource((signal) => api.inventory(name, kind || undefined, 500, signal));
+  const nodes = useResource((signal) => api.nodes(signal));
+  const isAgent = $derived(
+    inventory.data?.access === 'agent' || nodes.data?.some((n) => n.name === name && n.access === 'agent') === true,
+  );
+  const agentCommand = $derived(
+    `nodivara-agent --server ${globalThis.location?.origin ?? ''} --node ${inlineText(name, 80)} --token ${rotatedToken ?? '<TOKEN>'}`,
+  );
+
+  async function copyCommand() {
+    try {
+      await navigator.clipboard?.writeText(agentCommand);
+      toasts.push('success', t('ui.nodes.agent_command_copied'));
+    } catch (cause) {
+      toastError(cause);
+    }
+  }
 
   const kindOptions = $derived([
     { value: '', label: t('ui.node.kind_all') },
@@ -124,6 +141,13 @@
     {#if rotatedToken}
       <p class="muted">{t('ui.node.token_once')}</p>
       <TextBlock text={rotatedToken} mono />
+    {/if}
+    {#if isAgent}
+      <p class="muted">{t('ui.nodes.agent_command_hint')}</p>
+      <div class="row">
+        <TextBlock text={agentCommand} mono />
+        <Button variant="secondary" onclick={copyCommand}>{t('ui.nodes.copy_command')}</Button>
+      </div>
     {/if}
   </Card>
 </div>

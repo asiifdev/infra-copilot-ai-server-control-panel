@@ -31,26 +31,23 @@
 
   let filter = $state<Filter>('pending');
   let acting = $state<string | null>(null);
-  // The decision waiting for a second look: every rejection, and an approval of a risky change.
-  let confirming = $state.raw<{ proposal: ProposalView; decision: 'approve' | 'reject' } | null>(null);
-
-  // The approved action waiting for a second look before it runs.
-  let running = $state.raw<ProposalView | null>(null);
-  let rollingBack = $state.raw<ProposalView | null>(null);
+  let modal = $state.raw<{ proposal: ProposalView; kind: 'approve' | 'reject' | 'run' | 'rollback' } | null>(null);
   const executionEnabled = $derived(session.info?.execution_enabled === true);
+
+  const FILTERS: [Filter, string][] = [
+    ['pending', 'ui.proposals.f_pending'],
+    ['approved', 'ui.proposals.f_approved'],
+    ['rejected', 'ui.proposals.f_rejected'],
+    ['expired', 'ui.proposals.f_expired'],
+    ['all', 'ui.proposals.f_all'],
+  ];
 
   function inFilter(list: ProposalView[], which: Filter): ProposalView[] {
     return which === 'all' ? list : list.filter((p) => GROUPS[which].includes(p.status));
   }
 
   function options(list: ProposalView[]) {
-    return [
-      { value: 'pending', label: t('ui.proposals.f_pending'), count: inFilter(list, 'pending').length },
-      { value: 'approved', label: t('ui.proposals.f_approved'), count: inFilter(list, 'approved').length },
-      { value: 'rejected', label: t('ui.proposals.f_rejected'), count: inFilter(list, 'rejected').length },
-      { value: 'expired', label: t('ui.proposals.f_expired'), count: inFilter(list, 'expired').length },
-      { value: 'all', label: t('ui.proposals.f_all'), count: list.length },
-    ];
+    return FILTERS.map(([value, label]) => ({ value, label: t(label), count: inFilter(list, value).length }));
   }
 
   function setFilter(value: string) {
@@ -58,12 +55,13 @@
   }
 
   function approve(proposal: ProposalView) {
+    if (proposal.user_has_approved) return;
     // A risky or destructive change (tier 3 or 4) needs a second, explicit confirmation.
-    if (proposal.tier >= 3) confirming = { proposal, decision: 'approve' };
+    if (proposal.tier >= 3) modal = { proposal, kind: 'approve' };
     else void decide(proposal, 'approve');
   }
 
-  async function withProposal(id: string, fn: () => Promise<void>, clear?: () => void) {
+  async function withProposal(id: string, fn: () => Promise<void>, closeModal = false) {
     acting = id;
     try {
       await fn();
@@ -71,7 +69,7 @@
       toastError(cause);
     } finally {
       acting = null;
-      clear?.();
+      if (closeModal) modal = null;
       proposals.reload();
       void approvals.refresh();
     }
@@ -84,7 +82,7 @@
         await api.decideProposal(proposal.id, decision, typedConfirmation);
         toasts.push('success', t(decision === 'approve' ? 'ui.proposals.approved_toast' : 'ui.proposals.rejected_toast'));
       },
-      () => (confirming = null),
+      true,
     );
   }
 
@@ -106,7 +104,7 @@
           toasts.push('error', t('ui.proposals.run_failed_toast'));
         }
       },
-      () => (running = null),
+      true,
     );
   }
 
@@ -121,52 +119,45 @@
           toasts.push('error', t('ui.proposals.rollback_failed_toast'));
         }
       },
-      () => (rollingBack = null),
+      true,
     );
   }
   const dialog = $derived.by(() => {
-    if (confirming && !(confirming.decision === 'approve' && confirming.proposal.tier === 4)) {
-      const { proposal, decision } = confirming;
-      const approving = decision === 'approve';
+    if (!modal || (modal.kind === 'approve' && modal.proposal.tier === 4)) return null;
+    const { proposal, kind } = modal;
+    if (kind === 'approve' || kind === 'reject') {
+      const approving = kind === 'approve';
       return {
         id: proposal.id,
         title: t(approving ? 'ui.proposals.risky_title' : 'ui.proposals.reject_title'),
         message: t(approving ? 'ui.proposals.risky_message' : 'ui.proposals.reject_message', { title: inlineText(proposal.title, 80) }),
         confirmLabel: t(approving ? 'ui.proposals.risky_confirm' : 'ui.proposals.reject'),
         tone: (approving ? 'primary' : 'danger') as 'primary' | 'danger',
-        onconfirm: () => decide(proposal, decision),
-        oncancel: () => (confirming = null),
+        onconfirm: () => decide(proposal, kind),
       };
     }
-    if (running) {
-      const target = running;
+    if (kind === 'run') {
       return {
-        id: target.id,
+        id: proposal.id,
         title: t('ui.proposals.run_title'),
         message: t('ui.proposals.run_message', {
-          service: inlineText(target.action?.kind === 'restart_service' ? target.action.service : target.action?.target_label, 100),
-          manager: inlineText(target.action?.kind === 'restart_service' ? target.action.manager : target.action?.kind, 20),
-          node: inlineText(target.node, 80) || t('ui.proposal.node_unknown'),
+          service: inlineText(proposal.action?.kind === 'restart_service' ? proposal.action.service : proposal.action?.target_label, 100),
+          manager: inlineText(proposal.action?.kind === 'restart_service' ? proposal.action.manager : proposal.action?.kind, 20),
+          node: inlineText(proposal.node, 80) || t('ui.proposal.node_unknown'),
         }),
         confirmLabel: t('ui.proposals.run_confirm'),
         tone: 'primary' as const,
-        onconfirm: () => run(target),
-        oncancel: () => (running = null),
+        onconfirm: () => run(proposal),
       };
     }
-    if (rollingBack) {
-      const target = rollingBack;
-      return {
-        id: target.id,
-        title: t('ui.proposals.rollback_title'),
-        message: t('ui.proposals.rollback_message'),
-        confirmLabel: t('ui.proposals.rollback_confirm'),
-        tone: 'danger' as const,
-        onconfirm: () => rollback(target),
-        oncancel: () => (rollingBack = null),
-      };
-    }
-    return null;
+    return {
+      id: proposal.id,
+      title: t('ui.proposals.rollback_title'),
+      message: t('ui.proposals.rollback_message'),
+      confirmLabel: t('ui.proposals.rollback_confirm'),
+      tone: 'danger' as const,
+      onconfirm: () => rollback(proposal),
+    };
   });
 </script>
 
@@ -174,7 +165,7 @@
   <PageHeader title={t('ui.nav.proposals')} description={t('ui.proposals.intro')} eyebrow={t('ui.nav.group_work')} />
 
   <Card tone="info">
-    <p class="notice"><Icon name="shield" /><span>{t('ui.proposals.nothing_runs')} {t('ui.proposals.later')}</span></p>
+    <p class="nv-notice"><Icon name="shield" /><span>{t('ui.proposals.nothing_runs')} {t('ui.proposals.later')}</span></p>
   </Card>
 
   <AsyncView resource={proposals}>
@@ -188,7 +179,7 @@
           <EmptyState title={t('ui.proposals.empty_other')} />
         {/if}
       {:else}
-        <ul class="plain cards" aria-label={t('ui.proposals.list_label')}>
+        <ul class="plain stack" aria-label={t('ui.proposals.list_label')}>
           {#each shown as proposal (proposal.id)}
             <li>
               <ProposalCard
@@ -196,11 +187,11 @@
                 level={2}
                 busy={acting === proposal.id}
                 onapprove={() => approve(proposal)}
-                onreject={() => (confirming = { proposal, decision: 'reject' })}
+                onreject={() => (modal = { proposal, kind: 'reject' })}
                 {executionEnabled}
-                onrun={() => (running = proposal)}
+                onrun={() => (modal = { proposal, kind: 'run' })}
                 ondryrun={() => dryRun(proposal)}
-                onrollback={() => (rollingBack = proposal)}
+                onrollback={() => (modal = { proposal, kind: 'rollback' })}
               />
             </li>
           {/each}
@@ -210,8 +201,8 @@
   </AsyncView>
 </div>
 
-{#if confirming && confirming.decision === 'approve' && confirming.proposal.tier === 4}
-  {@const { proposal, decision } = confirming}
+{#if modal && modal.kind === 'approve' && modal.proposal.tier === 4}
+  {@const { proposal } = modal}
   <ConfirmTyped
     title={t('ui.proposals.risky_title')}
     message={t('ui.proposals.risky_message', { title: inlineText(proposal.title, 80) })}
@@ -220,8 +211,8 @@
     cancelLabel={t('ui.common.cancel')}
     tone="primary"
     busy={acting === proposal.id}
-    onconfirm={(typed) => decide(proposal, decision, typed)}
-    oncancel={() => (confirming = null)}
+    onconfirm={(typed) => decide(proposal, 'approve', typed)}
+    oncancel={() => (modal = null)}
   />
 {:else if dialog}
   <ConfirmDialog
@@ -232,20 +223,6 @@
     tone={dialog.tone}
     busy={acting === dialog.id}
     onconfirm={dialog.onconfirm}
-    oncancel={dialog.oncancel}
+    oncancel={() => (modal = null)}
   />
 {/if}
-
-<style>
-  .notice {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--nv-space-3);
-    max-width: none;
-  }
-  .cards {
-    display: flex;
-    flex-direction: column;
-    gap: var(--nv-space-4);
-  }
-</style>

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '../lib/api';
-  import { toastError } from '../lib/errors';
+  import { withBusy } from '../lib/errors';
   import { t } from '../lib/i18n.svelte';
   import { useResource } from '../lib/resource.svelte';
   import { toasts } from '../lib/toast.svelte';
@@ -33,46 +33,30 @@
   let toDelete = $state.raw<MemoryNote | null>(null);
   let working = $state(false);
 
-  function reloadAll() {
-    pending.reload();
-    active.reload();
+  function runMem(toastKey: string, fn: () => Promise<void>) {
+    return withBusy((b) => (working = b), async () => {
+      await fn();
+      toasts.push('success', t(toastKey));
+      pending.reload();
+      active.reload();
+    });
   }
 
-  const fail = toastError;
+  const approve = (note: MemoryNote) => runMem('ui.memory.approved', () => api.approveMemory(note.id));
 
-  async function approve(note: MemoryNote) {
-    working = true;
-    try {
-      await api.approveMemory(note.id);
-      toasts.push('success', t('ui.memory.approved'));
-      reloadAll();
-    } catch (cause) {
-      fail(cause);
-    } finally {
-      working = false;
-    }
-  }
-
-  async function confirmDelete() {
+  function confirmDelete() {
     const note = toDelete;
     if (!note) return;
-    working = true;
-    try {
+    return runMem('ui.memory.deleted', async () => {
       await api.deleteMemory(note.id);
-      toasts.push('success', t('ui.memory.deleted'));
       toDelete = null;
-      reloadAll();
-    } catch (cause) {
-      fail(cause);
-    } finally {
-      working = false;
-    }
+    });
   }
 </script>
 
 {#snippet note(item: MemoryNote, canApprove: boolean)}
-  <li class="note">
-    <p class="meta"><span class="chip">{kindLabel(item.kind)}</span><span class="chip">{sourceLabel(item.source)}</span></p>
+  <li class="nv-note">
+    <p class="nv-chips"><span class="chip">{kindLabel(item.kind)}</span><span class="chip">{sourceLabel(item.source)}</span></p>
     <TextBlock text={item.content} />
     <div class="row">
       {#if canApprove}
@@ -93,7 +77,7 @@
         {#if list.length === 0}
           <EmptyState icon="check" title={t('ui.memory.none_pending')} />
         {:else}
-          <ul class="notes" aria-label={t('ui.memory.pending')}>
+          <ul class="plain stack-sm" aria-label={t('ui.memory.pending')}>
             {#each list as item (item.id)}{@render note(item, true)}{/each}
           </ul>
         {/if}
@@ -107,7 +91,7 @@
         {#if list.length === 0}
           <EmptyState icon="memory" title={t('ui.memory.none_active')} />
         {:else}
-          <ul class="notes" aria-label={t('ui.memory.active')}>
+          <ul class="plain stack-sm" aria-label={t('ui.memory.active')}>
             {#each list as item (item.id)}{@render note(item, false)}{/each}
           </ul>
         {/if}
@@ -127,36 +111,3 @@
     oncancel={() => (toDelete = null)}
   />
 {/if}
-
-<style>
-  .notes {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--nv-space-3);
-  }
-  .meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--nv-space-2);
-    font-size: var(--nv-text-caption);
-  }
-  .chip {
-    padding: 0 var(--nv-space-2);
-    border-radius: var(--nv-radius-pill);
-    background: var(--nv-surface-2);
-    color: var(--nv-text);
-    font-weight: 650;
-  }
-  .note {
-    display: flex;
-    flex-direction: column;
-    gap: var(--nv-space-2);
-    padding: var(--nv-space-4);
-    border: var(--nv-border-width) solid var(--nv-border);
-    border-radius: var(--nv-radius-sm);
-    background: var(--nv-surface-2);
-  }
-</style>

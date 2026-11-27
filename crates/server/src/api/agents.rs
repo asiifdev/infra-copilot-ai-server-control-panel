@@ -206,6 +206,8 @@ pub(crate) async fn sites_list(State(app): State<Arc<App>>) -> Reply {
                     "upstream_port": s.upstream_port,
                     "config_path": s.config_path,
                     "status": s.status.as_str(),
+                    "php_version": s.php_version,
+                    "tls_enabled": s.tls_enabled,
                     "created_at": s.created_at,
                 })
             })
@@ -214,6 +216,31 @@ pub(crate) async fn sites_list(State(app): State<Arc<App>>) -> Reply {
     })
     .await?;
     Ok(json_ok(&body))
+}
+
+fn parse_php_version(value: Option<&Value>) -> Result<Option<String>, ApiError> {
+    match value {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) => {
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                Ok(None)
+            } else if matches!(trimmed, "8.1" | "8.2" | "8.3" | "8.4") {
+                Ok(Some(trimmed.to_owned()))
+            } else {
+                Err(INVALID_INPUT)
+            }
+        }
+        Some(_) => Err(INVALID_INPUT),
+    }
+}
+
+fn parse_tls_enabled(value: Option<&Value>) -> Result<bool, ApiError> {
+    match value {
+        None | Some(Value::Null) => Ok(false),
+        Some(Value::Bool(b)) => Ok(*b),
+        Some(_) => Err(INVALID_INPUT),
+    }
 }
 
 /// `POST /api/sites`: validates a `*.test` domain and records/writes a safe managed vhost config.
@@ -232,6 +259,8 @@ pub(crate) async fn sites_create(State(app): State<Arc<App>>, raw: Bytes) -> Rep
     if upstream_port == 0 {
         return Err(ApiError::new("invalid_upstream_port"));
     }
+    let php_version = parse_php_version(map.get("php_version"))?;
+    let tls_enabled = parse_tls_enabled(map.get("tls_enabled"))?;
     let domain = validate_test_domain(domain_raw).map_err(ApiError::new)?;
     let config_preview = render_test_vhost_config(&domain, upstream_port);
 
@@ -257,6 +286,8 @@ pub(crate) async fn sites_create(State(app): State<Arc<App>>, raw: Bytes) -> Rep
             upstream_port,
             &config_path,
             status,
+            php_version.as_deref(),
+            tls_enabled,
         )
         .map_err(|e| from_db(&e))?;
         Ok(json!({
@@ -266,6 +297,8 @@ pub(crate) async fn sites_create(State(app): State<Arc<App>>, raw: Bytes) -> Rep
                 "upstream_port": row.upstream_port,
                 "config_path": row.config_path,
                 "status": row.status.as_str(),
+                "php_version": row.php_version,
+                "tls_enabled": row.tls_enabled,
                 "created_at": row.created_at,
             },
             "config_preview": config_preview,

@@ -36,7 +36,6 @@
           {columns}
           rows={list}
           rowKey={(n) => n.name}
-          empty={t('ui.nodes.empty')}
         >
           {#snippet cell(node, column)}
             {#if column.id === 'name'}

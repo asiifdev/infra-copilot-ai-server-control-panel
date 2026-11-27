@@ -890,6 +890,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "dns"
+version = "0.0.0"
+dependencies = [
+ "core-domain",
+ "net",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
 name = "dom_query"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2315,6 +2327,21 @@ name = "new_debug_unreachable"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
+
+[[package]]
+name = "nodivara-agent"
+version = "0.0.0"
+dependencies = [
+ "actions",
+ "core-domain",
+ "net",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "transport",
+]
 
 [[package]]
 name = "nodivara-desktop"

@@ -2,7 +2,8 @@
 //! operations, and runs commands through a [`Runner`]. Output from the target is untrusted text:
 //! it is redacted, stripped of control characters and cut before anything keeps it.
 
-use crate::{Action, ServiceManagerKind};
+use crate::sites::render_site_vhost_config;
+use crate::{AcmeProvider, Action, DbEngine, ServiceManagerKind};
 use core_domain::redact::redact;
 use std::fs;
 use std::io::Write;
@@ -84,6 +85,8 @@ pub fn default_allowed_roots() -> Vec<PathBuf> {
         PathBuf::from("/etc/nodivara"),
         PathBuf::from("/opt/nodivara"),
         PathBuf::from("/var/lib/nodivara"),
+        PathBuf::from("/var/backups/nodivara"),
+        PathBuf::from("/var/www"),
         PathBuf::from("/srv"),
     ]
 }
@@ -130,6 +133,141 @@ fn systemctl(args: &[&str], name: &str) -> CommandPlan {
         env: Vec::new(),
         stdin: None,
     }
+}
+
+pub(crate) fn acme_issue_plan(provider: AcmeProvider, domain: &str, dry_run: bool) -> CommandPlan {
+    match provider {
+        AcmeProvider::LetsEncrypt => {
+            let mut args = vec![
+                "certonly".to_owned(),
+                "--non-interactive".to_owned(),
+                "--agree-tos".to_owned(),
+                "--nginx".to_owned(),
+            ];
+            if dry_run {
+                args.push("--dry-run".to_owned());
+            }
+            args.push("-d".to_owned());
+            args.push(domain.to_owned());
+            CommandPlan {
+                program: "certbot",
+                args,
+                env: Vec::new(),
+                stdin: None,
+            }
+        }
+        AcmeProvider::ZeroSsl => {
+            let mut args = vec![
+                "--issue".to_owned(),
+                "--server".to_owned(),
+                "zerossl".to_owned(),
+                "-d".to_owned(),
+                domain.to_owned(),
+                "--nginx".to_owned(),
+            ];
+            if dry_run {
+                args.push("--staging".to_owned());
+            }
+            CommandPlan {
+                program: "acme.sh",
+                args,
+                env: Vec::new(),
+                stdin: None,
+            }
+        }
+    }
+}
+
+pub(crate) fn acme_status_plan(provider: AcmeProvider, domain: &str) -> CommandPlan {
+    match provider {
+        AcmeProvider::LetsEncrypt => CommandPlan {
+            program: "certbot",
+            args: vec![
+                "certificates".to_owned(),
+                "-d".to_owned(),
+                domain.to_owned(),
+            ],
+            env: Vec::new(),
+            stdin: None,
+        },
+        AcmeProvider::ZeroSsl => CommandPlan {
+            program: "acme.sh",
+            args: vec!["--info".to_owned(), "-d".to_owned(), domain.to_owned()],
+            env: Vec::new(),
+            stdin: None,
+        },
+    }
+}
+
+pub(crate) fn acme_delete_plan(provider: AcmeProvider, domain: &str) -> CommandPlan {
+    match provider {
+        AcmeProvider::LetsEncrypt => CommandPlan {
+            program: "certbot",
+            args: vec![
+                "delete".to_owned(),
+                "--non-interactive".to_owned(),
+                "--cert-name".to_owned(),
+                domain.to_owned(),
+            ],
+            env: Vec::new(),
+            stdin: None,
+        },
+        AcmeProvider::ZeroSsl => CommandPlan {
+            program: "acme.sh",
+            args: vec!["--remove".to_owned(), "-d".to_owned(), domain.to_owned()],
+            env: Vec::new(),
+            stdin: None,
+        },
+    }
+}
+
+pub(crate) fn db_backup_plan(engine: DbEngine, db_name: &str, output_path: &str) -> CommandPlan {
+    match engine {
+        DbEngine::Mysql => CommandPlan {
+            program: "mysqldump",
+            args: vec![
+                "--single-transaction".to_owned(),
+                "--quick".to_owned(),
+                format!("--result-file={output_path}"),
+                "--".to_owned(),
+                db_name.to_owned(),
+            ],
+            env: Vec::new(),
+            stdin: None,
+        },
+        DbEngine::Postgres => CommandPlan {
+            program: "pg_dump",
+            args: vec![
+                "--format=custom".to_owned(),
+                format!("--file={output_path}"),
+                "--".to_owned(),
+                db_name.to_owned(),
+            ],
+            env: Vec::new(),
+            stdin: None,
+        },
+    }
+}
+
+pub(crate) fn validate_managed_dir(
+    path_str: &str,
+    allowed_roots: &[PathBuf],
+) -> Result<PathBuf, &'static str> {
+    match validate_managed_path(path_str, allowed_roots) {
+        Ok(p) => Ok(p),
+        Err("is_directory") => Ok(PathBuf::from(path_str)),
+        Err(e) => Err(e),
+    }
+}
+
+pub(crate) fn site_vhost_path(
+    allowed_roots: &[PathBuf],
+    domain: &str,
+) -> Result<PathBuf, &'static str> {
+    let base = allowed_roots.first().ok_or("path_not_allowed")?;
+    let candidate = base.join("sites").join(format!("{domain}.conf"));
+    let s = candidate.to_str().ok_or("path_not_allowed")?;
+    validate_managed_path(s, allowed_roots)
 }
 
 /// Untrusted output made safe to keep: redacted, control characters (but newlines) replaced,
@@ -418,6 +556,78 @@ impl<R: Runner + Send + Sync> Executor for LocalExecutor<R> {
                     diff: Some(format!("--- {}\n+++ /dev/null\n({})", path.as_str(), state)),
                 }
             }
+            Action::ConfigureSite {
+                domain,
+                upstream_port,
+                php_version,
+                tls_enabled,
+                root_dir,
+            } => {
+                let root_ok = validate_managed_dir(root_dir.as_str(), &self.allowed_roots);
+                let vhost = site_vhost_path(&self.allowed_roots, domain.as_str());
+                let state = match (&root_ok, &vhost) {
+                    (Err(r), _) | (_, Err(r)) => (*r).to_owned(),
+                    (Ok(_), Ok(p)) => match fs::symlink_metadata(p) {
+                        Ok(_) => "present".to_owned(),
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => "absent".to_owned(),
+                        Err(_) => "io".to_owned(),
+                    },
+                };
+                let rendered = render_site_vhost_config(
+                    domain,
+                    *upstream_port,
+                    *php_version,
+                    *tls_enabled,
+                    root_dir,
+                );
+                let vhost_label = vhost.as_ref().map_or_else(
+                    |_| domain.as_str().to_owned(),
+                    |p| p.to_string_lossy().into_owned(),
+                );
+                DryRun {
+                    steps: vec![format!("write site vhost config {vhost_label}")],
+                    current_state: state,
+                    diff: Some(rendered),
+                }
+            }
+            Action::IssueTlsCert {
+                domain,
+                acme_provider,
+            } => {
+                let dry_plan = acme_issue_plan(*acme_provider, domain.as_str(), true);
+                let live_plan = acme_issue_plan(*acme_provider, domain.as_str(), false);
+                let status_plan = acme_status_plan(*acme_provider, domain.as_str());
+                let state = match self.runner.run(&status_plan) {
+                    Ok(out) if out.exit_code == Some(0) => "present".to_owned(),
+                    Ok(_) => "absent".to_owned(),
+                    Err(e) => run_error_reason(e).to_owned(),
+                };
+                DryRun {
+                    steps: vec![dry_plan.to_string(), live_plan.to_string()],
+                    current_state: state,
+                    diff: None,
+                }
+            }
+            Action::BackupDatabase {
+                engine,
+                db_name,
+                output_path,
+            } => {
+                let plan = db_backup_plan(*engine, db_name.as_str(), output_path.as_str());
+                let state = match validate_managed_path(output_path.as_str(), &self.allowed_roots) {
+                    Ok(p) => match fs::symlink_metadata(&p) {
+                        Ok(meta) => format!("present ({} bytes)", meta.len()),
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => "absent".to_owned(),
+                        Err(_) => "io".to_owned(),
+                    },
+                    Err(reason) => reason.to_owned(),
+                };
+                DryRun {
+                    steps: vec![plan.to_string()],
+                    current_state: state,
+                    diff: None,
+                }
+            }
         }
     }
 
@@ -459,6 +669,56 @@ impl<R: Runner + Send + Sync> Executor for LocalExecutor<R> {
                     "kind": "file",
                     "existed": true,
                     "hex": encode_hex(&bytes),
+                })
+                .to_string();
+                write_backup_artifact(backup_dir, payload.as_bytes())
+            }
+            Action::ConfigureSite {
+                domain, root_dir, ..
+            } => {
+                let _ = validate_managed_dir(root_dir.as_str(), &self.allowed_roots)?;
+                let p = site_vhost_path(&self.allowed_roots, domain.as_str())?;
+                let (existed, hex) = match fs::read(&p) {
+                    Ok(bytes) => (true, encode_hex(&bytes)),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => (false, String::new()),
+                    Err(_) => return Err("io"),
+                };
+                let payload = serde_json::json!({
+                    "kind": "file",
+                    "existed": existed,
+                    "hex": hex,
+                })
+                .to_string();
+                write_backup_artifact(backup_dir, payload.as_bytes())
+            }
+            Action::IssueTlsCert {
+                domain,
+                acme_provider,
+            } => {
+                let status_plan = acme_status_plan(*acme_provider, domain.as_str());
+                let existed = match self.runner.run(&status_plan) {
+                    Ok(out) => out.exit_code == Some(0),
+                    Err(_) => false,
+                };
+                let payload = serde_json::json!({
+                    "kind": "tls_cert",
+                    "domain": domain.as_str(),
+                    "existed": existed,
+                })
+                .to_string();
+                write_backup_artifact(backup_dir, payload.as_bytes())
+            }
+            Action::BackupDatabase { output_path, .. } => {
+                let p = validate_managed_path(output_path.as_str(), &self.allowed_roots)?;
+                let (existed, hex) = match fs::read(&p) {
+                    Ok(bytes) => (true, encode_hex(&bytes)),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => (false, String::new()),
+                    Err(_) => return Err("io"),
+                };
+                let payload = serde_json::json!({
+                    "kind": "file",
+                    "existed": existed,
+                    "hex": hex,
                 })
                 .to_string();
                 write_backup_artifact(backup_dir, payload.as_bytes())
@@ -554,6 +814,108 @@ impl<R: Runner + Send + Sync> Executor for LocalExecutor<R> {
                     }
                 }
             }
+            Action::ConfigureSite {
+                domain,
+                upstream_port,
+                php_version,
+                tls_enabled,
+                root_dir,
+            } => {
+                if let Err(reason) = validate_managed_dir(root_dir.as_str(), &self.allowed_roots) {
+                    return failure(reason, String::new());
+                }
+                let p = match site_vhost_path(&self.allowed_roots, domain.as_str()) {
+                    Ok(p) => p,
+                    Err(reason) => return failure(reason, String::new()),
+                };
+                let content = render_site_vhost_config(
+                    domain,
+                    *upstream_port,
+                    *php_version,
+                    *tls_enabled,
+                    root_dir,
+                );
+                if let Err(reason) = write_file_atomically(&p, content.as_bytes()) {
+                    return failure(reason, String::new());
+                }
+                let expected = format!("server_name {};", domain.as_str());
+                let verified = fs::read_to_string(&p)
+                    .map(|after| after.contains(&expected))
+                    .unwrap_or(false);
+                if verified {
+                    Outcome {
+                        status: OutcomeStatus::Succeeded,
+                        verified: true,
+                        reason: "ok",
+                        detail: String::new(),
+                    }
+                } else {
+                    failure("verify_failed", String::new())
+                }
+            }
+            Action::IssueTlsCert {
+                domain,
+                acme_provider,
+            } => {
+                let plan = acme_issue_plan(*acme_provider, domain.as_str(), false);
+                match self.runner.run(&plan) {
+                    Err(error) => return failure(run_error_reason(error), String::new()),
+                    Ok(output) if output.exit_code != Some(0) => {
+                        return failure("command_failed", safe_excerpt(&output.stderr));
+                    }
+                    Ok(_) => {}
+                }
+                let verify_plan = acme_status_plan(*acme_provider, domain.as_str());
+                match self.runner.run(&verify_plan) {
+                    Err(error) => failure(run_error_reason(error), String::new()),
+                    Ok(output) if output.exit_code == Some(0) => Outcome {
+                        status: OutcomeStatus::Succeeded,
+                        verified: true,
+                        reason: "ok",
+                        detail: safe_excerpt(&output.stdout),
+                    },
+                    Ok(output) => failure("verify_failed", safe_excerpt(&output.stderr)),
+                }
+            }
+            Action::BackupDatabase {
+                engine,
+                db_name,
+                output_path,
+            } => {
+                let p = match validate_managed_path(output_path.as_str(), &self.allowed_roots) {
+                    Ok(p) => p,
+                    Err(reason) => return failure(reason, String::new()),
+                };
+                if let Some(parent) = p.parent()
+                    && fs::create_dir_all(parent).is_err()
+                {
+                    return failure("io", String::new());
+                }
+                let plan = db_backup_plan(*engine, db_name.as_str(), output_path.as_str());
+                match self.runner.run(&plan) {
+                    Err(error) => return failure(run_error_reason(error), String::new()),
+                    Ok(output) if output.exit_code != Some(0) => {
+                        return failure("command_failed", safe_excerpt(&output.stderr));
+                    }
+                    Ok(_) => {}
+                }
+                let verify_plan = CommandPlan {
+                    program: "test",
+                    args: vec!["-s".to_owned(), output_path.as_str().to_owned()],
+                    env: Vec::new(),
+                    stdin: None,
+                };
+                match self.runner.run(&verify_plan) {
+                    Err(error) => failure(run_error_reason(error), String::new()),
+                    Ok(output) if output.exit_code == Some(0) => Outcome {
+                        status: OutcomeStatus::Succeeded,
+                        verified: true,
+                        reason: "ok",
+                        detail: String::new(),
+                    },
+                    Ok(output) => failure("verify_failed", safe_excerpt(&output.stderr)),
+                }
+            }
         }
     }
 
@@ -614,53 +976,95 @@ impl<R: Runner + Send + Sync> Executor for LocalExecutor<R> {
                     }
                 }
             }
-            Action::UpdateEnvVar { path, .. } | Action::DeleteManagedFile { path } => {
+            Action::UpdateEnvVar { path, .. }
+            | Action::DeleteManagedFile { path }
+            | Action::BackupDatabase {
+                output_path: path, ..
+            } => {
                 let p = match validate_managed_path(path.as_str(), &self.allowed_roots) {
                     Ok(p) => p,
                     Err(reason) => return failure(reason, String::new()),
                 };
+                restore_managed_file(&p, &value)
+            }
+            Action::ConfigureSite { domain, .. } => {
+                let p = match site_vhost_path(&self.allowed_roots, domain.as_str()) {
+                    Ok(p) => p,
+                    Err(reason) => return failure(reason, String::new()),
+                };
+                restore_managed_file(&p, &value)
+            }
+            Action::IssueTlsCert {
+                domain,
+                acme_provider,
+            } => {
                 let Some(existed) = value.get("existed").and_then(serde_json::Value::as_bool)
                 else {
                     return failure("backup_corrupted", String::new());
                 };
                 if existed {
-                    let Some(hex) = value.get("hex").and_then(serde_json::Value::as_str) else {
-                        return failure("backup_corrupted", String::new());
+                    return Outcome {
+                        status: OutcomeStatus::Succeeded,
+                        verified: true,
+                        reason: "ok",
+                        detail: String::new(),
                     };
-                    let Some(orig_bytes) = decode_hex(hex) else {
-                        return failure("backup_corrupted", String::new());
-                    };
-                    if let Err(reason) = write_file_atomically(&p, &orig_bytes) {
-                        return failure(reason, String::new());
-                    }
-                    let verified = fs::read(&p).map(|now| now == orig_bytes).unwrap_or(false);
-                    if verified {
-                        Outcome {
-                            status: OutcomeStatus::Succeeded,
-                            verified: true,
-                            reason: "ok",
-                            detail: String::new(),
-                        }
-                    } else {
-                        failure("verify_failed", String::new())
-                    }
-                } else {
-                    match fs::remove_file(&p) {
-                        Ok(()) => {}
-                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                        Err(_) => return failure("io", String::new()),
-                    }
-                    if p.exists() {
-                        failure("verify_failed", String::new())
-                    } else {
-                        Outcome {
-                            status: OutcomeStatus::Succeeded,
-                            verified: true,
-                            reason: "ok",
-                            detail: String::new(),
-                        }
-                    }
                 }
+                let del_plan = acme_delete_plan(*acme_provider, domain.as_str());
+                match self.runner.run(&del_plan) {
+                    Err(error) => failure(run_error_reason(error), String::new()),
+                    Ok(output) if output.exit_code == Some(0) => Outcome {
+                        status: OutcomeStatus::Succeeded,
+                        verified: true,
+                        reason: "ok",
+                        detail: String::new(),
+                    },
+                    Ok(output) => failure("command_failed", safe_excerpt(&output.stderr)),
+                }
+            }
+        }
+    }
+}
+
+fn restore_managed_file(p: &Path, value: &serde_json::Value) -> Outcome {
+    let Some(existed) = value.get("existed").and_then(serde_json::Value::as_bool) else {
+        return failure("backup_corrupted", String::new());
+    };
+    if existed {
+        let Some(hex) = value.get("hex").and_then(serde_json::Value::as_str) else {
+            return failure("backup_corrupted", String::new());
+        };
+        let Some(orig_bytes) = decode_hex(hex) else {
+            return failure("backup_corrupted", String::new());
+        };
+        if let Err(reason) = write_file_atomically(p, &orig_bytes) {
+            return failure(reason, String::new());
+        }
+        let verified = fs::read(p).map(|now| now == orig_bytes).unwrap_or(false);
+        if verified {
+            Outcome {
+                status: OutcomeStatus::Succeeded,
+                verified: true,
+                reason: "ok",
+                detail: String::new(),
+            }
+        } else {
+            failure("verify_failed", String::new())
+        }
+    } else {
+        match fs::remove_file(p) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return failure("io", String::new()),
+        }
+        if p.exists() {
+            failure("verify_failed", String::new())
+        } else {
+            Outcome {
+                status: OutcomeStatus::Succeeded,
+                verified: true,
+                reason: "ok",
+                detail: String::new(),
             }
         }
     }

@@ -21,17 +21,9 @@
 </script>
 
 {#if session.phase === 'starting'}
-  <div class="boot"><Spinner label={t('ui.common.loading')} /></div>
+  <div class="nv-boot"><Spinner label={t('ui.common.loading')} /></div>
 {:else if session.phase === 'ready'}
   <Shell />
 {:else}
   <SignIn />
 {/if}
-
-<style>
-  .boot {
-    display: grid;
-    place-items: center;
-    min-height: 100vh;
-  }
-</style>

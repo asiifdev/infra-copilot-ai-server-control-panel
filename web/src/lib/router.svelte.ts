@@ -29,39 +29,22 @@ function decode(segment: string | undefined): string | null {
   }
 }
 
+const STATIC_ROUTES = new Set(['findings', 'monitors', 'proposals', 'transports', 'memory', 'settings']);
+
 export function parseHash(hash: string): Route {
   const path = hash.startsWith('#') ? hash.slice(1) : hash;
   if (!path.startsWith('/')) return { name: 'overview' };
   const [head, param, ...rest] = path.split('?')[0]!.slice(1).split('/');
   if (rest.length > 0) return { name: 'overview' };
-  switch (head) {
-    case 'nodes': {
-      if (param === undefined || param === '') return { name: 'nodes' };
-      const node = decode(param);
-      return node ? { name: 'node', node } : { name: 'nodes' };
-    }
-    case 'findings':
-      return { name: 'findings' };
-    case 'monitors':
-      return { name: 'monitors' };
-    case 'assistant':
-      return { name: 'assistant', conversation: decode(param) };
-    case 'plans': {
-      if (param === undefined || param === '') return { name: 'plans' };
-      const plan = decode(param);
-      return plan ? { name: 'plan', plan } : { name: 'plans' };
-    }
-    case 'proposals':
-      return { name: 'proposals' };
-    case 'transports':
-      return { name: 'transports' };
-    case 'memory':
-      return { name: 'memory' };
-    case 'settings':
-      return { name: 'settings' };
-    default:
-      return { name: 'overview' };
+  if (head === 'nodes' || head === 'plans') {
+    if (!param) return { name: head };
+    const val = decode(param);
+    if (!val) return { name: head };
+    return head === 'nodes' ? { name: 'node', node: val } : { name: 'plan', plan: val };
   }
+  if (head === 'assistant') return { name: 'assistant', conversation: decode(param) };
+  if (head && STATIC_ROUTES.has(head)) return { name: head } as Route;
+  return { name: 'overview' };
 }
 
 export function hrefFor(route: Route): string {

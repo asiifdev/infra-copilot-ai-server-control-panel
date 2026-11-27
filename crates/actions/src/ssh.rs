@@ -2,9 +2,11 @@
 //! commands through a [`Runner`]. Never uses shell interpolation.
 
 use crate::exec::{
-    decode_hex, encode_hex, failure, first_line, read_verified_backup_json, run_error_reason,
-    safe_excerpt, write_backup_artifact,
+    acme_delete_plan, acme_issue_plan, acme_status_plan, db_backup_plan, decode_hex, encode_hex,
+    failure, first_line, read_verified_backup_json, run_error_reason, safe_excerpt,
+    write_backup_artifact,
 };
+use crate::sites::render_site_vhost_config;
 use crate::{Action, BackupSnapshot, DryRun, Executor, Outcome, OutcomeStatus, ServiceManagerKind};
 use serde_json::json;
 use std::path::{Path, PathBuf};
@@ -159,6 +161,15 @@ impl<R: Runner + Send + Sync> SshExecutor<R> {
         }
     }
 
+    fn run_remote_plan(&self, plan: CommandPlan) -> Result<RunOutput, &'static str> {
+        let mut argv: Vec<&str> = Vec::with_capacity(1 + plan.args.len());
+        argv.push(plan.program);
+        for arg in &plan.args {
+            argv.push(arg.as_str());
+        }
+        self.run_remote(&argv, plan.stdin)
+    }
+
     fn verify_service_active(&self, name: &str) -> Outcome {
         match self.run_remote(&["systemctl", "is-active", name], None) {
             Err(reason) => failure(reason, String::new()),
@@ -220,6 +231,76 @@ impl<R: Runner + Send + Sync> Executor for SshExecutor<R> {
                     diff: Some(format!("- {}", path.as_str())),
                 }
             }
+            Action::ConfigureSite {
+                domain,
+                upstream_port,
+                php_version,
+                tls_enabled,
+                root_dir,
+            } => {
+                let conf_path = format!("/etc/nodivara/sites/{}.conf", domain.as_str());
+                let exists = self
+                    .run_remote(&["test", "-f", &conf_path], None)
+                    .is_ok_and(|o| o.exit_code == Some(0));
+                let rendered = render_site_vhost_config(
+                    domain,
+                    *upstream_port,
+                    *php_version,
+                    *tls_enabled,
+                    root_dir,
+                );
+                DryRun {
+                    steps: vec![format!("ssh {dest} tee {conf_path}")],
+                    current_state: if exists {
+                        "present".to_owned()
+                    } else {
+                        "missing".to_owned()
+                    },
+                    diff: Some(rendered),
+                }
+            }
+            Action::IssueTlsCert {
+                domain,
+                acme_provider,
+            } => {
+                let dry_plan = acme_issue_plan(*acme_provider, domain.as_str(), true);
+                let live_plan = acme_issue_plan(*acme_provider, domain.as_str(), false);
+                let status_plan = acme_status_plan(*acme_provider, domain.as_str());
+                let exists = self
+                    .run_remote_plan(status_plan)
+                    .is_ok_and(|o| o.exit_code == Some(0));
+                DryRun {
+                    steps: vec![
+                        format!("ssh {dest} {dry_plan}"),
+                        format!("ssh {dest} {live_plan}"),
+                    ],
+                    current_state: if exists {
+                        "present".to_owned()
+                    } else {
+                        "missing".to_owned()
+                    },
+                    diff: None,
+                }
+            }
+            Action::BackupDatabase {
+                engine,
+                db_name,
+                output_path,
+            } => {
+                let plan = db_backup_plan(*engine, db_name.as_str(), output_path.as_str());
+                let exists = self
+                    .run_remote(&["test", "-f", output_path.as_str()], None)
+                    .is_ok_and(|o| o.exit_code == Some(0));
+                DryRun {
+                    steps: vec![format!("ssh {dest} {plan}")],
+                    current_state: if exists {
+                        "present".to_owned()
+                    } else {
+                        "missing".to_owned()
+                    },
+                    diff: None,
+                }
+            }
         }
     }
 
@@ -233,7 +314,11 @@ impl<R: Runner + Send + Sync> Executor for SshExecutor<R> {
             })
             .to_string()
             .into_bytes(),
-            Action::UpdateEnvVar { path, .. } | Action::DeleteManagedFile { path } => {
+            Action::UpdateEnvVar { path, .. }
+            | Action::DeleteManagedFile { path }
+            | Action::BackupDatabase {
+                output_path: path, ..
+            } => {
                 let out = self.run_remote(&["cat", path.as_str()], None)?;
                 let existed = out.exit_code == Some(0);
                 let hex = if existed {
@@ -247,6 +332,42 @@ impl<R: Runner + Send + Sync> Executor for SshExecutor<R> {
                     "path": path.as_str(),
                     "existed": existed,
                     "hex": hex,
+                })
+                .to_string()
+                .into_bytes()
+            }
+            Action::ConfigureSite { domain, .. } => {
+                let conf_path = format!("/etc/nodivara/sites/{}.conf", domain.as_str());
+                let out = self.run_remote(&["cat", &conf_path], None)?;
+                let existed = out.exit_code == Some(0);
+                let hex = if existed {
+                    encode_hex(&out.stdout)
+                } else {
+                    String::new()
+                };
+                json!({
+                    "kind": "ssh_file",
+                    "host": self.target.host,
+                    "path": conf_path,
+                    "existed": existed,
+                    "hex": hex,
+                })
+                .to_string()
+                .into_bytes()
+            }
+            Action::IssueTlsCert {
+                domain,
+                acme_provider,
+            } => {
+                let status_plan = acme_status_plan(*acme_provider, domain.as_str());
+                let existed = self
+                    .run_remote_plan(status_plan)
+                    .is_ok_and(|o| o.exit_code == Some(0));
+                json!({
+                    "kind": "ssh_tls_cert",
+                    "host": self.target.host,
+                    "domain": domain.as_str(),
+                    "existed": existed,
                 })
                 .to_string()
                 .into_bytes()
@@ -305,6 +426,90 @@ impl<R: Runner + Send + Sync> Executor for SshExecutor<R> {
                     Ok(out) => failure("verify_failed", safe_excerpt(&out.stderr)),
                 }
             }
+            Action::ConfigureSite {
+                domain,
+                upstream_port,
+                php_version,
+                tls_enabled,
+                root_dir,
+            } => {
+                let conf_path = format!("/etc/nodivara/sites/{}.conf", domain.as_str());
+                let rendered = render_site_vhost_config(
+                    domain,
+                    *upstream_port,
+                    *php_version,
+                    *tls_enabled,
+                    root_dir,
+                );
+                match self.run_remote(
+                    &["tee", &conf_path],
+                    Some(StdinData::Bytes(rendered.into_bytes())),
+                ) {
+                    Err(reason) => return failure(reason, String::new()),
+                    Ok(out) if out.exit_code != Some(0) => {
+                        return failure("command_failed", safe_excerpt(&out.stderr));
+                    }
+                    Ok(_) => {}
+                }
+                match self.run_remote(&["test", "-s", &conf_path], None) {
+                    Err(reason) => failure(reason, String::new()),
+                    Ok(out) if out.exit_code == Some(0) => Outcome {
+                        status: OutcomeStatus::Succeeded,
+                        verified: true,
+                        reason: "ok",
+                        detail: String::new(),
+                    },
+                    Ok(out) => failure("verify_failed", safe_excerpt(&out.stderr)),
+                }
+            }
+            Action::IssueTlsCert {
+                domain,
+                acme_provider,
+            } => {
+                let plan = acme_issue_plan(*acme_provider, domain.as_str(), false);
+                match self.run_remote_plan(plan) {
+                    Err(reason) => return failure(reason, String::new()),
+                    Ok(out) if out.exit_code != Some(0) => {
+                        return failure("command_failed", safe_excerpt(&out.stderr));
+                    }
+                    Ok(_) => {}
+                }
+                let verify = acme_status_plan(*acme_provider, domain.as_str());
+                match self.run_remote_plan(verify) {
+                    Err(reason) => failure(reason, String::new()),
+                    Ok(out) if out.exit_code == Some(0) => Outcome {
+                        status: OutcomeStatus::Succeeded,
+                        verified: true,
+                        reason: "ok",
+                        detail: safe_excerpt(&out.stdout),
+                    },
+                    Ok(out) => failure("verify_failed", safe_excerpt(&out.stderr)),
+                }
+            }
+            Action::BackupDatabase {
+                engine,
+                db_name,
+                output_path,
+            } => {
+                let plan = db_backup_plan(*engine, db_name.as_str(), output_path.as_str());
+                match self.run_remote_plan(plan) {
+                    Err(reason) => return failure(reason, String::new()),
+                    Ok(out) if out.exit_code != Some(0) => {
+                        return failure("command_failed", safe_excerpt(&out.stderr));
+                    }
+                    Ok(_) => {}
+                }
+                match self.run_remote(&["test", "-s", output_path.as_str()], None) {
+                    Err(reason) => failure(reason, String::new()),
+                    Ok(out) if out.exit_code == Some(0) => Outcome {
+                        status: OutcomeStatus::Succeeded,
+                        verified: true,
+                        reason: "ok",
+                        detail: String::new(),
+                    },
+                    Ok(out) => failure("verify_failed", safe_excerpt(&out.stderr)),
+                }
+            }
         }
     }
 
@@ -346,46 +551,83 @@ impl<R: Runner + Send + Sync> Executor for SshExecutor<R> {
                     }
                 }
             }
-            Action::UpdateEnvVar { path, .. } | Action::DeleteManagedFile { path } => {
+            Action::UpdateEnvVar { path, .. }
+            | Action::DeleteManagedFile { path }
+            | Action::BackupDatabase {
+                output_path: path, ..
+            } => self.rollback_remote_file(path.as_str(), &value),
+            Action::ConfigureSite { domain, .. } => {
+                let conf_path = format!("/etc/nodivara/sites/{}.conf", domain.as_str());
+                self.rollback_remote_file(&conf_path, &value)
+            }
+            Action::IssueTlsCert {
+                domain,
+                acme_provider,
+            } => {
                 let Some(existed) = value.get("existed").and_then(serde_json::Value::as_bool)
                 else {
                     return failure("backup_corrupted", String::new());
                 };
                 if existed {
-                    let Some(hex) = value.get("hex").and_then(serde_json::Value::as_str) else {
-                        return failure("backup_corrupted", String::new());
+                    return Outcome {
+                        status: OutcomeStatus::Succeeded,
+                        verified: true,
+                        reason: "ok",
+                        detail: String::new(),
                     };
-                    let Some(orig_bytes) = decode_hex(hex) else {
-                        return failure("backup_corrupted", String::new());
-                    };
-                    match self
-                        .run_remote(&["tee", path.as_str()], Some(StdinData::Bytes(orig_bytes)))
-                    {
-                        Err(reason) => failure(reason, String::new()),
-                        Ok(out) if out.exit_code != Some(0) => {
-                            failure("command_failed", safe_excerpt(&out.stderr))
-                        }
-                        Ok(_) => Outcome {
-                            status: OutcomeStatus::Succeeded,
-                            verified: true,
-                            reason: "ok",
-                            detail: String::new(),
-                        },
-                    }
-                } else {
-                    match self.run_remote(&["rm", "-f", "--", path.as_str()], None) {
-                        Err(reason) => failure(reason, String::new()),
-                        Ok(out) if out.exit_code != Some(0) => {
-                            failure("command_failed", safe_excerpt(&out.stderr))
-                        }
-                        Ok(_) => Outcome {
-                            status: OutcomeStatus::Succeeded,
-                            verified: true,
-                            reason: "ok",
-                            detail: String::new(),
-                        },
-                    }
                 }
+                let del_plan = acme_delete_plan(*acme_provider, domain.as_str());
+                match self.run_remote_plan(del_plan) {
+                    Err(reason) => failure(reason, String::new()),
+                    Ok(out) if out.exit_code == Some(0) => Outcome {
+                        status: OutcomeStatus::Succeeded,
+                        verified: true,
+                        reason: "ok",
+                        detail: String::new(),
+                    },
+                    Ok(out) => failure("command_failed", safe_excerpt(&out.stderr)),
+                }
+            }
+        }
+    }
+}
+
+impl<R: Runner + Send + Sync> SshExecutor<R> {
+    fn rollback_remote_file(&self, path: &str, value: &serde_json::Value) -> Outcome {
+        let Some(existed) = value.get("existed").and_then(serde_json::Value::as_bool) else {
+            return failure("backup_corrupted", String::new());
+        };
+        if existed {
+            let Some(hex) = value.get("hex").and_then(serde_json::Value::as_str) else {
+                return failure("backup_corrupted", String::new());
+            };
+            let Some(orig_bytes) = decode_hex(hex) else {
+                return failure("backup_corrupted", String::new());
+            };
+            match self.run_remote(&["tee", path], Some(StdinData::Bytes(orig_bytes))) {
+                Err(reason) => failure(reason, String::new()),
+                Ok(out) if out.exit_code != Some(0) => {
+                    failure("command_failed", safe_excerpt(&out.stderr))
+                }
+                Ok(_) => Outcome {
+                    status: OutcomeStatus::Succeeded,
+                    verified: true,
+                    reason: "ok",
+                    detail: String::new(),
+                },
+            }
+        } else {
+            match self.run_remote(&["rm", "-f", "--", path], None) {
+                Err(reason) => failure(reason, String::new()),
+                Ok(out) if out.exit_code != Some(0) => {
+                    failure("command_failed", safe_excerpt(&out.stderr))
+                }
+                Ok(_) => Outcome {
+                    status: OutcomeStatus::Succeeded,
+                    verified: true,
+                    reason: "ok",
+                    detail: String::new(),
+                },
             }
         }
     }

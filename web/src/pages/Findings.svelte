@@ -43,16 +43,16 @@
       {#if view.findings.length === 0}
         <EmptyState title={t('ui.findings.empty')} message={t('ui.findings.empty_hint')} />
       {:else}
-        <ul class="list" aria-label={t('ui.findings.list_label')}>
+        <ul class="plain stack-sm" aria-label={t('ui.findings.list_label')}>
           {#each view.findings as finding, index (`${finding.rule_id}:${finding.subject.kind}:${finding.subject.key}:${index}`)}
             <li>
-              <details class="finding">
+              <details class="nv-finding">
                 <summary>
                   <StatusBadge kind="severity" value={finding.severity} />
-                  <span class="title">{inlineText(finding.title, 200)}</span>
-                  <span class="chev"><Icon name="chevron" size="sm" /></span>
+                  <span class="nv-finding-title">{inlineText(finding.title, 200)}</span>
+                  <span class="nv-finding-chev"><Icon name="chevron" size="sm" /></span>
                 </summary>
-                <div class="stack body">
+                <div class="stack nv-finding-body">
                   <p class="muted">
                     {t('ui.findings.subject', {
                       kind: inlineText(finding.subject.kind, 40),
@@ -82,57 +82,3 @@
     {/snippet}
   </AsyncView>
 </div>
-
-<style>
-  .list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--nv-space-3);
-  }
-  .finding {
-    background: var(--nv-surface);
-    border: var(--nv-border-width) solid var(--nv-border);
-    border-radius: var(--nv-radius);
-    box-shadow: var(--nv-shadow-1);
-    padding: 0 var(--nv-space-4);
-    transition: box-shadow var(--nv-motion-slow) var(--nv-ease);
-  }
-  .finding[open] {
-    box-shadow: var(--nv-shadow-2);
-    padding-block-end: var(--nv-space-4);
-  }
-  summary {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--nv-space-2) var(--nv-space-3);
-    min-height: 3.5rem;
-    padding-block: var(--nv-space-2);
-    cursor: pointer;
-    list-style: none;
-  }
-  summary::-webkit-details-marker {
-    display: none;
-  }
-  .title {
-    flex: 1 1 14rem;
-    min-width: 0;
-    font-weight: 650;
-    overflow-wrap: anywhere;
-  }
-  .chev {
-    display: inline-flex;
-    margin-inline-start: auto;
-    color: var(--nv-text-muted);
-    transition: transform var(--nv-motion) var(--nv-ease);
-  }
-  .finding[open] .chev {
-    transform: rotate(90deg);
-  }
-  .body {
-    margin-top: var(--nv-space-2);
-  }
-</style>

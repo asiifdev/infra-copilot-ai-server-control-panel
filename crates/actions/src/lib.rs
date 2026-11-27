@@ -19,7 +19,8 @@ pub use logs::{
     read_service_logs_via_runner,
 };
 pub use sites::{
-    MAX_TEST_DOMAIN_LEN, render_test_vhost_config, validate_test_domain, write_managed_test_site,
+    MAX_SITE_DOMAIN_LEN, MAX_TEST_DOMAIN_LEN, PhpVersion, SiteDomain, render_site_vhost_config,
+    render_test_vhost_config, validate_test_domain, write_managed_test_site,
 };
 pub use ssh::{SshExecutor, SshTarget};
 
@@ -88,6 +89,18 @@ pub enum ActionError {
     BadEnvKey,
     /// The environment variable value is too long or contains NUL / newline characters.
     BadEnvValue,
+    /// The site or certificate domain is empty, too long, malformed, or reserved.
+    BadDomain,
+    /// The upstream port is `0`.
+    BadPort,
+    /// The PHP version is not on the strict allowlist (`8.1`, `8.2`, `8.3`, `8.4`).
+    UnknownPhpVersion,
+    /// The ACME provider is not on the strict allowlist (`letsencrypt`, `zerossl`).
+    UnknownAcmeProvider,
+    /// The database engine is not on the strict allowlist (`mysql`, `postgres`).
+    UnknownDbEngine,
+    /// The database name is empty, too long, or outside `[a-zA-Z0-9_]+`.
+    BadDbName,
 }
 
 impl fmt::Display for ActionError {
@@ -100,6 +113,12 @@ impl fmt::Display for ActionError {
             Self::BadPath => "action_bad_path",
             Self::BadEnvKey => "action_bad_env_key",
             Self::BadEnvValue => "action_bad_env_value",
+            Self::BadDomain => "action_bad_domain",
+            Self::BadPort => "action_bad_port",
+            Self::UnknownPhpVersion => "action_unknown_php_version",
+            Self::UnknownAcmeProvider => "action_unknown_acme_provider",
+            Self::UnknownDbEngine => "action_unknown_db_engine",
+            Self::BadDbName => "action_bad_db_name",
         })
     }
 }
@@ -367,6 +386,91 @@ impl fmt::Display for EnvValue {
     }
 }
 
+/// Longest database name accepted.
+pub const MAX_DB_NAME: usize = 64;
+
+/// Supported ACME certificate authorities for [`Action::IssueTlsCert`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AcmeProvider {
+    /// Let's Encrypt via `certbot`.
+    LetsEncrypt,
+    /// ZeroSSL via `acme.sh`.
+    ZeroSsl,
+}
+
+impl AcmeProvider {
+    /// Stored text form.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::LetsEncrypt => "letsencrypt",
+            Self::ZeroSsl => "zerossl",
+        }
+    }
+
+    fn parse(text: &str) -> Option<Self> {
+        match text {
+            "letsencrypt" => Some(Self::LetsEncrypt),
+            "zerossl" => Some(Self::ZeroSsl),
+            _ => None,
+        }
+    }
+}
+
+/// Supported database engines for [`Action::BackupDatabase`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DbEngine {
+    /// MySQL / MariaDB (`mysqldump`).
+    Mysql,
+    /// PostgreSQL (`pg_dump`).
+    Postgres,
+}
+
+impl DbEngine {
+    /// Stored text form.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Mysql => "mysql",
+            Self::Postgres => "postgres",
+        }
+    }
+
+    fn parse(text: &str) -> Option<Self> {
+        match text {
+            "mysql" => Some(Self::Mysql),
+            "postgres" => Some(Self::Postgres),
+            _ => None,
+        }
+    }
+}
+
+/// A validated database name matching `^[a-zA-Z0-9_]+$`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DbName(String);
+
+impl DbName {
+    /// Validates a database name (`1..=64` ASCII alphanumeric or `_` characters).
+    ///
+    /// # Errors
+    /// [`ActionError::BadDbName`].
+    pub fn new(text: &str) -> Result<Self, ActionError> {
+        if text.is_empty()
+            || text.len() > MAX_DB_NAME
+            || !text.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+        {
+            return Err(ActionError::BadDbName);
+        }
+        Ok(Self(text.to_owned()))
+    }
+
+    /// The database name string.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// One thing an approved proposal may do.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
@@ -391,6 +495,35 @@ pub enum Action {
     DeleteManagedFile {
         /// Path to the managed file.
         path: ManagedPath,
+    },
+    /// Configure an nginx site vhost (tier 2 for `.test` without TLS; tier 3 for production or TLS).
+    ConfigureSite {
+        /// Validated `.test` or production domain.
+        domain: SiteDomain,
+        /// Local upstream port (`1..=65535`).
+        upstream_port: u16,
+        /// Optional PHP-FPM version from the strict allowlist.
+        php_version: Option<PhpVersion>,
+        /// Whether TLS is enabled on the vhost.
+        tls_enabled: bool,
+        /// Site document root under an allowlisted managed directory.
+        root_dir: ManagedPath,
+    },
+    /// Issue or renew a production TLS certificate via ACME (tier 3).
+    IssueTlsCert {
+        /// Validated production domain (`.test` / local TLDs refused).
+        domain: SiteDomain,
+        /// ACME provider (`letsencrypt` or `zerossl`).
+        acme_provider: AcmeProvider,
+    },
+    /// Dump a MySQL or PostgreSQL database to a managed backup path without password in argv (tier 2).
+    BackupDatabase {
+        /// Database engine (`mysql` or `postgres`).
+        engine: DbEngine,
+        /// Strict `[a-zA-Z0-9_]+` database name.
+        db_name: DbName,
+        /// Destination dump file path under an allowlisted managed directory.
+        output_path: ManagedPath,
     },
 }
 
@@ -428,6 +561,56 @@ impl Action {
         })
     }
 
+    /// Configures a `.test` or production site vhost.
+    ///
+    /// # Errors
+    /// [`ActionError::BadDomain`], [`ActionError::BadPort`], or [`ActionError::BadPath`].
+    pub fn configure_site(
+        domain: &str,
+        upstream_port: u16,
+        php_version: Option<PhpVersion>,
+        tls_enabled: bool,
+        root_dir: &str,
+    ) -> Result<Self, ActionError> {
+        if upstream_port == 0 {
+            return Err(ActionError::BadPort);
+        }
+        Ok(Self::ConfigureSite {
+            domain: SiteDomain::new(domain).map_err(|_| ActionError::BadDomain)?,
+            upstream_port,
+            php_version,
+            tls_enabled,
+            root_dir: ManagedPath::new(root_dir)?,
+        })
+    }
+
+    /// Issues a TLS certificate for a production domain via `acme_provider`.
+    ///
+    /// # Errors
+    /// [`ActionError::BadDomain`].
+    pub fn issue_tls_cert(domain: &str, acme_provider: AcmeProvider) -> Result<Self, ActionError> {
+        Ok(Self::IssueTlsCert {
+            domain: SiteDomain::new_production(domain).map_err(|_| ActionError::BadDomain)?,
+            acme_provider,
+        })
+    }
+
+    /// Backs up a database to `output_path` without passing credentials in argv.
+    ///
+    /// # Errors
+    /// [`ActionError::BadDbName`] or [`ActionError::BadPath`].
+    pub fn backup_database(
+        engine: DbEngine,
+        db_name: &str,
+        output_path: &str,
+    ) -> Result<Self, ActionError> {
+        Ok(Self::BackupDatabase {
+            engine,
+            db_name: DbName::new(db_name)?,
+            output_path: ManagedPath::new(output_path)?,
+        })
+    }
+
     /// The tool name stored in `proposals.tool`.
     #[must_use]
     pub const fn tool(&self) -> &'static str {
@@ -435,6 +618,9 @@ impl Action {
             Self::RestartService { .. } => "propose_restart_service",
             Self::UpdateEnvVar { .. } => "propose_update_env_var",
             Self::DeleteManagedFile { .. } => "propose_delete_managed_file",
+            Self::ConfigureSite { .. } => "propose_configure_site",
+            Self::IssueTlsCert { .. } => "propose_issue_tls_cert",
+            Self::BackupDatabase { .. } => "propose_backup_database",
         }
     }
 
@@ -443,8 +629,19 @@ impl Action {
     pub fn tier(&self) -> Tier {
         match self {
             Self::RestartService { name, .. } if name.is_critical() => Tier::RiskyChange,
-            Self::RestartService { .. } => Tier::LightChange,
-            Self::UpdateEnvVar { .. } => Tier::RiskyChange,
+            Self::RestartService { .. } | Self::BackupDatabase { .. } => Tier::LightChange,
+            Self::ConfigureSite {
+                domain,
+                tls_enabled,
+                ..
+            } => {
+                if domain.is_test_domain() && !*tls_enabled {
+                    Tier::LightChange
+                } else {
+                    Tier::RiskyChange
+                }
+            }
+            Self::UpdateEnvVar { .. } | Self::IssueTlsCert { .. } => Tier::RiskyChange,
             Self::DeleteManagedFile { .. } => Tier::Destructive,
         }
     }
@@ -456,6 +653,10 @@ impl Action {
         match self {
             Self::RestartService { name, .. } => name.as_str(),
             Self::UpdateEnvVar { path, .. } | Self::DeleteManagedFile { path } => path.as_str(),
+            Self::ConfigureSite { domain, .. } | Self::IssueTlsCert { domain, .. } => {
+                domain.as_str()
+            }
+            Self::BackupDatabase { db_name, .. } => db_name.as_str(),
         }
     }
 
@@ -496,6 +697,41 @@ impl Action {
             Self::DeleteManagedFile { path } => serde_json::json!({
                 "action": "delete_managed_file",
                 "path": path.as_str(),
+            })
+            .to_string(),
+            Self::ConfigureSite {
+                domain,
+                upstream_port,
+                php_version,
+                tls_enabled,
+                root_dir,
+            } => serde_json::json!({
+                "action": "configure_site",
+                "domain": domain.as_str(),
+                "php_version": php_version.map(PhpVersion::as_str),
+                "root_dir": root_dir.as_str(),
+                "tls_enabled": tls_enabled,
+                "upstream_port": upstream_port,
+            })
+            .to_string(),
+            Self::IssueTlsCert {
+                domain,
+                acme_provider,
+            } => serde_json::json!({
+                "acme_provider": acme_provider.as_str(),
+                "action": "issue_tls_cert",
+                "domain": domain.as_str(),
+            })
+            .to_string(),
+            Self::BackupDatabase {
+                engine,
+                db_name,
+                output_path,
+            } => serde_json::json!({
+                "action": "backup_database",
+                "db_name": db_name.as_str(),
+                "engine": engine.as_str(),
+                "output_path": output_path.as_str(),
             })
             .to_string(),
         }
@@ -542,6 +778,50 @@ impl Action {
                     return Err(ActionError::BadShape);
                 }
                 Self::delete_managed_file(text("path")?)
+            }
+            "configure_site" => {
+                if object.len() != 6 {
+                    return Err(ActionError::BadShape);
+                }
+                let port_u64 = object
+                    .get("upstream_port")
+                    .and_then(serde_json::Value::as_u64)
+                    .ok_or(ActionError::BadShape)?;
+                let upstream_port = u16::try_from(port_u64).map_err(|_| ActionError::BadPort)?;
+                let tls_enabled = object
+                    .get("tls_enabled")
+                    .and_then(serde_json::Value::as_bool)
+                    .ok_or(ActionError::BadShape)?;
+                let php_version = match object.get("php_version").ok_or(ActionError::BadShape)? {
+                    serde_json::Value::Null => None,
+                    serde_json::Value::String(s) => {
+                        Some(PhpVersion::parse(s).ok_or(ActionError::UnknownPhpVersion)?)
+                    }
+                    _ => return Err(ActionError::BadShape),
+                };
+                Self::configure_site(
+                    text("domain")?,
+                    upstream_port,
+                    php_version,
+                    tls_enabled,
+                    text("root_dir")?,
+                )
+            }
+            "issue_tls_cert" => {
+                if object.len() != 3 {
+                    return Err(ActionError::BadShape);
+                }
+                let provider = AcmeProvider::parse(text("acme_provider")?)
+                    .ok_or(ActionError::UnknownAcmeProvider)?;
+                Self::issue_tls_cert(text("domain")?, provider)
+            }
+            "backup_database" => {
+                if object.len() != 4 {
+                    return Err(ActionError::BadShape);
+                }
+                let engine =
+                    DbEngine::parse(text("engine")?).ok_or(ActionError::UnknownDbEngine)?;
+                Self::backup_database(engine, text("db_name")?, text("output_path")?)
             }
             _ => Err(ActionError::UnknownAction),
         }

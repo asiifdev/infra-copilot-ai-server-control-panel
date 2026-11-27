@@ -1,18 +1,8 @@
-<script lang="ts">
-  import { t } from '../lib/i18n.svelte';
-  import { inlineText } from '../lib/text';
-  import Icon, { type IconName } from './Icon.svelte';
+<script lang="ts" module>
+  import type { IconName } from './Icon.svelte';
 
   type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
   type Kind = 'node' | 'severity' | 'tier' | 'state' | 'site';
-
-  interface Props {
-    kind: Kind;
-    /** Raw value from the API (untrusted); unknown values are shown as plain text. */
-    value: string | number;
-  }
-
-  let { kind, value }: Props = $props();
 
   // Literal keys on purpose: the key-coverage test finds them.
   const NODE: Record<string, [string, Tone]> = {
@@ -75,49 +65,27 @@
     info: 'info',
     neutral: 'circle',
   };
+</script>
+
+<script lang="ts">
+  import { t } from '../lib/i18n.svelte';
+  import { inlineText } from '../lib/text';
+  import Icon from './Icon.svelte';
+
+  interface Props {
+    kind: Kind;
+    /** Raw value from the API (untrusted); unknown values are shown as plain text. */
+    value: string | number;
+  }
+
+  let { kind, value }: Props = $props();
 
   const entry = $derived(TABLES[kind][String(value).toLowerCase()]);
   const tone = $derived<Tone>(entry ? entry[1] : 'neutral');
   const label = $derived(entry ? t(entry[0]) : inlineText(value, 40));
 </script>
 
-<span class={['badge', tone]}>
+<span class={['nv-badge', `nv-t-${tone}`]}>
   <Icon name={ICONS[tone]} size="sm" />
   <span>{label}</span>
 </span>
-
-<style>
-  .badge {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--nv-space-1);
-    padding: 0.125rem var(--nv-space-2) 0.125rem 0.375rem;
-    border: var(--nv-border-width) solid color-mix(in srgb, currentColor 45%, transparent);
-    border-radius: var(--nv-radius-pill);
-    font-size: var(--nv-text-caption);
-    font-weight: 650;
-    line-height: 1.3;
-    background: var(--nv-surface);
-    white-space: nowrap;
-  }
-  .success {
-    color: var(--nv-success);
-    background: var(--nv-tint-success);
-  }
-  .warning {
-    color: var(--nv-warning);
-    background: var(--nv-tint-warning);
-  }
-  .danger {
-    color: var(--nv-danger);
-    background: var(--nv-tint-danger);
-  }
-  .info {
-    color: var(--nv-info);
-    background: var(--nv-tint-info);
-  }
-  .neutral {
-    color: var(--nv-text-muted);
-    background: var(--nv-surface-2);
-  }
-</style>

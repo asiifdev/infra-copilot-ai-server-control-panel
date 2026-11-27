@@ -1,9 +1,10 @@
 <script lang="ts">
+  import type { Component } from 'svelte';
   import { approvals } from './lib/approvals.svelte';
   import { t } from './lib/i18n.svelte';
   import { currentItem, NAV_GROUPS } from './lib/nav';
   import { palette } from './lib/palette.svelte';
-  import { hrefFor, router } from './lib/router.svelte';
+  import { hrefFor, router, type RouteName } from './lib/router.svelte';
   import { session } from './lib/session.svelte';
   import CommandPalette from './components/CommandPalette.svelte';
   import Icon from './components/Icon.svelte';
@@ -20,6 +21,22 @@
   import Proposals from './pages/Proposals.svelte';
   import Settings from './pages/Settings.svelte';
   import Transports from './pages/Transports.svelte';
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const PAGES: Record<RouteName, Component<any>> = {
+    overview: Overview,
+    nodes: Nodes,
+    node: NodeDetail,
+    findings: Findings,
+    monitors: Monitors,
+    assistant: Assistant,
+    proposals: Proposals,
+    plans: Plans,
+    plan: PlanDetail,
+    transports: Transports,
+    memory: Memory,
+    settings: Settings,
+  };
 
   const current = $derived(currentItem(router.route.name));
 
@@ -63,11 +80,11 @@
 
 <svelte:window onhashchange={focusHeading} {onkeydown} />
 
-<a class="skip" href="#main-content" onclick={(event) => { event.preventDefault(); document.getElementById('main-content')?.focus(); }}>
+<a class="nv-skip" href="#main-content" onclick={(event) => { event.preventDefault(); document.getElementById('main-content')?.focus(); }}>
   {t('ui.app.skip')}
 </a>
 
-<div class="app">
+<div class="nv-shell">
   <div class="side">
     <header class="top">
       <a class="brand" href={hrefFor({ name: 'overview' })}>
@@ -119,33 +136,13 @@
 
   <main id="main-content" tabindex="-1">
     <div class="content">
-      {#key router.route.name}
+      {#key router.route.name === 'node' ? router.route.node : router.route.name}
+        {@const Page = PAGES[router.route.name]}
         <div class="page">
-          {#if router.route.name === 'overview'}
-            <Overview />
-          {:else if router.route.name === 'nodes'}
-            <Nodes />
-          {:else if router.route.name === 'node'}
-            {#key router.route.node}<NodeDetail name={router.route.node} />{/key}
-          {:else if router.route.name === 'findings'}
-            <Findings />
-          {:else if router.route.name === 'monitors'}
-            <Monitors />
-          {:else if router.route.name === 'assistant'}
-            <Assistant conversation={router.route.conversation} />
-          {:else if router.route.name === 'proposals'}
-            <Proposals />
-          {:else if router.route.name === 'plans'}
-            <Plans />
-          {:else if router.route.name === 'plan'}
-            <PlanDetail name={router.route.plan} />
-          {:else if router.route.name === 'transports'}
-            <Transports />
-          {:else if router.route.name === 'memory'}
-            <Memory />
-          {:else}
-            <Settings />
-          {/if}
+          <Page
+            name={router.route.name === 'node' ? router.route.node : router.route.name === 'plan' ? router.route.plan : undefined}
+            conversation={router.route.name === 'assistant' ? router.route.conversation : undefined}
+          />
         </div>
       {/key}
     </div>
@@ -154,255 +151,3 @@
 
 {#if palette.open}<CommandPalette />{/if}
 <Toast />
-
-<style>
-  .skip {
-    position: absolute;
-    inset-inline-start: var(--nv-space-2);
-    inset-block-start: calc(-1 * var(--nv-target) * 2);
-    padding: var(--nv-space-2) var(--nv-space-4);
-    background: var(--nv-surface);
-    border: var(--nv-border-width) solid var(--nv-border-strong);
-    border-radius: var(--nv-radius);
-    box-shadow: var(--nv-shadow-2);
-    z-index: 70;
-  }
-  .skip:focus {
-    inset-block-start: var(--nv-space-2);
-  }
-
-  .app {
-    display: block;
-    min-height: 100vh;
-  }
-
-  /* Phone: a sticky top bar (brand, search, menu); the navigation drops down under it. */
-  .side {
-    position: sticky;
-    inset-block-start: 0;
-    z-index: 30;
-    background: var(--nv-surface);
-    border-block-end: var(--nv-border-width) solid var(--nv-border);
-  }
-  .top {
-    display: flex;
-    align-items: center;
-    gap: var(--nv-space-2);
-    min-height: var(--nv-topbar);
-    padding: 0 var(--nv-space-3) 0 var(--nv-space-4);
-  }
-  .brand {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--nv-space-2);
-    margin-inline-end: auto;
-    min-height: var(--nv-target);
-    color: var(--nv-text);
-    text-decoration: none;
-  }
-  .mark {
-    width: 1.875rem;
-    height: 1.875rem;
-  }
-  .tile {
-    fill: var(--nv-on-accent);
-  }
-  .glyph {
-    fill: none;
-    stroke: var(--nv-accent);
-    stroke-width: 3;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-  .name {
-    font-weight: 800;
-    font-size: var(--nv-text-title);
-    letter-spacing: -0.02em;
-  }
-  .find,
-  .menu {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--nv-space-2);
-    min-height: var(--nv-target);
-    min-width: var(--nv-target);
-    border: var(--nv-border-width) solid transparent;
-    border-radius: var(--nv-radius-sm);
-    background: none;
-    color: var(--nv-text);
-    font: inherit;
-    cursor: pointer;
-    transition: background var(--nv-motion) var(--nv-ease);
-  }
-  .find:hover,
-  .menu:hover {
-    background: var(--nv-hover);
-  }
-  .find-label,
-  .find-key {
-    display: none;
-  }
-  .nav {
-    display: none;
-    position: absolute;
-    inset-inline: 0;
-    inset-block-start: 100%;
-    max-height: calc(100dvh - var(--nv-topbar));
-    overflow-y: auto;
-    padding: var(--nv-space-2) var(--nv-space-3) var(--nv-space-4);
-    background: var(--nv-surface);
-    border-block-end: var(--nv-border-width) solid var(--nv-border);
-    box-shadow: var(--nv-shadow-2);
-  }
-  .nav.open {
-    display: block;
-    animation: drop var(--nv-motion-slow) var(--nv-ease);
-  }
-  .group {
-    padding-block: var(--nv-space-2);
-  }
-  .group-label {
-    padding: var(--nv-space-1) var(--nv-space-3);
-  }
-  .nav li a {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: var(--nv-space-3);
-    min-height: var(--nv-target);
-    padding: var(--nv-space-2) var(--nv-space-3);
-    border-radius: var(--nv-radius-sm);
-    color: var(--nv-text);
-    text-decoration: none;
-    font-weight: 500;
-    transition: background var(--nv-motion) var(--nv-ease);
-  }
-  .nav li a:hover {
-    background: var(--nv-hover);
-  }
-  .nav li a[aria-current='page'] {
-    background: var(--nv-tint-primary);
-    font-weight: 700;
-  }
-  .nav li a[aria-current='page']::before {
-    content: '';
-    position: absolute;
-    inset-block: var(--nv-space-2);
-    inset-inline-start: 0;
-    width: 3px;
-    border-radius: var(--nv-radius-pill);
-    background: var(--nv-primary);
-  }
-  .text {
-    flex: 1;
-    min-width: 0;
-  }
-  .count {
-    min-width: 1.5rem;
-    padding: 0 var(--nv-space-2);
-    border-radius: var(--nv-radius-pill);
-    background: var(--nv-primary);
-    color: var(--nv-on-primary);
-    font-size: var(--nv-text-caption);
-    font-weight: 700;
-    text-align: center;
-  }
-  .org {
-    margin-block-start: var(--nv-space-3);
-    padding: var(--nv-space-3) var(--nv-space-3) 0;
-    border-block-start: var(--nv-border-width) solid var(--nv-border);
-    font-size: var(--nv-text-sm);
-    overflow-wrap: anywhere;
-  }
-
-  main {
-    min-width: 0;
-  }
-  .content {
-    max-width: var(--nv-content-max);
-    margin: 0 auto;
-    padding: var(--nv-space-4) var(--nv-space-4) var(--nv-space-6);
-  }
-  .page {
-    animation: nv-enter var(--nv-motion-slow) var(--nv-ease);
-  }
-
-  @keyframes drop {
-    from {
-      opacity: 0;
-      transform: translateY(-0.5rem);
-    }
-  }
-
-  /* Wide screens: the sidebar is a full-height column of its own. */
-  @media (min-width: 52rem) {
-    .app {
-      display: grid;
-      grid-template-columns: var(--nv-sidebar) minmax(0, 1fr);
-      align-items: start;
-    }
-    .side {
-      display: flex;
-      flex-direction: column;
-      height: 100dvh;
-      border-block-end: 0;
-      border-inline-end: var(--nv-border-width) solid var(--nv-border);
-    }
-    .top {
-      flex-wrap: wrap;
-      align-content: center;
-      gap: var(--nv-space-2);
-      min-height: auto;
-      padding: var(--nv-space-4) var(--nv-space-3) var(--nv-space-2);
-    }
-    .brand {
-      flex: 1 0 100%;
-      margin: 0 0 var(--nv-space-2) var(--nv-space-2);
-    }
-    .find {
-      flex: 1 0 100%;
-      justify-content: flex-start;
-      border-color: var(--nv-border-strong);
-      color: var(--nv-text-muted);
-      padding: 0 var(--nv-space-3);
-      background: var(--nv-bg);
-    }
-    .find-label {
-      display: inline;
-      flex: 1;
-      text-align: start;
-    }
-    .find-key {
-      display: inline;
-      padding: 0 var(--nv-space-2);
-      border: var(--nv-border-width) solid var(--nv-border-strong);
-      border-radius: var(--nv-radius-xs);
-      background: var(--nv-surface);
-      color: var(--nv-text);
-      font: inherit;
-      font-size: var(--nv-text-caption);
-    }
-    .menu {
-      display: none;
-    }
-    .nav,
-    .nav.open {
-      display: flex;
-      flex-direction: column;
-      position: static;
-      animation: none;
-      flex: 1;
-      max-height: none;
-      padding: var(--nv-space-2) var(--nv-space-3) var(--nv-space-3);
-      border: 0;
-      box-shadow: none;
-    }
-    .org {
-      margin-block-start: auto;
-    }
-    .content {
-      padding: var(--nv-space-6) var(--nv-space-6) var(--nv-space-7);
-    }
-  }
-</style>

@@ -151,7 +151,7 @@ describe('Assistant page', () => {
     }
     expect((window as unknown as { __pwned?: unknown }).__pwned).toBeUndefined();
     expect(root.textContent).toContain('<script>window.__pwned = true</script>');
-    const blocks = [...root.querySelectorAll('.block')].map((b) => b.textContent ?? '');
+    const blocks = [...root.querySelectorAll('.nv-text-block')].map((b) => b.textContent ?? '');
     expect(blocks.some((text) => text.includes('line one\nline two'))).toBe(true);
     // Bidi override and zero-width characters are removed, the visible text stays.
     expect(root.textContent).not.toMatch(/[\u202A-\u202E\u2066-\u2069\u200B]/);

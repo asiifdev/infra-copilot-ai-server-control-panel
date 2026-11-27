@@ -54,7 +54,7 @@ class I18n {
   locale = $state<Locale>('en');
   messages = $state.raw<Record<string, string>>({});
   loaded = $state(false);
-  #controller: AbortController | null = null;
+  #c: AbortController | null = null;
 
   has(key: string): boolean {
     return key in this.messages;
@@ -67,9 +67,9 @@ class I18n {
 
   /** Loads the catalog of a locale. When it fails the page keeps working with the keys. */
   async load(locale: Locale, persist = false): Promise<void> {
-    this.#controller?.abort();
+    this.#c?.abort();
     const controller = new AbortController();
-    this.#controller = controller;
+    this.#c = controller;
     setApiLocale(locale);
     try {
       const map = await api.i18n(locale, controller.signal);
@@ -77,15 +77,13 @@ class I18n {
       this.messages = Object.fromEntries(
         Object.entries(map).filter(([, value]) => typeof value === 'string'),
       );
-      this.locale = locale;
       this.loaded = true;
       if (persist) writeStored('nv.locale', locale);
-      if (typeof document !== 'undefined') document.documentElement.lang = locale;
     } catch {
       if (controller.signal.aborted) return;
-      this.locale = locale;
-      if (typeof document !== 'undefined') document.documentElement.lang = locale;
     }
+    this.locale = locale;
+    if (typeof document !== 'undefined') document.documentElement.lang = locale;
   }
 }
 

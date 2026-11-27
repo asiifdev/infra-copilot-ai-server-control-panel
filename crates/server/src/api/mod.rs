@@ -12,7 +12,7 @@ mod memories;
 pub(crate) mod monitors;
 mod providers;
 
-pub(crate) use access::{exchange, healthz, i18n_catalog, logout, session};
+pub(crate) use access::{entitlements, exchange, healthz, i18n_catalog, logout, session};
 pub(crate) use agents::{
     agent_poll, agent_result, node_agent_token_rotate, node_logs, sites_create, sites_list,
 };

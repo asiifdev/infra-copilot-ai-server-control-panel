@@ -93,6 +93,10 @@ pub struct LocalSiteRow {
     pub config_path: String,
     /// Site status (`proposed` | `active`).
     pub status: LocalSiteStatus,
+    /// Optional PHP-FPM version (`8.1`..`8.4`).
+    pub php_version: Option<String>,
+    /// Whether local TLS is enabled for this site.
+    pub tls_enabled: bool,
     /// Creation timestamp.
     pub created_at: String,
 }
@@ -439,6 +443,7 @@ pub fn get_agent_job_for_execution(
 ///
 /// # Errors
 /// Constraint violation on duplicate domain or database failure.
+#[allow(clippy::too_many_arguments)]
 pub fn create_local_site(
     conn: &Connection,
     org: &OrgId,
@@ -447,13 +452,15 @@ pub fn create_local_site(
     upstream_port: u16,
     config_path: &str,
     status: LocalSiteStatus,
+    php_version: Option<&str>,
+    tls_enabled: bool,
 ) -> Result<LocalSiteRow> {
     let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
     let id = new_uuid(&tx)?;
     let now = now_utc(&tx)?;
     tx.execute(
-        "INSERT INTO local_sites (id, org_id, domain, upstream_port, config_path, status, created_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        "INSERT INTO local_sites (id, org_id, domain, upstream_port, config_path, status, php_version, tls_enabled, created_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
             id,
             org.as_str(),
@@ -461,11 +468,13 @@ pub fn create_local_site(
             i64::from(upstream_port),
             config_path,
             status.as_str(),
+            php_version,
+            i64::from(tls_enabled),
             now
         ],
     )?;
     let subject = format!(
-        r#"{{"site_id":"{id}","domain":"{domain}","upstream_port":{upstream_port},"status":"{}"}}"#,
+        r#"{{"site_id":"{id}","domain":"{domain}","upstream_port":{upstream_port},"status":"{}","tls_enabled":{tls_enabled}}}"#,
         status.as_str()
     );
     append_audit_in_tx(
@@ -488,6 +497,8 @@ pub fn create_local_site(
         upstream_port,
         config_path: config_path.to_owned(),
         status,
+        php_version: php_version.map(str::to_owned),
+        tls_enabled,
         created_at: now,
     })
 }
@@ -498,7 +509,7 @@ pub fn create_local_site(
 /// Database failure.
 pub fn list_local_sites(conn: &Connection, org: &OrgId) -> Result<Vec<LocalSiteRow>> {
     let mut stmt = conn.prepare(
-        "SELECT id, org_id, domain, upstream_port, config_path, status, created_at \
+        "SELECT id, org_id, domain, upstream_port, config_path, status, php_version, tls_enabled, created_at \
          FROM local_sites WHERE org_id = ?1 ORDER BY domain ASC",
     )?;
     let rows = stmt
@@ -515,7 +526,9 @@ pub fn list_local_sites(conn: &Connection, org: &OrgId) -> Result<Vec<LocalSiteR
                 upstream_port,
                 config_path: row.get(4)?,
                 status,
-                created_at: row.get(6)?,
+                php_version: row.get(6)?,
+                tls_enabled: row.get::<_, i64>(7)? != 0,
+                created_at: row.get(8)?,
             })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -628,7 +641,7 @@ mod tests {
         let org_b = create_org(&conn, "Org B", "org-b", "free")?.id;
         let user_a = create_user(&conn, "a@example.test", "A", None)?.id;
         crate::add_member(&conn, &org_a, &user_a, crate::Role::Admin)?;
-        create_local_site(
+        let created = create_local_site(
             &conn,
             &org_a,
             &user_a,
@@ -636,8 +649,15 @@ mod tests {
             3000,
             "/tmp/billing.test.conf",
             LocalSiteStatus::Active,
+            Some("8.3"),
+            true,
         )?;
-        assert_eq!(list_local_sites(&conn, &org_a)?.len(), 1);
+        assert_eq!(created.php_version.as_deref(), Some("8.3"));
+        assert!(created.tls_enabled);
+        let listed = list_local_sites(&conn, &org_a)?;
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].php_version.as_deref(), Some("8.3"));
+        assert!(listed[0].tls_enabled);
         assert_eq!(list_local_sites(&conn, &org_b)?.len(), 0);
         Ok(())
     }

@@ -100,6 +100,7 @@ fn router(app: &Arc<App>) -> Router {
         .route("/api/auth/exchange", post(api::exchange))
         .route("/api/auth/logout", post(api::logout))
         .route("/api/session", get(api::session))
+        .route("/api/entitlements", get(api::entitlements))
         .route("/api/i18n/{locale}", get(api::i18n_catalog))
         .route("/api/nodes", get(api::nodes))
         .route("/api/nodes/{name}/inventory", get(api::inventory))

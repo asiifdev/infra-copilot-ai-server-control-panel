@@ -225,6 +225,17 @@ impl Client {
         self.run(Method::GET, url, &[], &[], policy).await
     }
 
+    /// `GET` with extra headers (for example `Authorization`). Redirects are not followed, so
+    /// credentials are only ever sent to the URL given.
+    pub async fn get_with(
+        &self,
+        url: &str,
+        headers: Headers<'_>,
+        policy: &Policy,
+    ) -> Result<Response, NetError> {
+        self.run_once(Method::GET, url, &[], headers, policy).await
+    }
+
     /// `POST` with `Content-Type: application/json` (for the Telegram Bot API). Redirects are not
     /// followed: a 3xx comes back as the response.
     pub async fn post_json(
@@ -246,6 +257,27 @@ impl Client {
         policy: &Policy,
     ) -> Result<Response, NetError> {
         self.run(Method::POST, url, body, headers, policy).await
+    }
+
+    /// `PUT` with `Content-Type: application/json` and extra headers. Redirects are not followed.
+    pub async fn put_json_with(
+        &self,
+        url: &str,
+        body: &[u8],
+        headers: Headers<'_>,
+        policy: &Policy,
+    ) -> Result<Response, NetError> {
+        self.run(Method::PUT, url, body, headers, policy).await
+    }
+
+    /// `DELETE` with extra headers. Redirects are not followed.
+    pub async fn delete_with(
+        &self,
+        url: &str,
+        headers: Headers<'_>,
+        policy: &Policy,
+    ) -> Result<Response, NetError> {
+        self.run(Method::DELETE, url, &[], headers, policy).await
     }
 
     /// `POST` that returns as soon as the response head arrives, leaving the body to be read with
@@ -318,6 +350,34 @@ impl Client {
                 .map_err(|e| tls::map_handshake_error(&e))?;
             let leaf = leaf_der(stream.get_ref().1.peer_certificates())?;
             tls::cert_info(leaf, verifier.chain_trusted())
+        };
+        within(policy, work).await
+    }
+
+    async fn run_once(
+        &self,
+        method: Method,
+        url: &str,
+        body: &[u8],
+        headers: Headers<'_>,
+        policy: &Policy,
+    ) -> Result<Response, NetError> {
+        let started = Instant::now();
+        let work = async {
+            let target = Target::parse(url)?;
+            if !target.https && !policy.allow_http {
+                return Err(NetError::SchemeNotAllowed);
+            }
+            let opened = self.open(&method, &target, body, headers, policy).await?;
+            let (kept, truncated) = read_capped(opened.body, policy.max_body_bytes).await?;
+            Ok(Response {
+                status: opened.status,
+                body: kept,
+                body_truncated: truncated,
+                elapsed: started.elapsed(),
+                tls: opened.tls,
+                final_url: opened.url,
+            })
         };
         within(policy, work).await
     }
@@ -492,7 +552,7 @@ where
     if !custom_accept {
         request = request.header(ACCEPT, "*/*");
     }
-    if method == Method::POST {
+    if *method == Method::POST || *method == Method::PUT {
         request = request.header(CONTENT_TYPE, "application/json");
     }
     let request = request

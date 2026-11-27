@@ -2,7 +2,7 @@
   import { api } from '../lib/api';
   import { formatNumber } from '../lib/format';
   import { i18n, t } from '../lib/i18n.svelte';
-  import { hrefFor } from '../lib/router.svelte';
+  import { hrefFor, type Route } from '../lib/router.svelte';
   import { useResource } from '../lib/resource.svelte';
   import { session } from '../lib/session.svelte';
   import type { IconName } from '../components/Icon.svelte';
@@ -44,33 +44,35 @@
   const attention = $derived.by<Attention[] | null>(() => {
     if (!nodes.data || !findings.data || !providers.data || !proposals.data || !approved.data) return null;
     const out: Attention[] = [];
+    const add = (id: string, icon: IconName, text: string, route: Route, linkKey: string) =>
+      out.push({ id, icon, text, href: hrefFor(route), link: t(linkKey) });
     if (proposals.data.length > 0) {
-      out.push({ id: 'pending', icon: 'proposals', text: t('ui.overview.attention_pending', { count: proposals.data.length }), href: hrefFor({ name: 'proposals' }), link: t('ui.overview.act_review') });
+      add('pending', 'proposals', t('ui.overview.attention_pending', { count: proposals.data.length }), { name: 'proposals' }, 'ui.overview.act_review');
     }
     // Approved and not yet run: only an approved proposal with an action can still be run.
     const waiting = approved.data.filter((p) => p.action !== null).length;
     if (waiting > 0) {
-      out.push({ id: 'run', icon: 'proposals', text: t('ui.overview.attention_run', { count: waiting }), href: hrefFor({ name: 'proposals' }), link: t('ui.overview.act_review') });
+      add('run', 'proposals', t('ui.overview.attention_run', { count: waiting }), { name: 'proposals' }, 'ui.overview.act_review');
     }
     const critical = findings.data.findings.filter((f) => f.severity === 'critical').length;
     if (critical > 0) {
-      out.push({ id: 'critical', icon: 'findings', text: t('ui.overview.attention_critical', { count: critical }), href: hrefFor({ name: 'findings' }), link: t('ui.overview.see_findings') });
+      add('critical', 'findings', t('ui.overview.attention_critical', { count: critical }), { name: 'findings' }, 'ui.overview.see_findings');
     }
     const offline = nodes.data.filter((n) => n.status === 'offline').length;
     if (offline > 0) {
-      out.push({ id: 'offline', icon: 'nodes', text: t('ui.overview.attention_offline', { count: offline }), href: hrefFor({ name: 'nodes' }), link: t('ui.overview.see_nodes') });
+      add('offline', 'nodes', t('ui.overview.attention_offline', { count: offline }), { name: 'nodes' }, 'ui.overview.see_nodes');
     }
     if (providers.data.length === 0) {
-      out.push({ id: 'provider', icon: 'assistant', text: t('ui.overview.provider_none'), href: hrefFor({ name: 'settings' }), link: t('ui.overview.act_provider') });
+      add('provider', 'assistant', t('ui.overview.provider_none'), { name: 'settings' }, 'ui.overview.act_provider');
     }
     if (!session.info?.master_key_configured) {
-      out.push({ id: 'key', icon: 'shield', text: t('ui.overview.key_missing'), href: hrefFor({ name: 'settings' }), link: t('ui.overview.open_settings') });
+      add('key', 'shield', t('ui.overview.key_missing'), { name: 'settings' }, 'ui.overview.open_settings');
     }
     return out;
   });
 </script>
 
-<div class="stack">
+<div class="stack nv-overview">
   <PageHeader title={t('ui.nav.overview')} description={t('ui.overview.intro')} eyebrow={t('ui.nav.group_monitor')} />
 
   <div class="tiles">
@@ -173,68 +175,3 @@
     </Card>
   </div>
 </div>
-
-<style>
-  .tiles {
-    display: grid;
-    gap: var(--nv-space-4);
-    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-  }
-  .lower {
-    display: grid;
-    gap: var(--nv-space-4);
-    grid-template-columns: minmax(0, 1fr);
-  }
-  @media (min-width: 64rem) {
-    .lower {
-      grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-      align-items: start;
-    }
-  }
-  .pair {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--nv-space-1);
-  }
-  .items {
-    display: flex;
-    flex-direction: column;
-    gap: var(--nv-space-2);
-  }
-  .item {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--nv-space-2) var(--nv-space-3);
-    padding: var(--nv-space-3);
-    border: var(--nv-border-width) solid var(--nv-border);
-    border-radius: var(--nv-radius-sm);
-    background: var(--nv-surface-2);
-  }
-  .ico {
-    display: inline-flex;
-    color: var(--nv-warning);
-  }
-  .item a {
-    display: inline-flex;
-    align-items: center;
-    min-height: var(--nv-target);
-  }
-  .text {
-    flex: 1 1 12rem;
-    min-width: 0;
-    font-weight: 600;
-  }
-  .calm {
-    display: flex;
-    align-items: center;
-    gap: var(--nv-space-2);
-    color: var(--nv-success);
-    font-weight: 600;
-  }
-  .actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--nv-space-3);
-  }
-</style>

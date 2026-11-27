@@ -46,18 +46,17 @@
     { id: 'language', group: 'actions', label: t('ui.palette.switch_language'), icon: 'globe', run: nextLocale },
   ]);
 
-  const results = $derived(
-    entries
+  const view = $derived.by(() => {
+    const results = entries
       .map((entry) => ({ entry, score: fuzzyScore(query, entry.label) }))
       .filter((r) => r.score >= 0)
       .sort((a, b) => a.score - b.score)
-      .map((r) => r.entry),
-  );
-  const pages = $derived(results.filter((e) => e.group === 'pages'));
-  const actions = $derived(results.filter((e) => e.group === 'actions'));
-  // The order on screen: pages, then actions (the headings follow it).
-  const shown = $derived([...pages, ...actions]);
-  const activeEntry = $derived(shown[Math.min(active, shown.length - 1)]);
+      .map((r) => r.entry);
+    const pages = results.filter((e) => e.group === 'pages');
+    const actions = results.filter((e) => e.group === 'actions');
+    const shown = [...pages, ...actions];
+    return { pages, actions, shown, activeEntry: shown[Math.min(active, shown.length - 1)] };
+  });
 
   // Moves focus to the field and gives it back to what opened the palette when it closes.
   const manageFocus: Attachment<HTMLElement> = (dialog) => {
@@ -76,8 +75,8 @@
   }
 
   function move(delta: number) {
-    if (shown.length === 0) return;
-    active = (Math.min(active, shown.length - 1) + delta + shown.length) % shown.length;
+    if (view.shown.length === 0) return;
+    active = (Math.min(active, view.shown.length - 1) + delta + view.shown.length) % view.shown.length;
     queueMicrotask(() => list?.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest' }));
   }
 
@@ -98,7 +97,7 @@
       case 'Enter':
         if (event.target instanceof HTMLInputElement) {
           event.preventDefault();
-          run(activeEntry);
+          run(view.activeEntry);
         }
         return;
       default:
@@ -112,14 +111,14 @@
 </script>
 
 {#snippet option(entry: Entry)}
-  {@const index = shown.indexOf(entry)}
+  {@const index = view.shown.indexOf(entry)}
   <!-- Options are driven from the field (arrow keys, Enter), as in the combobox pattern; the click is for the mouse. -->
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_interactive_supports_focus -->
   <div
     id="palette-option-{index}"
-    class={['option', index === Math.min(active, shown.length - 1) && 'active']}
+    class={['option', index === Math.min(active, view.shown.length - 1) && 'active']}
     role="option"
-    aria-selected={index === Math.min(active, shown.length - 1)}
+    aria-selected={index === Math.min(active, view.shown.length - 1)}
     onclick={() => run(entry)}
     onpointermove={() => (active = index)}
   >
@@ -129,7 +128,7 @@
   </div>
 {/snippet}
 
-<div class="scrim" role="presentation" {onpointerdown}>
+<div class="nv-palette" role="presentation" {onpointerdown}>
   <div {@attach manageFocus} class="panel" role="dialog" aria-modal="true" aria-labelledby="palette-title" tabindex="-1" {onkeydown}>
     <h2 id="palette-title" class="visually-hidden">{t('ui.palette.title')}</h2>
     <div class="field">
@@ -141,7 +140,7 @@
         aria-expanded="true"
         aria-controls="palette-list"
         aria-autocomplete="list"
-        aria-activedescendant={activeEntry ? `palette-option-${shown.indexOf(activeEntry)}` : undefined}
+        aria-activedescendant={view.activeEntry ? `palette-option-${view.shown.indexOf(view.activeEntry)}` : undefined}
         aria-label={t('ui.palette.label')}
         placeholder={t('ui.palette.placeholder')}
         autocomplete="off"
@@ -154,131 +153,21 @@
       </button>
     </div>
     <div id="palette-list" class="list" role="listbox" aria-label={t('ui.palette.label')} bind:this={list}>
-      {#if pages.length > 0}
+      {#if view.pages.length > 0}
         <div role="group" aria-labelledby="palette-pages">
           <div id="palette-pages" class="heading eyebrow">{t('ui.palette.pages')}</div>
-          {#each pages as entry (entry.id)}{@render option(entry)}{/each}
+          {#each view.pages as entry (entry.id)}{@render option(entry)}{/each}
         </div>
       {/if}
-      {#if actions.length > 0}
+      {#if view.actions.length > 0}
         <div role="group" aria-labelledby="palette-actions">
           <div id="palette-actions" class="heading eyebrow">{t('ui.palette.actions')}</div>
-          {#each actions as entry (entry.id)}{@render option(entry)}{/each}
+          {#each view.actions as entry (entry.id)}{@render option(entry)}{/each}
         </div>
       {/if}
     </div>
-    {#if shown.length === 0}<p class="empty muted">{t('ui.palette.empty')}</p>{/if}
-    <p class="visually-hidden" role="status" aria-live="polite">{t('ui.palette.results', { count: shown.length })}</p>
+    {#if view.shown.length === 0}<p class="empty muted">{t('ui.palette.empty')}</p>{/if}
+    <p class="visually-hidden" role="status" aria-live="polite">{t('ui.palette.results', { count: view.shown.length })}</p>
     <p class="foot muted">{t('ui.palette.hint')}</p>
   </div>
 </div>
-
-<style>
-  .scrim {
-    position: fixed;
-    inset: 0;
-    z-index: 60;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    padding: var(--nv-space-4);
-    padding-block-start: min(14vh, 6rem);
-    background: var(--nv-scrim);
-    backdrop-filter: blur(6px);
-    animation: nv-fade var(--nv-motion-slow) var(--nv-ease);
-  }
-  .panel {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    max-width: 36rem;
-    max-height: 100%;
-    overflow: hidden;
-    background: var(--nv-surface);
-    border: var(--nv-border-width) solid var(--nv-border-strong);
-    border-radius: var(--nv-radius-lg);
-    box-shadow: var(--nv-shadow-2);
-    animation: nv-pop var(--nv-motion-slow) var(--nv-ease);
-  }
-  .field {
-    display: flex;
-    align-items: center;
-    gap: var(--nv-space-2);
-    padding: 0 var(--nv-space-2) 0 var(--nv-space-4);
-    border-block-end: var(--nv-border-width) solid var(--nv-border);
-    color: var(--nv-text-muted);
-  }
-  .input {
-    flex: 1;
-    min-width: 0;
-    min-height: 3.5rem;
-    border: 0;
-    background: none;
-    color: var(--nv-text);
-    font: inherit;
-    font-size: var(--nv-text-title);
-  }
-  .input:focus-visible {
-    outline: none;
-  }
-  .field:has(.input:focus-visible) {
-    box-shadow: inset 0 calc(-1 * var(--nv-focus-width)) 0 var(--nv-focus);
-  }
-  .close {
-    display: inline-grid;
-    place-items: center;
-    min-width: var(--nv-target);
-    min-height: var(--nv-target);
-    border: 0;
-    border-radius: var(--nv-radius-sm);
-    background: none;
-    color: var(--nv-text-muted);
-    cursor: pointer;
-  }
-  .close:hover {
-    background: var(--nv-hover);
-    color: var(--nv-text);
-  }
-  .list {
-    overflow-y: auto;
-    padding: var(--nv-space-2);
-    max-height: 22rem;
-  }
-  .heading {
-    padding: var(--nv-space-2) var(--nv-space-3) var(--nv-space-1);
-  }
-  .option {
-    display: flex;
-    align-items: center;
-    gap: var(--nv-space-3);
-    min-height: var(--nv-target);
-    padding: var(--nv-space-2) var(--nv-space-3);
-    border-radius: var(--nv-radius-sm);
-    cursor: pointer;
-  }
-  .active {
-    background: var(--nv-tint-primary);
-    box-shadow: inset var(--nv-space-1) 0 0 var(--nv-primary);
-  }
-  .label {
-    flex: 1;
-    min-width: 0;
-  }
-  .go {
-    display: none;
-    color: var(--nv-text-muted);
-  }
-  .active .go {
-    display: inline-flex;
-  }
-  .empty {
-    padding: var(--nv-space-4);
-  }
-  .foot {
-    padding: var(--nv-space-2) var(--nv-space-4);
-    border-block-start: var(--nv-border-width) solid var(--nv-border);
-    background: var(--nv-surface-2);
-    font-size: var(--nv-text-caption);
-    max-width: none;
-  }
-</style>

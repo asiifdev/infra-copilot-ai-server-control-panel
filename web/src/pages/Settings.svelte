@@ -11,6 +11,7 @@
   import AsyncView from '../components/AsyncView.svelte';
   import Button from '../components/Button.svelte';
   import Card from '../components/Card.svelte';
+  import Checkbox from '../components/Checkbox.svelte';
   import ConfirmDialog from '../components/ConfirmDialog.svelte';
   import DataTable, { type Column } from '../components/DataTable.svelte';
   import EmptyState from '../components/EmptyState.svelte';
@@ -29,6 +30,8 @@
 
   let siteDomain = $state('');
   let sitePort = $state('3000');
+  let sitePhpVersion = $state('');
+  let siteTls = $state(false);
   let siteBusy = $state(false);
   let sitePreview = $state<string | null>(null);
 
@@ -36,16 +39,19 @@
     event.preventDefault();
     const port = Number(sitePort);
     if (!siteDomain.trim() || !Number.isInteger(port) || port < 1 || port > 65535 || siteBusy) return;
-    siteBusy = true;
-    void api.createSite(siteDomain.trim(), port).then(
-      (res) => {
-        siteDomain = '';
-        sitePreview = res.config_preview;
-        toasts.push('success', t('ui.sites.created'));
-        sites.reload();
-      },
-      toastError,
-    ).finally(() => (siteBusy = false));
+    const php = sitePhpVersion.trim();
+    void withBusy((b) => (siteBusy = b), async () => {
+      const res = await api.createSite(siteDomain.trim(), port, {
+        ...(php ? { php_version: php } : {}),
+        ...(siteTls ? { tls_enabled: true } : {}),
+      });
+      siteDomain = '';
+      sitePhpVersion = '';
+      siteTls = false;
+      sitePreview = res.config_preview;
+      toasts.push('success', t('ui.sites.created'));
+      sites.reload();
+    });
   }
 
   let chKind = $state('telegram');
@@ -129,20 +135,15 @@
     }
   }
 
-  async function confirmDelete() {
+  function confirmDelete() {
     const provider = toDelete;
     if (!provider) return;
-    deleting = true;
-    try {
+    return withBusy((b) => (deleting = b), async () => {
       await api.deleteProvider(provider.name);
       toasts.push('success', t('ui.settings.deleted'));
       toDelete = null;
       providers.reload();
-    } catch (cause) {
-      toastError(cause);
-    } finally {
-      deleting = false;
-    }
+    });
   }
 </script>
 
@@ -150,8 +151,8 @@
   <PageHeader title={t('ui.nav.settings')} description={t('ui.settings.intro')} eyebrow={t('ui.nav.group_workspace')} />
 
   {#if !masterKey}
-    <div class="banner" role="alert">
-      <p class="title"><Icon name="alert" />{t('ui.settings.no_master_key_title')}</p>
+    <div class="nv-banner" role="alert">
+      <p class="nv-banner-title"><Icon name="alert" />{t('ui.settings.no_master_key_title')}</p>
       <p>{t('ui.settings.no_master_key')}</p>
     </div>
   {/if}
@@ -176,7 +177,6 @@
             {columns}
             rows={list}
             rowKey={(p) => p.name}
-            empty={t('ui.settings.no_providers')}
           >
             {#snippet cell(provider, column)}
               {#if column.id === 'name'}
@@ -205,7 +205,7 @@
     <div role="status" aria-live="polite">
       {#if testResult}
         {#if testResult.result.ok}
-          <p class="ok">
+          <p class="nv-ok">
             <StatusBadge kind="state" value="ok" />
             {t('ui.settings.test_ok', {
               name: inlineText(testResult.name, 60),
@@ -263,6 +263,8 @@
             <code>{inlineText(s.domain, 120)}</code>
             <span class="muted">:{s.upstream_port}</span>
             <StatusBadge kind="site" value={s.status} />
+            {#if s.php_version}<span class="muted">{t('ui.sites.php_badge', { version: inlineText(s.php_version, 20) })}</span>{/if}
+            {#if s.tls_enabled}<span class="muted">{t('ui.sites.tls_badge')}</span>{/if}
             <code class="muted">{inlineText(s.config_path, 120)}</code>
           </li>
         {/each}
@@ -271,6 +273,8 @@
     <form class="row" onsubmit={addSite}>
       <TextField id="site-domain" label={t('ui.sites.domain')} bind:value={siteDomain} required disabled={siteBusy} />
       <TextField id="site-port" label={t('ui.sites.port')} bind:value={sitePort} required disabled={siteBusy} />
+      <TextField id="site-php" label={t('ui.sites.php_version')} bind:value={sitePhpVersion} placeholder={t('ui.sites.php_placeholder')} disabled={siteBusy} />
+      <Checkbox id="site-tls" label={t('ui.sites.tls_enabled')} bind:checked={siteTls} disabled={siteBusy} />
       <Button type="submit" variant="primary" busy={siteBusy}>{t('ui.sites.add')}</Button>
     </form>
     {#if sitePreview}
@@ -296,26 +300,3 @@
     oncancel={() => (toDelete = null)}
   />
 {/if}
-
-<style>
-  .banner {
-    padding: var(--nv-space-4);
-    border: var(--nv-border-width) solid var(--nv-warning);
-    border-inline-start-width: var(--nv-space-1);
-    border-radius: var(--nv-radius);
-    background: var(--nv-tint-warning);
-  }
-  .title {
-    display: flex;
-    align-items: center;
-    gap: var(--nv-space-2);
-    font-weight: 700;
-    color: var(--nv-warning);
-  }
-  .ok {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--nv-space-2);
-  }
-</style>

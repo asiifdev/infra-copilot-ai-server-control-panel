@@ -32,20 +32,14 @@
   let { proposal, level = 3, busy = false, onapprove, onreject, executionEnabled = false, onrun, ondryrun, onrollback }: Props = $props();
 
   const pending = $derived(proposal.status === 'pending');
-  const decidable = $derived(pending && onapprove !== undefined && onreject !== undefined);
-  const expiry = $derived(relativeTime(proposal.expires_at, i18n.locale));
-  const tone = $derived(proposal.tier >= 3 ? 'danger' : proposal.tier === 2 ? 'warning' : undefined);
-  const titleText = $derived(inlineText(proposal.title, 120));
   const approved = $derived(proposal.status === 'approved');
+  const expiry = $derived(relativeTime(proposal.expires_at, i18n.locale));
+  const decidable = $derived(pending && onapprove !== undefined && onreject !== undefined);
   const runnable = $derived(approved && proposal.action !== null && onrun !== undefined);
   const canDryRun = $derived((pending || approved) && proposal.action !== null && ondryrun !== undefined);
-  const execution = $derived(proposal.execution);
-  const dryRun = $derived(proposal.dry_run);
-  const rollback = $derived(proposal.rollback);
   const rollbackable = $derived(
-    proposal.has_backup && rollback === null && execution !== null && execution.status !== 'running' && onrollback !== undefined,
+    proposal.has_backup && proposal.rollback === null && proposal.execution !== null && proposal.execution.status !== 'running' && onrollback !== undefined,
   );
-  const hintId = $derived(`run-off-${proposal.id}`);
   // A command the owner types, not text to translate.
   const ENABLE_COMMAND = 'infra serve --enable-execution';
 
@@ -78,9 +72,10 @@
   }
 </script>
 
-{#snippet outcomeView(item: { status: string; verified: boolean; reason: string | null; output: string; started_at: string; finished_at: string | null }, showBackup: boolean)}
-  <dd class="result">
-    <p class="status">
+{#snippet outcomeView(labelKey: string, item: { status: string; verified: boolean; reason: string | null; output: string; started_at: string; finished_at: string | null }, showBackup: boolean)}
+  <dt>{t(labelKey)}</dt>
+  <dd class="nv-prop-result">
+    <p class="nv-prop-status">
       <StatusBadge kind="state" value={item.status} />
       <span class="muted">
         {#if item.finished_at}
@@ -100,18 +95,25 @@
       <p class="muted">{t('ui.proposals.backup_ready')}</p>
     {/if}
   </dd>
+  {#if item.output.trim() !== ''}
+    <dt>{t('ui.proposal.output')}</dt>
+    <dd><TextBlock text={item.output} mono /></dd>
+  {/if}
 {/snippet}
 
-<Card title={titleText} {level} {tone}>
+<Card title={inlineText(proposal.title, 120)} {level} tone={proposal.tier >= 3 ? 'danger' : proposal.tier === 2 ? 'warning' : undefined}>
   {#snippet actions()}
     <StatusBadge kind="state" value={proposal.status} />
     <StatusBadge kind="tier" value={proposal.tier} />
+    {#if (proposal.required_approvals ?? 1) > 1}
+      <span class="nv-prop-progress num">{t('ui.proposals.approvals_progress', { count: proposal.approvals_count ?? 0, required: proposal.required_approvals ?? 1 })}</span>
+    {/if}
   {/snippet}
-  <ul class="meta plain muted">
+  <ul class="nv-prop-meta plain muted">
     <li>{t('ui.proposal.tool', { tool: inlineText(proposal.tool, 64) })}</li>
     {#if proposal.rule_id}<li>{t('ui.proposals.rule', { rule: inlineText(proposal.rule_id, 40) })}</li>{/if}
     {#if proposal.subject_key}<li>{t('ui.proposals.subject', { subject: inlineText(proposal.subject_key, 80) })}</li>{/if}
-    <li class="when">
+    <li class="nv-prop-when">
       <Icon name="clock" size="sm" />
       {#if pending && expiry}
         {t(expiry.past ? 'ui.proposals.expired_ago' : 'ui.proposals.expires', { when: expiry.text })}
@@ -120,7 +122,7 @@
       {/if}
     </li>
   </ul>
-  <dl class="facts">
+  <dl class="nv-prop-facts">
     <dt>{t('ui.proposal.reason')}</dt>
     <dd><TextBlock text={proposal.rationale} /></dd>
     <dt>{t('ui.proposal.action')}</dt>
@@ -129,49 +131,37 @@
     <dd><TextBlock text={proposal.impact} /></dd>
     {#if proposal.action}
       <dt>{t('ui.proposal.prepared')}</dt>
-      <dd class="prepared">{actionText(proposal.action)}</dd>
+      <dd class="nv-prop-prepared">{actionText(proposal.action)}</dd>
     {/if}
-    {#if dryRun}
+    {#if proposal.dry_run}
       <dt>{t('ui.proposals.dry_run_title')}</dt>
-      <dd class="result">
+      <dd class="nv-prop-result">
         <p class="muted">{t('ui.proposals.dry_run_state')}</p>
-        <p>{inlineText(dryRun.current_state, 300)}</p>
-        {#if dryRun.steps.length > 0}
+        <p>{inlineText(proposal.dry_run.current_state, 300)}</p>
+        {#if proposal.dry_run.steps.length > 0}
           <p class="muted">{t('ui.proposals.dry_run_steps')}</p>
-          <ol class="steps">
-            {#each dryRun.steps as step}
+          <ol class="nv-prop-steps">
+            {#each proposal.dry_run.steps as step}
               <li>{inlineText(step, 200)}</li>
             {/each}
           </ol>
         {/if}
-        {#if dryRun.diff}
+        {#if proposal.dry_run.diff}
           <p class="muted">{t('ui.proposals.dry_run_diff')}</p>
-          <pre class="diff"><code>{dryRun.diff}</code></pre>
+          <pre class="nv-prop-diff"><code>{proposal.dry_run.diff}</code></pre>
         {/if}
       </dd>
     {/if}
-    {#if execution}
-      <dt>{t('ui.proposal.result')}</dt>
-      {@render outcomeView(execution, proposal.has_backup)}
-      {#if execution.output.trim() !== ''}
-        <dt>{t('ui.proposal.output')}</dt>
-        <dd><TextBlock text={execution.output} mono /></dd>
-      {/if}
-    {/if}
-    {#if rollback}
-      <dt>{t('ui.proposals.rollback')}</dt>
-      {@render outcomeView(rollback, false)}
-      {#if rollback.output.trim() !== ''}
-        <dt>{t('ui.proposal.output')}</dt>
-        <dd><TextBlock text={rollback.output} mono /></dd>
-      {/if}
-    {/if}
+    {#if proposal.execution}{@render outcomeView('ui.proposal.result', proposal.execution, proposal.has_backup)}{/if}
+    {#if proposal.rollback}{@render outcomeView('ui.proposals.rollback', proposal.rollback, false)}{/if}
   </dl>
   {#if decidable}
-    <div class="decide">
-      <p class="muted note">{t('ui.proposals.nothing_runs')}</p>
+    <div class="nv-prop-decide">
+      <p class="muted nv-prop-note">{t('ui.proposals.nothing_runs')}</p>
       <div class="row">
-        <Button variant="primary" icon="check" onclick={onapprove} disabled={busy}>{t('ui.proposals.approve')}</Button>
+        <Button variant="primary" icon="check" onclick={onapprove} disabled={busy || proposal.user_has_approved === true}>
+          {t(proposal.user_has_approved ? 'ui.proposals.already_approved' : 'ui.proposals.approve')}
+        </Button>
         <Button variant="secondary" onclick={onreject} disabled={busy}>{t('ui.proposals.reject')}</Button>
         {#if canDryRun}
           <Button variant="secondary" onclick={ondryrun} disabled={busy}>{t('ui.proposals.dry_run')}</Button>
@@ -180,109 +170,23 @@
     </div>
   {/if}
   {#if approved && proposal.action === null}
-    <p class="muted note">{t('ui.proposals.recommendation_only')}</p>
-  {:else if runnable}
-    <div class="decide">
+    <p class="muted nv-prop-note">{t('ui.proposals.recommendation_only')}</p>
+  {:else if runnable || rollbackable}
+    {@const hintId = `run-off-${proposal.id}`}
+    <div class="nv-prop-decide">
       {#if !executionEnabled}
-        <p id={hintId} class="muted note">{t('ui.proposals.run_off')} <code>{ENABLE_COMMAND}</code>.</p>
+        <p id={hintId} class="muted nv-prop-note">{t('ui.proposals.run_off')} <code>{ENABLE_COMMAND}</code>.</p>
       {/if}
       <div class="row">
-        <Button variant="primary" icon="arrow" onclick={onrun} disabled={busy || !executionEnabled} describedby={executionEnabled ? undefined : hintId}>{t('ui.proposals.run')}</Button>
-        {#if canDryRun}
-          <Button variant="secondary" onclick={ondryrun} disabled={busy}>{t('ui.proposals.dry_run')}</Button>
+        {#if runnable}
+          <Button variant="primary" icon="arrow" onclick={onrun} disabled={busy || !executionEnabled} describedby={executionEnabled ? undefined : hintId}>{t('ui.proposals.run')}</Button>
+          {#if canDryRun}
+            <Button variant="secondary" onclick={ondryrun} disabled={busy}>{t('ui.proposals.dry_run')}</Button>
+          {/if}
+        {:else}
+          <Button variant="secondary" onclick={onrollback} disabled={busy || !executionEnabled} describedby={executionEnabled ? undefined : hintId}>{t('ui.proposals.rollback')}</Button>
         {/if}
-      </div>
-    </div>
-  {:else if rollbackable}
-    <div class="decide">
-      {#if !executionEnabled}
-        <p id={hintId} class="muted note">{t('ui.proposals.run_off')} <code>{ENABLE_COMMAND}</code>.</p>
-      {/if}
-      <div class="row">
-        <Button variant="secondary" onclick={onrollback} disabled={busy || !executionEnabled} describedby={executionEnabled ? undefined : hintId}>{t('ui.proposals.rollback')}</Button>
       </div>
     </div>
   {/if}
 </Card>
-
-<style>
-  .meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--nv-space-1) var(--nv-space-4);
-    font-size: var(--nv-text-sm);
-  }
-  .when {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--nv-space-1);
-  }
-  .facts {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--nv-space-1) var(--nv-space-4);
-    margin: 0;
-  }
-  dt {
-    font-weight: 650;
-    font-size: var(--nv-text-sm);
-    color: var(--nv-text-muted);
-    margin-block-start: var(--nv-space-2);
-  }
-  dd {
-    margin: 0;
-    min-width: 0;
-  }
-  .decide {
-    display: flex;
-    flex-direction: column;
-    gap: var(--nv-space-3);
-    padding-block-start: var(--nv-space-3);
-    border-block-start: var(--nv-border-width) solid var(--nv-border);
-  }
-  .prepared {
-    overflow-wrap: anywhere;
-  }
-  .result {
-    display: flex;
-    flex-direction: column;
-    gap: var(--nv-space-1);
-  }
-  .result p {
-    max-width: none;
-  }
-  .status {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--nv-space-2);
-  }
-  code {
-    overflow-wrap: anywhere;
-  }
-  .steps {
-    margin: 0;
-    padding-inline-start: var(--nv-space-4);
-    font-size: var(--nv-text-sm);
-  }
-  .diff {
-    margin: 0;
-    padding: var(--nv-space-2);
-    background: var(--nv-surface-2);
-    border-radius: var(--nv-radius-sm);
-    font-size: var(--nv-text-caption);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  .note {
-    font-size: var(--nv-text-sm);
-  }
-  @media (min-width: 40rem) {
-    .facts {
-      grid-template-columns: 8rem minmax(0, 1fr);
-    }
-    dt {
-      margin-block-start: 0;
-    }
-  }
-</style>
