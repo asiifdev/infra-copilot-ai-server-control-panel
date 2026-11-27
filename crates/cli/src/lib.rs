@@ -535,6 +535,7 @@ mod tests {
 
     #[test]
     fn read_limited_rejects_non_files_and_bad_utf8() -> Result<(), Box<dyn std::error::Error>> {
+        #[cfg(unix)]
         assert!(matches!(
             read_limited(std::path::Path::new("/dev/zero"), 10),
             Err(ReadError::NotFile)
