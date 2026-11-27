@@ -5,12 +5,14 @@
 
 import { readSse } from './sse';
 import type {
+  AgentTokenResult,
   ChannelView,
   ChatMessage,
   Conversation,
   FindingsView,
   IncidentView,
   InventoryView,
+  LocalSite,
   MemoryNote,
   MonitorView,
   NodeLogsView,
@@ -178,6 +180,10 @@ export const api = {
     get<InventoryView>(`/api/nodes/${enc(name)}/inventory`, signal, { kind, limit }),
   nodeLogs: (id: string, service: string, lines = 50, signal?: AbortSignal) =>
     get<NodeLogsView>(`/api/nodes/${enc(id)}/logs`, signal, { service, lines }),
+  rotateAgentToken: (id: string) => post<AgentTokenResult>(`/api/nodes/${enc(id)}/agent-token`),
+  sites: (signal?: AbortSignal) => get<{ sites: LocalSite[] }>('/api/sites', signal),
+  createSite: (domain: string, upstream_port: number) =>
+    post<{ site: LocalSite; config_preview: string }>('/api/sites', { domain, upstream_port }),
   findings: (minSeverity?: string, limit?: number, signal?: AbortSignal) =>
     get<FindingsView>('/api/findings', signal, { min_severity: minSeverity, limit }),
   plans: (signal?: AbortSignal) => get<PlanSummary[]>('/api/plans', signal),

@@ -113,6 +113,7 @@ export function createMock(options: MockOptions = {}) {
   const errorTexts = { en: loadCatalog('en', 'api.error.'), id: loadCatalog('id', 'api.error.') };
   const state = {
     ...fixtures,
+    sites: [{ id: fakeId(901), domain: 'demo.test', upstream_port: 3000, config_path: '/etc/nodivara/sites/demo.test.conf', status: 'proposed', created_at: '2026-11-27T10:00:00Z' }],
     masterKey: options.masterKey ?? true,
     executionEnabled: options.executionEnabled ?? false,
     executionFails: options.executionFails ?? false,
@@ -274,6 +275,9 @@ export function createMock(options: MockOptions = {}) {
         if (sub.length === 2) return json(200, catalogs[sub[1] === 'id' ? 'id' : 'en']);
         break;
       case 'nodes': {
+        if (method === 'POST' && name && action === 'agent-token') {
+          return json(200, { node_id: name, token_id: fakeId(950), token: 'nv_agent_rotated_token_123' });
+        }
         if (method !== 'GET') break;
         if (!name) return json(200, state.nodes);
         if (action === 'logs') {
@@ -409,6 +413,18 @@ export function createMock(options: MockOptions = {}) {
         if (method === 'DELETE' && name) {
           state.channels = state.channels.filter((c) => c.id !== name);
           return new Response(null, { status: 204 });
+        }
+        break;
+      }
+      case 'sites': {
+        if (method === 'GET' && !name) return json(200, { sites: state.sites });
+        if (method === 'POST' && !name) {
+          const inp = (body ?? {}) as { domain?: string; upstream_port?: number };
+          if (!inp.domain || !inp.domain.endsWith('.test')) return fail(req, 400, 'invalid_test_domain');
+          if (typeof inp.upstream_port !== 'number' || inp.upstream_port < 1 || inp.upstream_port > 65535) return fail(req, 400, 'invalid_upstream_port');
+          const site = { id: fakeId(900 + state.sites.length + 1), domain: inp.domain, upstream_port: inp.upstream_port, config_path: `/etc/nodivara/sites/${inp.domain}.conf`, status: 'proposed', created_at: '2026-11-27T12:00:00Z' };
+          state.sites.push(site);
+          return json(201, { site, config_preview: `server { server_name ${inp.domain}; proxy_pass http://127.0.0.1:${inp.upstream_port}; }` });
         }
         break;
       }

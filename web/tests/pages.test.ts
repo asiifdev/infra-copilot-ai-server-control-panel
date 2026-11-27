@@ -500,8 +500,7 @@ describe('Transports page', () => {
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
     flushSync();
 
-    const submitBtn = [...dialog.querySelectorAll('button')].find((b) => b.getAttribute('type') === 'submit') as HTMLButtonElement;
-    submitBtn.click();
+    button(dialog, 'Update credentials').click();
     flushSync();
     expect(textarea.value).toBe('');
     await eventually(() => expect(toasts.items.some((x) => x.kind === 'success' && x.text.includes('Credentials updated'))).toBe(true));
@@ -545,7 +544,7 @@ describe('Channels and Telegram linking in Settings', () => {
 });
 
 describe('NodeDetail service logs', () => {
-  it('loads bounded service logs for a node', async () => {
+  it('loads bounded service logs for a node and rotates agent token', async () => {
     const mock = installMock();
     await readyApp(mock);
     const root = render(NodeDetail, { name: 'node-alpha' });
@@ -553,5 +552,23 @@ describe('NodeDetail service logs', () => {
     type(field(root, 'node-log-svc'), 'nginx.service');
     button(root, 'Service logs').click();
     await eventually(() => expect(root.querySelector('pre')?.textContent).toContain('line 1 nginx.service'));
+
+    button(root, 'Rotate agent token').click();
+    await eventually(() => expect(root.textContent).toContain('nv_agent_rotated_token_123'));
+  });
+});
+
+describe('Local .test sites in Settings', () => {
+  it('lists local .test sites and creates a new site', async () => {
+    const mock = installMock();
+    await readyApp(mock);
+    const root = render(Settings);
+    await eventually(() => expect(root.textContent).toContain('demo.test'));
+
+    type(field(root, 'site-domain'), 'app.test');
+    type(field(root, 'site-port'), '8080');
+    button(root, 'Add site').click();
+    await eventually(() => expect(root.textContent).toContain('app.test'));
+    await eventually(() => expect(root.textContent).toContain('proxy_pass http://127.0.0.1:8080'));
   });
 });

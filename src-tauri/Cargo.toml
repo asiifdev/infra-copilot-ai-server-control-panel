@@ -1,0 +1,28 @@
+[package]
+name = "nodivara-desktop"
+description = "Thin Tauri v2 desktop shell for Nodivara (ADR 0044)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "nodivara_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = "2.7.6"
+
+[dependencies]
+bootstrap = { path = "../crates/bootstrap" }
+serde = { version = "1", features = ["derive"] }
+server = { path = "../crates/server" }
+tauri = "2.12.7"
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync"] }
+tracing = "0.1"
+
+[dev-dependencies]
+db = { path = "../crates/db" }
+
+[lints]
+workspace = true

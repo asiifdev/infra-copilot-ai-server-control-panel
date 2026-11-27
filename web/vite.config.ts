@@ -14,7 +14,7 @@ export default defineConfig({
     conditions: process.env.VITEST ? ['browser'] : undefined,
   },
   server: { host: '127.0.0.1', fs: { allow: ['..'] } },
-  build: { target: 'es2022', outDir: 'dist', emptyOutDir: true, cssCodeSplit: false },
+  build: { target: 'es2022', outDir: 'dist', emptyOutDir: true, cssCodeSplit: false, modulePreload: false },
   test: {
     environment: 'jsdom',
     include: ['tests/**/*.test.ts'],

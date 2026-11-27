@@ -289,3 +289,18 @@ export interface NodeLogsView {
   truncated: boolean;
   content: string;
 }
+
+export interface AgentTokenResult {
+  node_id: string;
+  token_id: string;
+  token: string;
+}
+
+export interface LocalSite {
+  id: string;
+  domain: string;
+  upstream_port: number;
+  config_path: string;
+  status: string;
+  created_at: string;
+}

@@ -1,14 +1,14 @@
 # Langkah berikutnya: serah terima ke sesi implementasi
 
-Terakhir diperbarui: 2026-11-27 (setelah M4 langkah 3a–3b dan M1-b, keputusan 0038–0040; skema kini versi 12; 890 tes lulus dan 1 diabaikan (uji hidup penyedia AI) lewat `cargo test --workspace`, ditambah 293 tes di `web/` lewat `npm test`). Dokumen kerja internal (Indonesia).
+Terakhir diperbarui: 2026-11-28 (setelah Sprint 6 & Sprint 7, keputusan 0041–0044; skema kini versi 14; 914 tes Rust lulus dan 1 diabaikan (uji hidup penyedia AI) lewat `cargo test --workspace`, ditambah 296 tes di `web/` lewat `npm test`). Dokumen kerja internal (Indonesia).
 
 ## Yang sudah ada
 
-- Repo publik dengan CI hijau (fmt, clippy, tes di Linux dan macOS, `cargo deny`, `cargo audit`, gitleaks, pemeriksaan dokumen, dan job `web`: periksa tipe, tes, build, ukuran bundel, biner dengan UI tertanam, uji asap) dan perlindungan cabang `main`.
+- Repo publik dengan CI hijau (fmt, clippy, tes di Linux, macOS, dan Windows + dependensi Linux GTK/WebKit di `ubuntu-latest`, `cargo deny`, `cargo audit`, gitleaks, pemeriksaan dokumen, job `web`: periksa tipe, tes, build, ukuran bundel, biner dengan UI tertanam, uji asap, serta alur rilis `.github/workflows/release.yml`) dan perlindungan cabang `main`.
 - Crate `core-domain` (tingkat risiko dan penyaring rahasia), 25 tes, tanpa dependensi luar.
-- Crate `i18n` (katalog en/id), `db` (skema SQLite, kini versi 12 / migrasi 0001-0012, isolasi tenant, audit berantai-hash), dan (dipensiunkan di 0036) prototipe pengukuran dengan `scripts/measure.sh` (langkah 1-5 M0 selesai; keputusan 0007-0013 diterima; angka anggaran Linux menunggu kalibrasi).
-- Server lokal dan UI web: crate `server` dan `bootstrap`, `infra serve`, `web/` (lihat langkah 6c).
-- Dokumen: `docs/design.md`, `docs/plan.md`, `docs/decisions/0000-0040`, `docs/market-research.md`, `docs/RELEASE-CHECKLIST.md`.
+- Crate `i18n` (katalog en/id), `db` (skema SQLite, kini versi 14 / migrasi 0001-0014, isolasi tenant, audit berantai-hash), dan (dipensiunkan di 0036) prototipe pengukuran dengan `scripts/measure.sh` (langkah 1-5 M0 selesai; keputusan 0007-0013 diterima; angka anggaran Linux menunggu kalibrasi).
+- Server lokal, UI web, dan cangkang desktop tipis: crate `server` dan `bootstrap`, `infra serve`, `web/` (lihat langkah 6c), serta `src-tauri/` (`nodivara-desktop`, lihat langkah 6j / 0044).
+- Dokumen: `docs/design.md`, `docs/plan.md`, `docs/decisions/0000-0044`, `docs/market-research.md`, `docs/RELEASE-CHECKLIST.md`.
 - Konfigurasi pengembangan AI: `CLAUDE.md`, skill (parity-rules, ai-tool-tiers, migration-planning, security-review, repo-hygiene, rust-conventions, tauri-v2-*, svelte), hook `tauri-guard`, plugin Svelte (MCP dikunci 0.1.31).
 
 ## Memulai sesi implementasi
@@ -35,11 +35,23 @@ Terakhir diperbarui: 2026-11-27 (setelah M4 langkah 3a–3b dan M1-b, keputusan 
    - **Langkah 3a (0038, migrasi 0011)**: tabel `approvals` (siap 2 penyetuju di Cloud), `execution_backups` (wajib sebelum eksekusi tingkat >= 3, dengan `sha256`), `execution_rollbacks` (maksimal 1 rollback per eksekusi), dan `proposals.dry_run_json`/`dry_run_at`; kontrak `Action` (`target_label`, `requires_backup`, `requires_typed_confirmation`) dan `Executor` (`dry_run` dengan diff ter-redaksi, `backup`, `rollback`); validasi `typed_confirmation == action.target_label()` di server untuk tingkat 4; komponen `ConfirmTyped` di UI.
    - **Langkah 3b (0039)**: `infra plan approve|run` dan `POST /api/plans/{id}/approve|run` dengan pemeriksaan gerbang (`decommission_source`) dan pelacakan status atomik per langkah di `migration_steps` (wajib `--enable-execution`); penegakan resolusi DNS + `is_internal_ip` + *IP pinning* pada `transport::ProcessRunner` saat `EndpointPolicy::SharedInfrastructure` aktif; pembaruan kredensial transport *write-only* (`infra transport update-credentials --credentials-stdin` dan `POST /api/transports/{id}/credentials`).
 6g. **M1-b (0040, migrasi 0012), selesai 2026-11-27**: tabel `monitor_targets`, `incidents`, `notification_channels` (token tersegel `vault` via `secret_id`), `alert_rules` (`quiet_start`/`quiet_end`), `pending_alerts`, `telegram_links`; *background* `watch_loop` *lazy* di `infra serve` dengan penahanan + *flush* `pending_alerts` saat keluar dari jam tenang; bot Telegram interaktif (`/link`, `/status`, `/log`, `/bahasa`, `/restart`) dengan persetujuan tombol **ketat hanya tingkat 0–2** (tingkat 3–4 ditolak dan diarahkan ke Web UI); UI `Monitors.svelte` dan panel saluran/jam tenang di `Settings.svelte`. Perbaikan `scripts/check-secrets.sh` saat working tree bersih.
-6h. **Sisa pekerjaan berikutnya**:
-   - Pelaksana node jarak jauh (SSH / agen outbound) dan mode 2 penyetuju di Cloud.
-   - *Lazy-loading* / *code-splitting* UI untuk memperlebar margin anggaran kinerja (`ui_js_raw_bytes` kini sangat mepet di `179,995 / 180,000 B`).
-   - Sisa kolektor/aturan M1 (kolektor database, aturan parity tambahan), M5 (panel server: situs, PHP, DB), cangkang Tauri v2, M6 (Cloud/lisensi/billing), dan M7 (rilis terbuka).
-7. Cangkang Tauri tipis menyusul setelah M1-M2 (skill `tauri-v2-*`, command dibatasi `AppManifest::commands`).
+6h. **Kompatibilitas Windows, alur rilis GitHub, dan kelengkapan M1 (0041, 0042, migrasi 0013), selesai 2026-11-27**:
+   - **Windows & rilis (0041)**: `crates/collectors` dipagari `#[cfg(unix)]` untuk `rustix` dan traversal deskriptor aman (`rootfs.rs`), sehingga workspace terkompilasi dan lulus uji di `x86_64-pc-windows-msvc`; `.github/workflows/release.yml` dibangun untuk Linux, macOS, dan Windows dengan `SHA256SUMS.txt` dan action ter-pin ke SHA penuh.
+   - **Kolektor & 11 aturan kesetaraan (0042, migrasi 0013)**: penambahan kolektor read-only `vhost`, `cert`, `db`, dan `launchd` di atas `RootFs`; perluasan `inventory::Kind` dan batasan DB (`Vhost`, `Cert`, `Database`, `Dns`, `Check`); serta pengaktifan penuh seluruh 11 aturan kesetaraan (`PAR-001`..`PAR-011`) di `crates/parity`.
+6i. **Sprint 6 — Eksekutor jarak jauh & fondasi panel M5 (0043, migrasi 0014), selesai 2026-11-27**:
+   - **`SshExecutor` (`crates/actions`)**: eksekusi Usulan pada node `ssh` lewat pemanggilan `ssh` berbasis **argv saja** (`BatchMode=yes`, tanpa *shell interpolation*) melalui `transport::Runner`, dengan validasi target ketat serta keluaran diredaksi dan dibatasi ukuran.
+   - **Agen *pull-only* (`0014_agent_and_m5.sql`, `crates/server`)**: tabel `agent_tokens` (hanya menyimpan hash SHA-256) dan `agent_jobs` (antrean berbatas tenant); endpoint `POST /api/nodes/{id}/agent-token` (buat/rotasi token), `POST /api/agents/poll`, dan `POST /api/agents/result`; perluasan `POST /api/proposals/{id}/execute` untuk node `ssh` dan `agent` dengan seluruh pengaman persetujuan, `args_hash`, `--enable-execution`, cadangan, konfirmasi ketik, dan audit berantai-hash tetap utuh.
+   - **Fondasi panel M5 & UI (`crates/server`, `web/`)**: penampil log layanan read-only ter-redaksi (`GET /api/nodes/{id}/logs`), kontrak & manajemen situs lokal `.test` (`GET/POST /api/sites`, direktori terkelola tanpa shell), serta antarmuka di `NodeDetail.svelte` (penampil log & rotasi token agen) dan `Settings.svelte` (manajemen situs lokal `.test`).
+6j. **Sprint 7 — Cangkang desktop Tauri v2 tipis (0044), selesai 2026-11-28**:
+   - **`src-tauri/` (`nodivara-desktop`)**: anggota workspace Cargo root yang mewarisi `[workspace.lints]` (`unsafe_code = "forbid"`, `unwrap_used = "deny"`, `expect_used = "deny"`, `print_stdout = "deny"`, `print_stderr = "deny"`), 3 unit test lulus.
+   - **Server loopback tertanam & pengamanan webview**: menjalankan `crates/server` secara *in-process* pada `127.0.0.1:0` dan mengarahkan jendela `main` ke URL sekali pakai `http://127.0.0.1:<port>/#t=<token>`; `src-tauri/build.rs` membatasi command melalui `AppManifest::new().commands(&["app_info"])`; `tauri.conf.json` menyetel `withGlobalTauri: false`, `freezePrototype: true`, dan CSP ketat; `src-tauri/capabilities/main.json` (`main-capability`) terikat ke `"windows": ["main"]` hanya dengan `core:window:allow-set-title` (tanpa `core:default`, tanpa plugin `shell`/`fs`).
+   - **CI Linux**: `.github/workflows/ci.yml` memasang `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`, dan `librsvg2-dev` saat `runner.os == 'Linux'`.
+6k. **Sisa pekerjaan berikutnya**:
+   - Biner agen mandiri untuk dipasang di server jarak jauh dan mode 2 penyetuju di Cloud.
+   - *Lazy-loading* / *code-splitting* UI untuk memperlebar margin anggaran kinerja (`ui_js_raw_bytes` kini di `179,794 / 180,000 B`, `ui_gzip_bytes` `~61,547 / 64,000 B`).
+   - Penandatanganan kode (*code signing*) & installer desktop Tauri v2 (`.dmg`, `.msi`, `.deb`).
+   - Pengelolaan penuh M5 (situs produksi, SSL ACME, multi-versi PHP-FPM, manajemen database penuh), M6 (Cloud/lisensi/billing), dan M7 (rilis terbuka).
+7. Cangkang Tauri tipis sudah terpasang di `src-tauri/` (ADR 0044); yang tersisa untuk distribusi desktop adalah bundling installer dan *code signing*.
 
 ## Keputusan yang masih menunggu pemilik
 

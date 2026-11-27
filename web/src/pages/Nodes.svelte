@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '../lib/api';
-  import { formatDateTime, formatNumber } from '../lib/format';
+  import { dateText, formatNumber } from '../lib/format';
   import { i18n, t } from '../lib/i18n.svelte';
   import { hrefFor } from '../lib/router.svelte';
   import { useResource } from '../lib/resource.svelte';
@@ -47,7 +47,7 @@
               <StatusBadge kind="node" value={node.status} />
             {:else if column.id === 'inventory'}
               {#if node.latest_inventory}
-                {formatDateTime(node.latest_inventory.taken_at, i18n.locale) ?? inlineText(node.latest_inventory.taken_at, 40)}
+                {dateText(node.latest_inventory.taken_at, i18n.locale)}
                 <StatusBadge kind="state" value={node.latest_inventory.status} />
               {:else}
                 <span class="muted">{t('ui.nodes.never')}</span>

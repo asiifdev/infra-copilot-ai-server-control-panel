@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatDateTime } from '../lib/format';
+  import { dateText } from '../lib/format';
   import { i18n, t } from '../lib/i18n.svelte';
   import { relativeTime } from '../lib/time';
   import type { ProposalView } from '../lib/types';
@@ -84,9 +84,9 @@
       <StatusBadge kind="state" value={item.status} />
       <span class="muted">
         {#if item.finished_at}
-          {t('ui.execution.finished', { when: formatDateTime(item.finished_at, i18n.locale) ?? inlineText(item.finished_at, 40) })}
+          {t('ui.execution.finished', { when: dateText(item.finished_at, i18n.locale) })}
         {:else}
-          {t('ui.execution.started', { when: formatDateTime(item.started_at, i18n.locale) ?? inlineText(item.started_at, 40) })}
+          {t('ui.execution.started', { when: dateText(item.started_at, i18n.locale) })}
         {/if}
       </span>
     </p>
@@ -116,7 +116,7 @@
       {#if pending && expiry}
         {t(expiry.past ? 'ui.proposals.expired_ago' : 'ui.proposals.expires', { when: expiry.text })}
       {:else}
-        {t('ui.proposals.created', { when: formatDateTime(proposal.created_at, i18n.locale) ?? inlineText(proposal.created_at, 40) })}
+        {t('ui.proposals.created', { when: dateText(proposal.created_at, i18n.locale) })}
       {/if}
     </li>
   </ul>

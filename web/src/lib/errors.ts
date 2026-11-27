@@ -91,3 +91,14 @@ export function toastError(cause: unknown): void {
   const code = cause && typeof cause === 'object' && 'code' in cause && typeof cause.code === 'string' ? cause.code : 'internal';
   toasts.push('error', t(errorKey(code)));
 }
+
+export async function withBusy(setBusy: (busy: boolean) => void, fn: () => Promise<void>): Promise<void> {
+  setBusy(true);
+  try {
+    await fn();
+  } catch (cause) {
+    toastError(cause);
+  } finally {
+    setBusy(false);
+  }
+}

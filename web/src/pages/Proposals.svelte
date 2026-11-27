@@ -124,6 +124,50 @@
       () => (rollingBack = null),
     );
   }
+  const dialog = $derived.by(() => {
+    if (confirming && !(confirming.decision === 'approve' && confirming.proposal.tier === 4)) {
+      const { proposal, decision } = confirming;
+      const approving = decision === 'approve';
+      return {
+        id: proposal.id,
+        title: t(approving ? 'ui.proposals.risky_title' : 'ui.proposals.reject_title'),
+        message: t(approving ? 'ui.proposals.risky_message' : 'ui.proposals.reject_message', { title: inlineText(proposal.title, 80) }),
+        confirmLabel: t(approving ? 'ui.proposals.risky_confirm' : 'ui.proposals.reject'),
+        tone: (approving ? 'primary' : 'danger') as 'primary' | 'danger',
+        onconfirm: () => decide(proposal, decision),
+        oncancel: () => (confirming = null),
+      };
+    }
+    if (running) {
+      const target = running;
+      return {
+        id: target.id,
+        title: t('ui.proposals.run_title'),
+        message: t('ui.proposals.run_message', {
+          service: inlineText(target.action?.kind === 'restart_service' ? target.action.service : target.action?.target_label, 100),
+          manager: inlineText(target.action?.kind === 'restart_service' ? target.action.manager : target.action?.kind, 20),
+          node: inlineText(target.node, 80) || t('ui.proposal.node_unknown'),
+        }),
+        confirmLabel: t('ui.proposals.run_confirm'),
+        tone: 'primary' as const,
+        onconfirm: () => run(target),
+        oncancel: () => (running = null),
+      };
+    }
+    if (rollingBack) {
+      const target = rollingBack;
+      return {
+        id: target.id,
+        title: t('ui.proposals.rollback_title'),
+        message: t('ui.proposals.rollback_message'),
+        confirmLabel: t('ui.proposals.rollback_confirm'),
+        tone: 'danger' as const,
+        onconfirm: () => rollback(target),
+        oncancel: () => (rollingBack = null),
+      };
+    }
+    return null;
+  });
 </script>
 
 <div class="stack">
@@ -166,64 +210,29 @@
   </AsyncView>
 </div>
 
-{#if confirming}
+{#if confirming && confirming.decision === 'approve' && confirming.proposal.tier === 4}
   {@const { proposal, decision } = confirming}
-  {@const approving = decision === 'approve'}
-  {#if approving && proposal.tier === 4}
-    <ConfirmTyped
-      title={t('ui.proposals.risky_title')}
-      message={t('ui.proposals.risky_message', { title: inlineText(proposal.title, 80) })}
-      targetLabel={proposal.action?.target_label ?? proposal.title}
-      confirmLabel={t('ui.proposals.risky_confirm')}
-      cancelLabel={t('ui.common.cancel')}
-      tone="primary"
-      busy={acting === proposal.id}
-      onconfirm={(typed) => decide(proposal, decision, typed)}
-      oncancel={() => (confirming = null)}
-    />
-  {:else}
-    <ConfirmDialog
-      title={t(approving ? 'ui.proposals.risky_title' : 'ui.proposals.reject_title')}
-      message={t(approving ? 'ui.proposals.risky_message' : 'ui.proposals.reject_message', { title: inlineText(proposal.title, 80) })}
-      confirmLabel={t(approving ? 'ui.proposals.risky_confirm' : 'ui.proposals.reject')}
-      cancelLabel={t('ui.common.cancel')}
-      tone={approving ? 'primary' : 'danger'}
-      busy={acting === proposal.id}
-      onconfirm={() => decide(proposal, decision)}
-      oncancel={() => (confirming = null)}
-    />
-  {/if}
-{/if}
-
-{#if running}
-  {@const target = running}
-  <ConfirmDialog
-    title={t('ui.proposals.run_title')}
-    message={t('ui.proposals.run_message', {
-      service: inlineText(target.action?.kind === 'restart_service' ? target.action.service : target.action?.target_label, 100),
-      manager: inlineText(target.action?.kind === 'restart_service' ? target.action.manager : target.action?.kind, 20),
-      node: inlineText(target.node, 80) || t('ui.proposal.node_unknown'),
-    })}
-    confirmLabel={t('ui.proposals.run_confirm')}
+  <ConfirmTyped
+    title={t('ui.proposals.risky_title')}
+    message={t('ui.proposals.risky_message', { title: inlineText(proposal.title, 80) })}
+    targetLabel={proposal.action?.target_label ?? proposal.title}
+    confirmLabel={t('ui.proposals.risky_confirm')}
     cancelLabel={t('ui.common.cancel')}
     tone="primary"
-    busy={acting === target.id}
-    onconfirm={() => run(target)}
-    oncancel={() => (running = null)}
+    busy={acting === proposal.id}
+    onconfirm={(typed) => decide(proposal, decision, typed)}
+    oncancel={() => (confirming = null)}
   />
-{/if}
-
-{#if rollingBack}
-  {@const target = rollingBack}
+{:else if dialog}
   <ConfirmDialog
-    title={t('ui.proposals.rollback_title')}
-    message={t('ui.proposals.rollback_message')}
-    confirmLabel={t('ui.proposals.rollback_confirm')}
+    title={dialog.title}
+    message={dialog.message}
+    confirmLabel={dialog.confirmLabel}
     cancelLabel={t('ui.common.cancel')}
-    tone="danger"
-    busy={acting === target.id}
-    onconfirm={() => rollback(target)}
-    oncancel={() => (rollingBack = null)}
+    tone={dialog.tone}
+    busy={acting === dialog.id}
+    onconfirm={dialog.onconfirm}
+    oncancel={dialog.oncancel}
   />
 {/if}
 

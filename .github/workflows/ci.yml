@@ -39,6 +39,16 @@ jobs:
           rustup toolchain install stable --profile minimal --component clippy,rustfmt
           rustup default stable
           rustc --version
+      - name: Install Linux desktop dependencies (Tauri v2)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
       - name: Build web UI (embedded into server/cli)
         shell: bash
         run: |

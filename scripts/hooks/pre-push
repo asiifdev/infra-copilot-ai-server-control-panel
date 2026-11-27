@@ -6,6 +6,11 @@ set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
+# Ensure rustup default is set when both Homebrew and rustup coexist.
+if [ -x "$HOME/.cargo/bin/rustup" ]; then
+    export PATH="$HOME/.cargo/bin:$PATH"
+fi
+
 echo "pre-push: fmt"
 cargo fmt --all --check
 

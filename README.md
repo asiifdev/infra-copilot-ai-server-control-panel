@@ -25,20 +25,20 @@ English | [Bahasa Indonesia](README.id.md)
 
 **Nodivara is an open-source server control panel, aimed at the same job as aaPanel and cPanel, with a built-in AI agent that proposes changes and waits for human approval.** It is written in Rust with a Svelte interface, targets Linux servers and a desktop app, and is pre-alpha: nothing is installable yet.
 
-Last updated: 2026-11-27.
+Last updated: 2026-11-28.
 
 ## What works today
 
-> **Honest status.** There is no installable release and no server-management panel yet (no sites, PHP versions or databases). What exists is a read-only inventory and a parity check you can run from source, a local command line (`infra`) that stores inventories, manages migration plans (`draft`, `approve`, `run`) and transport settings (with write-only credential updates), and talks to an AI provider you configure, plus a local web UI (`infra serve`) over the same data: it listens on this machine only, for one user, with no TLS and no real login. Approved proposals (tiers 2–4, with dry-run, `sha256` backups, typed confirmation for tier 4, and one-time rollback) and migration plans can run locally when `infra serve --enable-execution` is passed (execution is **off** by default). Uptime monitoring, quiet-hours alerting, and the interactive Telegram bot (tiers 0–2 only) run in `infra serve`; remote agents/SSH and a live run against a real AI provider are not built or run yet.
+> **Honest status.** There is no installable release and no full production server-management panel yet (no ACME SSL, multi-PHP versions, or full DB administration). What exists is a read-only inventory (including `vhost`, `cert`, `db`, and `launchd`) and a parity check across **11 rules** (`PAR-001`..`PAR-011`) you can run from source, a local command line (`infra`) that stores inventories, manages migration plans (`draft`, `approve`, `run`) and transport settings (with write-only credential updates), and talks to an AI provider you configure, a local web UI (`infra serve`) over the same data (loopback only, one user, no TLS, no real login), and a thin Tauri v2 desktop shell (`src-tauri/`, `nodivara-desktop`) embedding that loopback server on `127.0.0.1:0`. Approved proposals (tiers 2–4, with dry-run, `sha256` backups, typed confirmation for tier 4, and one-time rollback) and migration plans can run locally when `infra serve --enable-execution` is passed (execution is **off** by default). Remote execution (`SshExecutor` argv-only `ssh` and pull-only agent API `/api/agents/poll` + `/api/agents/result`), read-only service log viewing (`GET /api/nodes/{id}/logs`), and `.test` local site management (`GET/POST /api/sites`) are implemented and tested; uptime monitoring, quiet-hours alerting, and the interactive Telegram bot (tiers 0–2 only) run in `infra serve`. A standalone remote agent binary for servers and a live run against a real AI provider are not built or run yet.
 
 | Works now (from source) | Built as libraries, not wired or still limited | Planned |
 |---|---|---|
-| Collect a Linux inventory, read-only: ports, processes, cron, PM2, systemd, Docker | Shared-infrastructure DNS + `is_internal_ip` enforcement exists in `transport::ProcessRunner`, awaiting Cloud/remote runner | Remote access with TLS, real multi-user login, and two-approver enforcement in Cloud |
-| Compare two inventories with **7 parity rules** and read the report in English or Indonesian | OpenAI-compatible AI client (never run against a live provider; tested against a local fake) | Remote node execution via outbound agent or SSH (M4+) |
-| Exit code 1 when a critical gap is found, so it fits a migration checklist | Database schema (version 14) with tenant isolation and a hash-chained audit log | Git deploys, DNS and Cloudflare Tunnel |
-| Store inventories and comparisons for a node in a local SQLite database (`--save`), and search them | | Desktop app (Tauri v2) |
+| Collect a Linux/macOS inventory, read-only: ports, processes, cron, PM2, systemd, Docker, `vhost`, `cert`, `db`, `launchd` | Shared-infrastructure DNS + `is_internal_ip` enforcement exists in `transport::ProcessRunner`, awaiting Cloud/remote runner | Remote access with TLS, real multi-user login, and two-approver enforcement in Cloud |
+| Compare two inventories with **11 parity rules** (`PAR-001`..`PAR-011`) and read the report in English or Indonesian | OpenAI-compatible AI client (never run against a live provider; tested against a local fake) | Standalone remote agent binary deployment for servers |
+| Exit code 1 when a critical gap is found, so it fits a migration checklist | Database schema (version 14) with tenant isolation, pull-only agent queue (`agent_tokens`/`agent_jobs`), and hash-chained audit log | Git deploys, DNS and Cloudflare Tunnel |
+| Store inventories and comparisons for a node in a local SQLite database (`--save`), and search them | Thin Tauri v2 desktop shell (`src-tauri/`, embedded `127.0.0.1:0` server; no installers or code signing yet) | Signed desktop installers (`.dmg`, `.msi`, `.deb`) |
 | Draft, approve, and run migration plans with gate checks (`infra plan`) and manage transports with write-only credential updates (`infra transport`) | | An AI model checked against a live provider (Muse, OpenAI, Ollama) |
-| Approve proposals, run local actions (tiers 2–4 with `--enable-execution`, dry-run, `sha256` backup, typed confirmation, rollback), and run uptime monitors + quiet-hours alerts + Telegram bot (tiers 0–2) | | Server-panel features: sites, PHP versions, databases (M5) |
+| Approve proposals, run local/SSH/agent-queued actions (tiers 2–4 with `--enable-execution`, dry-run, `sha256` backup, typed confirmation, rollback), view service logs, manage `.test` local sites, and run uptime monitors + quiet-hours alerts + Telegram bot (tiers 0–2) | | Full M5 production server-panel features: ACME SSL, multi-PHP versions, full database management |
 
 ### Try it
 
@@ -67,7 +67,7 @@ target/debug/infra serve             # optional: --port N, --db PATH, --org SLUG
 ./scripts/smoke-serve.sh             # smoke test of the real binary (what CI runs)
 ```
 
-The printed address signs you in once: the token is valid for 10 minutes, works a single time and sits in the URL fragment, so it is never sent to the server or to another site. The server binds `127.0.0.1` only and refuses any other address. There is no TLS and no password: a session ends after 8 hours of inactivity, on sign-out or when the server restarts, and then you start `infra serve` again. The pages are Overview, Nodes (with inventory), Findings, Assistant, Plans (draft text, steps and gates; there is no approve or run button), Transports, Memory and Settings (provider form with a "Test connection" button, language, theme). Provider keys are only accepted and sealed in the vault; no response ever contains a secret. Checked in Chromium (light and dark, 375 px wide, keyboard); **not** checked on real Windows high contrast or with a real screen reader. The size and speed budget in CI still measures the older prototype page; the real binary with the UI is not measured against a budget yet.
+The printed address signs you in once: the token is valid for 10 minutes, works a single time and sits in the URL fragment, so it is never sent to the server or to another site. The server binds `127.0.0.1` only and refuses any other address. There is no TLS and no password: a session ends after 8 hours of inactivity, on sign-out or when the server restarts, and then you start `infra serve` again. The pages are Overview, Nodes (with inventory, service logs, and pull-only agent token rotation), Findings, Monitors, Proposals, Assistant, Plans (draft text, steps, gates, approve/run), Transports, Memory and Settings (provider form with a "Test connection" button, `.test` local sites, notification channels, quiet hours, language, theme). Provider keys are only accepted and sealed in the vault; no response ever contains a secret. Checked in Chromium (light and dark, 375 px wide, keyboard); **not** checked on real Windows high contrast or with a real screen reader. CI checks the real `infra` binary with the embedded UI against `docs/perf-budget.json` (`ui_js_raw_bytes` ~179,794 / 180,000 B, `ui_gzip_bytes` ~61,547 / 64,000 B).
 
 Exit codes of `infra`: 0 success, 1 a critical finding or a blocked cutover, 2 a usage, configuration or I/O error, 3 an assistant or provider failure.
 
@@ -169,8 +169,9 @@ A tool that can change servers has to earn trust with rules you can check. These
 | Credentials never travel in command arguments | the CLI reads transport credentials and the provider key from stdin or the environment only, seals them with the vault, and `transport check` is a dry run unless `--run` ([0028](docs/decisions/0028-perintah-plan-dan-transport-di-cli.md)) | implemented, tested; nothing has run against a real host |
 | The local web server is not reachable from the network or from another website | loopback bind only (other addresses are refused); every request must carry the exact `Host`; changes need a same-origin `Origin` and an `X-Nodivara` header; a one-time sign-in token in the URL fragment, an `HttpOnly` `SameSite=Strict` session cookie; strict security headers including a Content-Security-Policy; no endpoint returns a secret, and provider keys are only accepted and sealed ([`server`](crates/server), [0029](docs/decisions/0029-server-lokal-ui-web-dan-api.md), [0030](docs/decisions/0030-server-lokal-crate-server-dan-bootstrap.md)) | implemented, tested against a real socket; no TLS and no real login, so loopback only |
 | Streamed assistant text is redacted like the stored text | text is released only at cuts where the redactor gives the same result as for the whole answer, with a 64 KiB hold cap ([`stream.rs`](crates/server/src/stream.rs)); the core redactor also hides `password = x` with spaces and `Bearer` tokens after extra spaces or a tab | implemented, tested |
-| The web UI cannot be turned into a script injector | no `{@html}`, `innerHTML`, `eval` or inline script and style; server, model and tool text goes through one text-only component ([0031](docs/decisions/0031-ui-web-svelte-tanpa-kerangka-tambahan.md)) | implemented, tested (214 tests, axe-core pages in two languages and themes) |
-| Human approval for anything that changes a server | proposal flow (tiers 2–4 local execution behind `--enable-execution`, dry-run, `sha256` backup, typed confirmation for tier 4, one-time rollback; [0034](docs/decisions/0034-keputusan-usulan-oleh-manusia.md), [0037](docs/decisions/0037-eksekusi-aksi-yang-disetujui.md), [0038](docs/decisions/0038-eksekusi-tingkat-3-4-dan-rollback.md)) | implemented for local node; remote/agent execution and two-approver Cloud mode planned |
+| The web UI cannot be turned into a script injector | no `{@html}`, `innerHTML`, `eval` or inline script and style; server, model and tool text goes through one text-only component ([0031](docs/decisions/0031-ui-web-svelte-tanpa-kerangka-tambahan.md)) | implemented, tested (296 tests, axe-core pages in two languages and themes) |
+| Human approval for anything that changes a server | proposal flow (tiers 2–4 local, SSH, and pull-only agent execution behind `--enable-execution`, dry-run, `sha256` backup, typed confirmation for tier 4, one-time rollback; [0034](docs/decisions/0034-keputusan-usulan-oleh-manusia.md), [0037](docs/decisions/0037-eksekusi-aksi-yang-disetujui.md), [0038](docs/decisions/0038-eksekusi-tingkat-3-4-dan-rollback.md), [0043](docs/decisions/0043-eksekutor-jarak-jauh-dan-panel-dasar-m5.md)) | implemented and tested for local, SSH, and pull-only agent queue; standalone agent binary and two-approver Cloud mode planned |
+| Desktop shell cannot expose wide IPC to the webview | thin Tauri v2 shell (`src-tauri/`) embeds `crates/server` on `127.0.0.1:0` with `#t=<token>`, restricts commands via `AppManifest::commands`, sets `withGlobalTauri: false` & `freezePrototype: true`, and binds `capabilities/main.json` strictly to `main` ([0044](docs/decisions/0044-cangkang-desktop-tauri-v2-tipis.md)) | implemented, tested |
 
 Found a vulnerability? Please report it privately: see [SECURITY.md](SECURITY.md).
 
@@ -179,11 +180,11 @@ Found a vulnerability? Please report it privately: see [SECURITY.md](SECURITY.md
 | Stage | What | Status |
 |---|---|---|
 | M0 Foundation | domain types, i18n, database schema, size and speed budget | done |
-| M1 Inventory and parity, read-only | collectors, parity rules, CLI, uptime monitor and Telegram alerts | done for core loop: collectors, rules, CLI, uptime monitor + quiet-hours alerting (`watch_loop`) and interactive Telegram bot (tiers 0–2, ADR 0040); remaining: extra collectors/rules |
+| M1 Inventory and parity, read-only | collectors, parity rules, CLI, uptime monitor and Telegram alerts | done: all 11 parity rules (`PAR-001`..`PAR-011`), `vhost`/`cert`/`db`/`launchd` collectors, CLI, uptime monitor + quiet-hours alerting (`watch_loop`) and interactive Telegram bot (tiers 0–2, ADR 0040, 0042) |
 | M2 Read-only AI assistant | OpenAI-compatible provider, chat, memory, tools of tier 0-1 | mostly done as libraries, a command line and a local web UI (`infra serve`, ADR 0029-0031): tool layer, vault, provider, turn loop, memory, FTS5 search, `infra ask`, chat with streaming answers, Telegram bot interface; remaining: a run against a live provider, remote access with TLS, multi-user login |
 | M3 Migration planner | wizard, backup and transport, written plan | done for local/library scope: plan model (M3-a), transport specs and wizard (M3-b), AI planning tools (M3-c), `infra plan` and `infra transport` (M3-d), write-only credential updates and DNS + `is_internal_ip` runner check (ADR 0039); remaining: running against real remote hosts |
-| M4 Execution with approval | tiers 2-4, dry-run, rollback, verification, audit | in progress: local execution for tiers 2–4 (`--enable-execution`), dry-run, `sha256` backup, typed confirmation, one-time rollback, plan approve/run (ADR 0037–0039); remaining: remote executor (SSH/outbound agent) and two-approver Cloud mode |
-| M5 Server panel | sites, PHP versions, databases | planned |
+| M4 Execution with approval | tiers 2-4, dry-run, rollback, verification, audit | in progress: local execution for tiers 2–4 (`--enable-execution`), dry-run, `sha256` backup, typed confirmation, one-time rollback, plan approve/run (ADR 0037–0039), plus `SshExecutor` and pull-only agent API (`/api/agents/poll`, `/api/agents/result`, ADR 0043); remaining: standalone remote agent binary and two-approver Cloud mode |
+| M5 Server panel & desktop shell | service logs, `.test` local sites, Tauri v2 desktop, full panel | base complete: read-only service log viewer, `.test` local site contract & UI (ADR 0043), and thin Tauri v2 desktop shell (`src-tauri/`, ADR 0044); remaining: full production panel (ACME SSL, multi-PHP, full DB management) and signed desktop installers |
 | M6 Commercial | licenses, hosted cloud, billing | planned |
 | M7 Open release | cleanup, documentation, final license and name check | planned |
 
@@ -212,13 +213,13 @@ More in the [FAQ](docs/faq.md).
 crates/core         shared domain types: risk tiers, secret redaction (no external dependencies)
 crates/i18n         en/id message catalog with stable keys and fallback
 crates/inventory    inventory model and the Collector / ParityRule contracts
-crates/collectors   read-only Linux collectors (listeners, processes, cron, PM2, systemd, Docker)
-crates/parity       parity rules PAR-001, PAR-002, PAR-006, PAR-007, PAR-008, PAR-009, PAR-010, comparer and localized report
+crates/collectors   read-only Linux/macOS collectors (listeners, processes, cron, PM2, systemd, Docker, vhost, cert, db, launchd)
+crates/parity       all 11 parity rules PAR-001..PAR-011, comparer and localized report
 crates/net          SSRF-safe async HTTP/TLS client (certificate inspection) for the monitor
 crates/monitor      uptime incident engine (thresholds, maintenance, uptime %), pure logic
 crates/notifier     NotificationChannel contract, Telegram send channel, localized alerts
 crates/watch        glue: probes via net, incidents via monitor, Telegram alerts via notifier (library)
-crates/actions      the closed list of actions an approved proposal may run (restart a service), their fixed tiers, and the argv-only executor behind `transport::Runner` (ADR 0037)
+crates/actions      closed list of actions, fixed tiers, argv-only local & `SshExecutor` behind `transport::Runner`, service log & `.test` site contracts (ADR 0037, 0043)
 crates/agent        AI tool layer and assistant turn loop: tool contract, strict argument schemas, tier-gated registry, conversations, 15-tool registry, tier 1 tools write only pending proposals, pending memories and draft plans (library; no approval or execution)
 crates/vault        AES-256-GCM sealing of secrets at rest, key rotation (library)
 crates/ai           OpenAI-compatible chat client: tool calls, SSE streaming, retries, circuit breaker (library, not yet run against a live provider)
@@ -226,8 +227,9 @@ crates/plan         migration plan model: strict spec, step ordering and gates, 
 crates/transport    transport specs, command plans for rclone/rsync/scp/ssh_pipe, runner seam, setup wizard (library; nothing is executed against real hosts)
 crates/cli          the `infra` command line: collect, compare, init, node, plan, transport, provider, ask, memory, serve (local single-user mode)
 crates/bootstrap    setup helpers shared by the CLI and the server: database location, one local organization, vault from the environment, providers with sealed keys
-crates/server       local web server (axum, tokio, rust-embed): JSON API and the embedded web/dist, loopback only, one-time sign-in token, strict headers; started by `infra serve`
-crates/db           SQLite schema (version 14, migrations 0001-0014), tenant-scoped queries, FTS5 search, hash-chained audit log
+crates/server       local web server (axum, tokio, rust-embed): JSON API, embedded web/dist, pull-only agent endpoints, service logs, `.test` sites, loopback only, one-time sign-in token, strict headers; started by `infra serve`
+crates/db           SQLite schema (version 14, migrations 0001-0014), tenant-scoped queries, FTS5 search, pull-only agent queue, hash-chained audit log
+src-tauri/          thin Tauri v2 desktop shell (`nodivara-desktop`): embeds `crates/server` on `127.0.0.1:0`, `AppManifest::commands`, `capabilities/main.json` bound to `main` (ADR 0044)
 web/                the web UI: Svelte 5 + Vite + TypeScript, no SvelteKit; built into web/dist and embedded by crates/server
 brand/              Nodivara logo files (optimized); colours and usage in docs/brand.md
 docs/design.md      technical design: schema, inventory format, agent protocol, approval flow
@@ -250,7 +252,7 @@ cargo fmt --all --check
 ./scripts/build-web.sh      # web UI: npm ci, type check, tests, production build (needs Node 24 or newer)
 ```
 
-Last run: 890 Rust tests pass and 1 is ignored (the live-provider test) in `cargo test --workspace`, plus 293 tests in `web/`. Build `web/` before `cargo build -p cli` if you want the UI inside the binary.
+Last run: 914 Rust tests pass and 1 is ignored (the live-provider test) in `cargo test --workspace`, plus 296 tests in `web/`. Build `web/` before `cargo build -p cli` (or `nodivara-desktop`) if you want the UI inside the binary.
 
 ## Documentation
 

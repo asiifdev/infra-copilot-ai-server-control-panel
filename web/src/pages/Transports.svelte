@@ -1,8 +1,7 @@
 <script lang="ts">
   import { api } from '../lib/api';
   import { toastError } from '../lib/errors';
-  import { dialogFocus, dialogKey } from '../lib/focus';
-  import { formatBytes, formatDateTime } from '../lib/format';
+  import { dateText, formatBytes } from '../lib/format';
   import { i18n, t } from '../lib/i18n.svelte';
   import { useResource } from '../lib/resource.svelte';
   import { inlineText } from '../lib/text';
@@ -11,6 +10,7 @@
   import type { TransportSummary } from '../lib/types';
   import AsyncView from '../components/AsyncView.svelte';
   import Button from '../components/Button.svelte';
+  import ConfirmDialog from '../components/ConfirmDialog.svelte';
   import DataTable, { type Column } from '../components/DataTable.svelte';
   import EmptyState from '../components/EmptyState.svelte';
   import PageHeader from '../components/PageHeader.svelte';
@@ -31,8 +31,6 @@
   let credsJson = $state('');
   let credsError = $state<string | undefined>(undefined);
   let saving = $state(false);
-
-  const manageFocus = dialogFocus();
 
   function openCredentials(item: TransportSummary) {
     editing = item;
@@ -61,8 +59,7 @@
     }
   }
 
-  async function submitCredentials(event: SubmitEvent) {
-    event.preventDefault();
+  async function submitCredentials() {
     if (!editing || saving) return;
     const parsed = parseCredentials(credsJson);
     if (!parsed) {
@@ -92,8 +89,7 @@
   }
 
   function when(value: string | null): string {
-    if (!value) return t('ui.transports.never');
-    return formatDateTime(value, i18n.locale) ?? inlineText(value, 40);
+    return value ? dateText(value, i18n.locale) : t('ui.transports.never');
   }
 </script>
 
@@ -154,68 +150,31 @@
 </div>
 
 {#if editing}
-  <div class="backdrop" role="presentation">
-    <div
-      {@attach manageFocus}
-      class="dialog"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="creds-title"
-      tabindex="-1"
-      onkeydown={(e) => dialogKey(e, closeCredentials)}
-    >
-      <h2 id="creds-title">{t('ui.transports.update_credentials')}</h2>
-      <p class="muted">{inlineText(editing.name, 80)}</p>
-      <form class="form" onsubmit={submitCredentials}>
-        <TextField
-          id="transport-credentials-json"
-          multiline
-          label={t('ui.transports.credentials_json_label')}
-          bind:value={credsJson}
-          error={credsError}
-          disabled={saving}
-        />
-        <div class="row actions">
-          <Button onclick={closeCredentials} disabled={saving}>{t('ui.common.cancel')}</Button>
-          <Button type="submit" variant="primary" busy={saving}>{t('ui.transports.update_credentials')}</Button>
-        </div>
-      </form>
-    </div>
-  </div>
+  <ConfirmDialog
+    role="dialog"
+    title={t('ui.transports.update_credentials')}
+    message={inlineText(editing.name, 80)}
+    confirmLabel={t('ui.transports.update_credentials')}
+    cancelLabel={t('ui.common.cancel')}
+    tone="primary"
+    busy={saving}
+    onconfirm={submitCredentials}
+    oncancel={closeCredentials}
+  >
+    <TextField
+      id="transport-credentials-json"
+      multiline
+      label={t('ui.transports.credentials_json_label')}
+      bind:value={credsJson}
+      error={credsError}
+      disabled={saving}
+    />
+  </ConfirmDialog>
 {/if}
 
 <style>
   .detail {
     display: block;
     font-size: var(--nv-text-sm);
-  }
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    padding: var(--nv-space-4);
-    background: var(--nv-scrim);
-    backdrop-filter: blur(6px);
-    z-index: 50;
-  }
-  .dialog,
-  .form {
-    display: flex;
-    flex-direction: column;
-    gap: var(--nv-space-3);
-  }
-  .dialog {
-    max-width: 30rem;
-    width: 100%;
-    padding: var(--nv-space-5);
-    background: var(--nv-surface);
-    border: var(--nv-border-width) solid var(--nv-border-strong);
-    border-radius: var(--nv-radius-lg);
-    box-shadow: var(--nv-shadow-2);
-  }
-  .actions {
-    justify-content: flex-end;
-    margin-block-start: var(--nv-space-2);
   }
 </style>

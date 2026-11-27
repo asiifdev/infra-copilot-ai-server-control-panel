@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '../lib/api';
-  import { formatDateTime } from '../lib/format';
+  import { dateText } from '../lib/format';
   import { i18n, t } from '../lib/i18n.svelte';
   import { useResource } from '../lib/resource.svelte';
   import { inlineText } from '../lib/text';
@@ -36,7 +36,7 @@
           {t('ui.findings.comparison', {
             source: inlineText(view.comparison.source, 80),
             target: inlineText(view.comparison.target, 80),
-            time: formatDateTime(view.comparison.created_at, i18n.locale) ?? inlineText(view.comparison.created_at, 40),
+            time: dateText(view.comparison.created_at, i18n.locale),
           })}
         </p>
       {/if}

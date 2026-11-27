@@ -1,7 +1,7 @@
 <script lang="ts">
   import { api } from '../lib/api';
-  import { toastError } from '../lib/errors';
-  import { describeData, formatDateTime } from '../lib/format';
+  import { withBusy } from '../lib/errors';
+  import { dateText, describeData } from '../lib/format';
   import { i18n, t } from '../lib/i18n.svelte';
   import { hrefFor } from '../lib/router.svelte';
   import { useResource } from '../lib/resource.svelte';
@@ -27,17 +27,20 @@
   let logService = $state('');
   let logBusy = $state(false);
   let logs = $state.raw<NodeLogsView | null>(null);
+  let tokenBusy = $state(false);
+  let rotatedToken = $state<string | null>(null);
 
-  async function loadLogs(event: SubmitEvent) {
+  function loadLogs(event: SubmitEvent) {
     event.preventDefault();
-    logBusy = true;
-    try {
+    void withBusy((b) => (logBusy = b), async () => {
       logs = await api.nodeLogs(name, logService.trim());
-    } catch (cause) {
-      toastError(cause);
-    } finally {
-      logBusy = false;
-    }
+    });
+  }
+
+  function rotateToken() {
+    void withBusy((b) => (tokenBusy = b), async () => {
+      rotatedToken = (await api.rotateAgentToken(name)).token;
+    });
   }
 
   const inventory = useResource((signal) => api.inventory(name, kind || undefined, 500, signal));
@@ -69,7 +72,7 @@
       <Card>
         <p>
           <StatusBadge kind="state" value={view.status} />
-          {t('ui.node.taken_at', { time: formatDateTime(view.taken_at, i18n.locale) ?? inlineText(view.taken_at, 40) })}
+          {t('ui.node.taken_at', { time: dateText(view.taken_at, i18n.locale) })}
         </p>
         {#if view.warnings.length > 0}
           <h2>{t('ui.node.warnings')}</h2>
@@ -111,6 +114,16 @@
     </form>
     {#if logs}
       <pre>{logs.content}</pre>
+    {/if}
+  </Card>
+
+  <Card title={t('ui.node.agent_token')}>
+    <div class="row">
+      <Button variant="secondary" onclick={rotateToken} busy={tokenBusy}>{t('ui.node.rotate_token')}</Button>
+    </div>
+    {#if rotatedToken}
+      <p class="muted">{t('ui.node.token_once')}</p>
+      <TextBlock text={rotatedToken} mono />
     {/if}
   </Card>
 </div>

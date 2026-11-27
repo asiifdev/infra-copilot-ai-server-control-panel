@@ -15,20 +15,20 @@
     oncancel: () => void;
   }
 
-  let { targetLabel, onconfirm, ...rest }: Props = $props();
+  let { title, message, targetLabel, confirmLabel, cancelLabel, busy = false, tone = 'danger', onconfirm, oncancel }: Props = $props();
   let typed = $state('');
   const matches = $derived(typed === targetLabel);
 </script>
 
-<ConfirmDialog {...rest} confirmDisabled={!matches} onconfirm={() => onconfirm(typed)}>
+<ConfirmDialog {title} {message} {confirmLabel} {cancelLabel} {busy} {tone} {oncancel} confirmDisabled={!matches} onconfirm={() => onconfirm(typed)}>
   <TextField
     id="confirm-typed-input"
     label={t('ui.proposals.typed_confirm_label', { target: targetLabel })}
     placeholder={t('ui.proposals.typed_confirm_placeholder')}
     bind:value={typed}
-    disabled={rest.busy}
+    disabled={busy}
     onkeydown={(e) => {
-      if (e.key === 'Enter' && matches && !rest.busy) {
+      if (e.key === 'Enter' && matches && !busy) {
         e.preventDefault();
         onconfirm(typed);
       }

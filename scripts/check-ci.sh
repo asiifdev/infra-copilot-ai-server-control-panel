@@ -2,8 +2,9 @@
 set -euo pipefail
 
 # Pre-push CI check: runs locally what GitHub Actions runs on all three OSes.
-# Cross-compilation to Windows is not available without rustup, so this script
-# uses heuristics to catch the most common cross-platform mistakes.
+# Full cross-compilation to Windows is impossible from macOS (C deps like ring,
+# libsqlite3-sys need MSVC), so this script catches Windows issues via heuristics
+# that match every real CI failure pattern we have seen so far.
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -20,6 +21,11 @@ err()  { fail=$((fail + 1)); printf "${RED}  ✗ %s${RESET}\n" "$1"; }
 skip() { warn=$((warn + 1)); printf "${YELLOW}  ⚠ %s${RESET}\n" "$1"; }
 
 section() { printf "\n${BOLD}── %s${RESET}\n" "$1"; }
+
+# Ensure rustup cargo-fmt works when both Homebrew and rustup coexist.
+if [ -x "$HOME/.cargo/bin/rustup" ]; then
+    export PATH="$HOME/.cargo/bin:$PATH"
+fi
 
 cd "$(git rev-parse --show-toplevel)"
 
@@ -101,76 +107,113 @@ else
     skip "gitleaks not installed (brew install gitleaks)"
 fi
 
-# ── 8. Windows cross-platform heuristics ──────────────────────────────────
+# ── 8. Windows compatibility (heuristic linter) ───────────────────────────
+# Catches every failure pattern seen in CI so far:
+#   - unix-only types (OsString, OwnedFd, ...) used outside #[cfg(unix)]
+#   - /dev/* paths in tests without #[cfg(unix)]
+#   - unix-only std/libc APIs without cfg gate
+#   - structs/enums/methods only used in unix code but not gated (dead_code on Windows)
 section "Windows compatibility (heuristics)"
 win_issues=0
 
-# 8a. Items used behind #[cfg(unix)] imports but referenced outside cfg(unix)
-# Check for types commonly gated behind cfg(unix) that are used without the gate
-while IFS= read -r file; do
-    # Find types imported under #[cfg(unix)]
-    unix_types=()
-    while IFS= read -r line; do
-        # Extract type names from use statements under cfg(unix)
-        for t in OsString OsStr OwnedFd RawFd SignalKind; do
-            if echo "$line" | grep -qw "$t"; then
-                unix_types+=("$t")
-            fi
-        done
-    done < <(awk '/#\[cfg\(unix\)\]/{getline; print}' "$file")
+# Helper: check whether a line number is inside a #[cfg(unix)] block.
+# Looks backwards for the nearest fn/struct/enum/impl and whether it has cfg(unix).
+in_unix_scope() {
+    local file="$1" lineno="$2"
+    awk -v line="$lineno" '
+        /^[[:space:]]*#\[cfg\(unix\)\]/ { saw_cfg = NR }
+        /^[[:space:]]*#\[cfg\(test\)\]/ { in_test_mod = 1 }
+        /^[[:space:]]*(pub )?(unsafe )?(async )?(fn |struct |enum |impl )/ {
+            if (saw_cfg >= NR-3 && saw_cfg < NR) fn_start = NR
+            else fn_start = 0
+            saw_cfg = 0
+        }
+        /^[[:space:]]*#\[cfg\(unix\)\]/ && NR >= line-2 && NR <= line { found_inline = 1 }
+        NR == line {
+            if (fn_start > 0 || found_inline) print "yes"
+            else print "no"
+        }
+    ' "$file"
+}
 
-    for t in "${unix_types[@]:-}"; do
-        [ -z "$t" ] && continue
-        # Find uses of the type outside of cfg(unix) blocks (rough heuristic:
-        # lines that reference the type but are NOT immediately preceded by cfg(unix))
+# 8a. Unix-only types used without cfg(unix) gate
+UNIX_TYPES="OsString OsStr OwnedFd RawFd BorrowedFd SignalKind"
+while IFS= read -r file; do
+    # Which unix-only types does this file import under #[cfg(unix)]?
+    file_unix_types=()
+    for t in $UNIX_TYPES; do
+        if awk '/#\[cfg\(unix\)\]/{getline; if ($0 ~ /\b'"$t"'\b/) print "yes"}' "$file" | grep -q yes; then
+            file_unix_types+=("$t")
+        fi
+    done
+    [ ${#file_unix_types[@]} -eq 0 ] && continue
+
+    for t in "${file_unix_types[@]}"; do
         while IFS=: read -r lineno content; do
-            prev_line=$((lineno - 1))
-            prev=$(sed -n "${prev_line}p" "$file")
-            prev2_line=$((lineno - 2))
-            prev2=$(sed -n "${prev2_line}p" "$file" 2>/dev/null || true)
-            if ! echo "$prev" | grep -q 'cfg(unix)' && \
-               ! echo "$prev2" | grep -q 'cfg(unix)' && \
-               ! echo "$content" | grep -q '#\[cfg' && \
-               ! echo "$content" | grep -q '^\s*use ' && \
-               ! echo "$content" | grep -q '^\s*//' ; then
-                # Check if inside a #[cfg(unix)] fn (rough: look back for fn with cfg)
-                in_unix_fn=$(awk -v line="$lineno" '
-                    /#\[cfg\(unix\)\]/ { saw_cfg = NR }
-                    /^[[:space:]]*(pub )?(async )?fn / {
-                        if (saw_cfg == NR-1 || saw_cfg == NR-2) fn_start = NR
-                        else fn_start = 0
-                    }
-                    NR == line { if (fn_start > 0) print "yes"; else print "no" }
-                ' "$file")
-                if [ "$in_unix_fn" != "yes" ]; then
-                    printf "  ${YELLOW}  ⚠ %s:%s uses %s without #[cfg(unix)]${RESET}\n" \
-                        "$file" "$lineno" "$t"
-                    win_issues=$((win_issues + 1))
-                fi
+            # Skip use/import lines and comments
+            echo "$content" | grep -qE '^\s*(use |//)' && continue
+            scope=$(in_unix_scope "$file" "$lineno")
+            if [ "$scope" != "yes" ]; then
+                printf "${RED}  ✗ %s:%s uses unix-only type '%s' without #[cfg(unix)]${RESET}\n" \
+                    "$file" "$lineno" "$t"
+                win_issues=$((win_issues + 1))
             fi
-        done < <(grep -n "\b${t}\b" "$file" | grep -v '^\s*use ' | grep -v '^\s*//' | grep -v '#\[cfg')
+        done < <(grep -n "\b${t}\b" "$file" | grep -vE '^\s*(use |.*//.*'"$t"')')
     done
 done < <(find crates -name '*.rs' -type f)
 
-# 8b. Check for unix-only std APIs used without cfg gate
+# 8b. /dev/* paths that access the filesystem without #[cfg(unix)]
+while IFS=: read -r file lineno content; do
+    # Skip comments
+    echo "$content" | grep -qE '^\s*//' && continue
+    # Skip diff output strings ("+++ /dev/null", "--- /dev/null") — just text, not fs access
+    echo "$content" | grep -qE '\+\+\+ /dev/null|--- /dev/null' && continue
+    # Skip string-only data in arrays/matches (parse tests, bad-input lists)
+    echo "$content" | grep -qE 'parse_socket_link|^\s*"/dev/' && continue
+
+    # Check: is there a #[cfg(unix)] anywhere in the 20 lines before this line?
+    start=$((lineno - 20))
+    [ "$start" -lt 1 ] && start=1
+    if sed -n "${start},${lineno}p" "$file" | grep -q '#\[cfg(unix)\]'; then
+        continue
+    fi
+    # Also check fn/struct-level scope
+    scope=$(in_unix_scope "$file" "$lineno")
+    if [ "$scope" = "yes" ]; then
+        continue
+    fi
+    printf "${RED}  ✗ %s:%s uses /dev/* path without #[cfg(unix)] — will fail on Windows${RESET}\n" \
+        "$file" "$lineno"
+    win_issues=$((win_issues + 1))
+done < <(grep -rn '"/dev/' crates/ --include='*.rs' 2>/dev/null || true)
+
+# 8c. Unix-only std APIs without cfg gate
 for pattern in 'std::os::unix' 'nix::' 'libc::' 'signal(SignalKind'; do
     while IFS=: read -r file lineno content; do
-        prev_line=$((lineno - 1))
-        prev=$(sed -n "${prev_line}p" "$file")
-        if ! echo "$prev" | grep -q 'cfg(unix)' && \
-           ! echo "$content" | grep -q 'cfg(unix)' && \
-           ! echo "$content" | grep -q '^\s*//'; then
-            printf "  ${YELLOW}  ⚠ %s:%s uses %s without cfg(unix)${RESET}\n" \
+        echo "$content" | grep -qE '^\s*//' && continue
+        scope=$(in_unix_scope "$file" "$lineno")
+        if [ "$scope" != "yes" ]; then
+            printf "${YELLOW}  ⚠ %s:%s uses '%s' without cfg(unix)${RESET}\n" \
                 "$file" "$lineno" "$pattern"
             win_issues=$((win_issues + 1))
         fi
     done < <(grep -rn "$pattern" crates/ --include='*.rs' 2>/dev/null || true)
 done
 
+# 8d. Fake secret patterns that gitleaks would flag (high-entropy API key lookalikes)
+while IFS=: read -r file lineno content; do
+    echo "$content" | grep -qE '^\s*//' && continue
+    if echo "$content" | grep -qiE '(sk-proj-|sk-live-|ghp_|ghr_|AKIA)[A-Za-z0-9]{10,}'; then
+        printf "${RED}  ✗ %s:%s has a fake key that looks real to gitleaks — use a low-entropy placeholder${RESET}\n" \
+            "$file" "$lineno"
+        win_issues=$((win_issues + 1))
+    fi
+done < <(grep -rn -E '(key|token|secret|password)\s*[=:]\s*"' crates/ --include='*.rs' 2>/dev/null || true)
+
 if [ "$win_issues" -eq 0 ]; then
-    ok "no obvious Windows issues found"
+    ok "no Windows / cross-platform issues found"
 else
-    skip "$win_issues potential Windows issue(s) — review above"
+    err "$win_issues cross-platform issue(s) found — fix before pushing"
 fi
 
 # ── Summary ────────────────────────────────────────────────────────────────

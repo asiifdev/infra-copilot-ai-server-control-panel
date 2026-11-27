@@ -4,7 +4,7 @@
   import Icon, { type IconName } from './Icon.svelte';
 
   type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
-  type Kind = 'node' | 'severity' | 'tier' | 'state';
+  type Kind = 'node' | 'severity' | 'tier' | 'state' | 'site';
 
   interface Props {
     kind: Kind;
@@ -57,11 +57,16 @@
     partial: ['ui.state.partial', 'warning'],
     ready: ['ui.state.ready', 'success'],
   };
+  const SITE: Record<string, [string, Tone]> = {
+    proposed: ['ui.sites.proposed', 'info'],
+    active: ['ui.sites.active', 'success'],
+  };
   const TABLES: Record<Kind, Record<string, [string, Tone]>> = {
     node: NODE,
     severity: SEVERITY,
     tier: TIER,
     state: STATE,
+    site: SITE,
   };
   const ICONS: Record<Tone, IconName> = {
     success: 'check',

@@ -55,9 +55,8 @@ describe('i18n key coverage', () => {
   });
 
   it('has no unused ui.* key in either catalog file', () => {
-    const reserved = new Set(['ui.sites.title', 'ui.sites.proposed', 'ui.sites.active']);
-    const uiEn = [...en.keys()].filter((k) => k.startsWith('ui.') && !reserved.has(k));
-    const uiId = [...id.keys()].filter((k) => k.startsWith('ui.') && !reserved.has(k));
+    const uiEn = [...en.keys()].filter((k) => k.startsWith('ui.'));
+    const uiId = [...id.keys()].filter((k) => k.startsWith('ui.'));
     expect(uiEn.filter((k) => !used.has(k))).toEqual([]);
     expect(uiId.filter((k) => !used.has(k))).toEqual([]);
   });

@@ -1,6 +1,8 @@
 // Locale-aware formatting of values from the API. Invalid input is shown as plain text, never
 // guessed at.
 
+import { inlineText } from './text';
+
 export function formatDateTime(value: string | null | undefined, locale: string): string | null {
   if (!value) return null;
   const date = new Date(value);
@@ -10,6 +12,10 @@ export function formatDateTime(value: string | null | undefined, locale: string)
   } catch {
     return null;
   }
+}
+
+export function dateText(value: string, locale: string): string {
+  return formatDateTime(value, locale) ?? inlineText(value, 40);
 }
 
 export function formatNumber(value: number, locale: string): string {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '../lib/api';
-  import { toastError } from '../lib/errors';
+  import { withBusy } from '../lib/errors';
   import { t } from '../lib/i18n.svelte';
   import { useResource } from '../lib/resource.svelte';
   import { inlineText } from '../lib/text';
@@ -27,16 +27,8 @@
     { value: 'tls', label: 'TLS' },
   ];
 
-  async function runOp(fn: () => Promise<void>) {
-    if (busy) return;
-    busy = true;
-    try {
-      await fn();
-    } catch (cause) {
-      toastError(cause);
-    } finally {
-      busy = false;
-    }
+  function runOp(fn: () => Promise<void>) {
+    if (!busy) void withBusy((b) => (busy = b), fn);
   }
 
   function addMonitor(event: SubmitEvent) {

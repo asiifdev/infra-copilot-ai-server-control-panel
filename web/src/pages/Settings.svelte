@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api, ApiError } from '../lib/api';
-  import { toastError } from '../lib/errors';
+  import { toastError, withBusy } from '../lib/errors';
   import { i18n, isLocale, LOCALES, t } from '../lib/i18n.svelte';
   import { useResource } from '../lib/resource.svelte';
   import { session } from '../lib/session.svelte';
@@ -24,7 +24,29 @@
 
   const providers = useResource((signal) => api.providers(signal));
   const channels = useResource((signal) => api.channels(signal));
+  const sites = useResource((signal) => api.sites(signal));
   const masterKey = $derived(session.info?.master_key_configured ?? false);
+
+  let siteDomain = $state('');
+  let sitePort = $state('3000');
+  let siteBusy = $state(false);
+  let sitePreview = $state<string | null>(null);
+
+  function addSite(event: SubmitEvent) {
+    event.preventDefault();
+    const port = Number(sitePort);
+    if (!siteDomain.trim() || !Number.isInteger(port) || port < 1 || port > 65535 || siteBusy) return;
+    siteBusy = true;
+    void api.createSite(siteDomain.trim(), port).then(
+      (res) => {
+        siteDomain = '';
+        sitePreview = res.config_preview;
+        toasts.push('success', t('ui.sites.created'));
+        sites.reload();
+      },
+      toastError,
+    ).finally(() => (siteBusy = false));
+  }
 
   let chKind = $state('telegram');
   let chName = $state('');
@@ -37,16 +59,8 @@
     { value: 'webhook', label: 'Webhook' },
   ];
 
-  async function runCh(fn: () => Promise<void>) {
-    if (chBusy) return;
-    chBusy = true;
-    try {
-      await fn();
-    } catch (cause) {
-      toastError(cause);
-    } finally {
-      chBusy = false;
-    }
+  function runCh(fn: () => Promise<void>) {
+    if (!chBusy) void withBusy((b) => (chBusy = b), fn);
   }
 
   function addChannel(event: SubmitEvent) {
@@ -239,6 +253,29 @@
         <p>{t('ui.channels.link_code', { command: linkCmd })}</p>
       {/if}
     </div>
+  </Card>
+
+  <Card title={t('ui.sites.title')}>
+    {#if sites.data?.sites.length}
+      <ul class="plain stack">
+        {#each sites.data.sites as s (s.id)}
+          <li class="row">
+            <code>{inlineText(s.domain, 120)}</code>
+            <span class="muted">:{s.upstream_port}</span>
+            <StatusBadge kind="site" value={s.status} />
+            <code class="muted">{inlineText(s.config_path, 120)}</code>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    <form class="row" onsubmit={addSite}>
+      <TextField id="site-domain" label={t('ui.sites.domain')} bind:value={siteDomain} required disabled={siteBusy} />
+      <TextField id="site-port" label={t('ui.sites.port')} bind:value={sitePort} required disabled={siteBusy} />
+      <Button type="submit" variant="primary" busy={siteBusy}>{t('ui.sites.add')}</Button>
+    </form>
+    {#if sitePreview}
+      <pre>{sitePreview}</pre>
+    {/if}
   </Card>
 
   <Card title={t('ui.settings.session')}>

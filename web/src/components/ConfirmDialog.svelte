@@ -12,12 +12,13 @@
     confirmDisabled?: boolean;
     /** Look of the confirming button: danger for a deletion, primary for a deliberate approval. */
     tone?: 'danger' | 'primary';
+    role?: 'alertdialog' | 'dialog';
     children?: Snippet;
     onconfirm: () => void;
     oncancel: () => void;
   }
 
-  let { title, message, confirmLabel, cancelLabel, busy = false, confirmDisabled = false, tone = 'danger', children, onconfirm, oncancel }: Props = $props();
+  let { title, message, confirmLabel, cancelLabel, busy = false, confirmDisabled = false, tone = 'danger', role = 'alertdialog', children, onconfirm, oncancel }: Props = $props();
 
   // Set once the person confirmed: the action usually removes the row the dialog was opened
   // from (a deleted note or provider), so the opener is no longer a place to return to.
@@ -40,7 +41,7 @@
   <div
     {@attach manageFocus}
     class="dialog"
-    role="alertdialog"
+    {role}
     aria-modal="true"
     aria-labelledby="confirm-title"
     aria-describedby="confirm-message"
