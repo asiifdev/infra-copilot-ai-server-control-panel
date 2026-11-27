@@ -267,14 +267,23 @@ fn repeated_options_are_a_usage_error() {
 
 #[test]
 fn non_regular_files_are_rejected_without_reading() {
-    // /dev/zero reports length 0 but never ends; a directory is not an inventory either.
-    for path in ["/dev/zero", "/dev/null", env!("CARGO_MANIFEST_DIR")] {
-        let r = run(&["compare", path, path], None);
-        assert_eq!(r.code, 2, "{path}: {}", r.stderr);
-        assert!(r.stderr.contains("not a regular file"), "{}", r.stderr);
+    // A directory is not an inventory.
+    let dir = env!("CARGO_MANIFEST_DIR");
+    let r = run(&["compare", dir, dir], None);
+    assert_eq!(r.code, 2, "{dir}: {}", r.stderr);
+    assert!(r.stderr.contains("not a regular file"), "{}", r.stderr);
+
+    // /dev/zero reports length 0 but never ends — only on Unix.
+    #[cfg(unix)]
+    {
+        for path in ["/dev/zero", "/dev/null"] {
+            let r = run(&["compare", path, path], None);
+            assert_eq!(r.code, 2, "{path}: {}", r.stderr);
+            assert!(r.stderr.contains("not a regular file"), "{}", r.stderr);
+        }
+        let id = run(&["compare", "/dev/zero", "/dev/zero", "--lang", "id"], None);
+        assert!(id.stderr.contains("bukan berkas biasa"), "{}", id.stderr);
     }
-    let id = run(&["compare", "/dev/zero", "/dev/zero", "--lang", "id"], None);
-    assert!(id.stderr.contains("bukan berkas biasa"), "{}", id.stderr);
 }
 
 #[test]
