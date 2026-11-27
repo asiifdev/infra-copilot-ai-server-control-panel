@@ -161,8 +161,8 @@ pub fn db_path(
             .map(|d| PathBuf::from(d).join("Nodivara"))
             .or_else(|| {
                 env.get("USERPROFILE")
-                    .or(home)
                     .filter(|h| !h.is_empty())
+                    .or(home)
                     .map(|h| PathBuf::from(h).join(".nodivara"))
             })
     } else {

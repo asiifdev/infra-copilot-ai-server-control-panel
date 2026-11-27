@@ -15,29 +15,37 @@ env:
 
 jobs:
   build:
-    name: Build (${{ matrix.target }})
+    name: Build (${{ matrix.label }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
+            label: Linux x64
             target: x86_64-unknown-linux-gnu
             archive_ext: tar.gz
             bin_name: infra
+            bundles: appimage,deb
           - os: macos-latest
+            label: macOS Apple Silicon
             target: aarch64-apple-darwin
             archive_ext: tar.gz
             bin_name: infra
+            bundles: dmg
           - os: macos-latest
+            label: macOS Intel
             target: x86_64-apple-darwin
             archive_ext: tar.gz
             bin_name: infra
+            bundles: dmg
           - os: windows-latest
+            label: Windows x64
             target: x86_64-pc-windows-msvc
             archive_ext: zip
             bin_name: infra.exe
+            bundles: nsis,msi
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -52,31 +60,63 @@ jobs:
           rustup default stable
           rustup target add "${{ matrix.target }}"
           rustc --version
-      - name: Build web UI (embedded into infra binary)
+      - name: Install Linux desktop dependencies (Tauri v2)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf xdg-utils
+      - name: Build web UI (embedded into infra & desktop)
         shell: bash
         run: |
           cd web
           npm ci --no-audit --no-fund
           npm run build
-      - name: Build release binary
+      - name: Build CLI release binary
         shell: bash
         run: cargo build --release --locked -p cli --target "${{ matrix.target }}"
-      - name: Package archive
+      - name: Build Desktop installer (Tauri v2)
+        shell: bash
+        env:
+          CI: "true"
+          TAURI_BUNDLER_NO_OPEN: "true"
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          cfg="{\"bundle\":{\"active\":true}}"
+          if [[ "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-].+)?$ ]]; then
+            cfg="{\"version\":\"${tag}\",\"bundle\":{\"active\":true}}"
+          fi
+          npx --yes @tauri-apps/cli@^2 build \
+            --target "${{ matrix.target }}" \
+            --bundles "${{ matrix.bundles }}" \
+            --config "$cfg" \
+            --ci -- --locked
+      - name: Package CLI & Desktop assets
         shell: bash
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME:-dev}"
           pkg="nodivara-${tag}-${{ matrix.target }}"
           stage="dist/${pkg}"
-          mkdir -p "$stage"
+          mkdir -p "$stage" artifacts
           cp "target/${{ matrix.target }}/release/${{ matrix.bin_name }}" "$stage/"
           cp README.md README.id.md LICENSE* "$stage/"
-          mkdir -p artifacts
           if [ "${{ matrix.archive_ext }}" = "tar.gz" ]; then
             tar -C dist -czf "artifacts/${pkg}.tar.gz" "${pkg}"
           else
             (cd dist && 7z a -tzip "../artifacts/${pkg}.zip" "${pkg}")
           fi
+
+          bundle_dir="target/${{ matrix.target }}/release/bundle"
+          for ext in dmg AppImage deb msi exe; do
+            while IFS= read -r f; do
+              [ -n "$f" ] || continue
+              base="$(basename "$f")"
+              cp "$f" "artifacts/${base}"
+            done < <(find "$bundle_dir" -type f -name "*.${ext}" 2>/dev/null || true)
+          done
+          ls -lh artifacts/
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-${{ matrix.target }}
@@ -99,7 +139,7 @@ jobs:
         run: |
           set -euo pipefail
           cd release-assets
-          sha256sum *.tar.gz *.zip > SHA256SUMS.txt
+          sha256sum * > SHA256SUMS.txt
           cat SHA256SUMS.txt
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -112,9 +152,57 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh release create "${GITHUB_REF_NAME}" \
-            release-assets/*.tar.gz \
-            release-assets/*.zip \
-            release-assets/SHA256SUMS.txt \
-            --title "${GITHUB_REF_NAME}" \
-            --generate-notes
+          tag="${GITHUB_REF_NAME}"
+          repo="${GITHUB_REPOSITORY}"
+          base_url="https://github.com/${repo}/releases/download/${tag}"
+
+          find_asset() {
+            find release-assets -maxdepth 1 -type f -name "$1" -printf '%f\n' | head -n1 || true
+          }
+
+          win_exe=$(find_asset '*-setup.exe')
+          [ -z "$win_exe" ] && win_exe=$(find_asset '*.exe')
+          win_msi=$(find_asset '*.msi')
+          mac_arm=$(find_asset '*aarch64*.dmg')
+          mac_x64=$(find_asset '*x64*.dmg')
+          [ -z "$mac_x64" ] && mac_x64=$(find_asset '*x86_64*.dmg')
+          lin_app=$(find_asset '*.AppImage')
+          lin_deb=$(find_asset '*.deb')
+
+          win_links=""
+          [ -n "$win_exe" ] && win_links="[Installer (.exe)](${base_url}/${win_exe})"
+          [ -n "$win_msi" ] && win_links="${win_links:+${win_links} · }[MSI (.msi)](${base_url}/${win_msi})"
+          [ -z "$win_links" ] && win_links="_n/a_"
+
+          mac_arm_link="_n/a_"
+          [ -n "$mac_arm" ] && mac_arm_link="[DMG](${base_url}/${mac_arm})"
+
+          mac_x64_link="_n/a_"
+          [ -n "$mac_x64" ] && mac_x64_link="[DMG](${base_url}/${mac_x64})"
+
+          lin_links=""
+          [ -n "$lin_app" ] && lin_links="[AppImage](${base_url}/${lin_app})"
+          [ -n "$lin_deb" ] && lin_links="${lin_links:+${lin_links} · }[deb](${base_url}/${lin_deb})"
+          [ -z "$lin_links" ] && lin_links="_n/a_"
+
+          python3 - <<PY
+          content = f"""## Download
+
+          | Platform | Download | Signing |
+          |---|---|---|
+          | Windows x64 | ${win_links} | ⚠️ Unsigned: SmartScreen may show "Windows protected your PC"; choose **More info → Run anyway** |
+          | macOS Apple Silicon | ${mac_arm_link} | ⚠️ Unsigned unless Apple Developer ID secrets are configured |
+          | macOS Intel | ${mac_x64_link} | ⚠️ Unsigned unless Apple Developer ID secrets are configured |
+          | Linux x64 | ${lin_links} | — Linux packages are not code-signed |
+
+          CLI binaries (\`infra\`) for all platforms and \`SHA256SUMS.txt\` are attached in the assets below.
+          """
+          import textwrap
+          with open("RELEASE_NOTES.md", "w", encoding="utf-8") as f:
+              f.write(textwrap.dedent(content))
+          PY
+
+          gh release create "${tag}" \
+            release-assets/* \
+            --title "${tag} — Nodivara" \
+            --notes-file RELEASE_NOTES.md
