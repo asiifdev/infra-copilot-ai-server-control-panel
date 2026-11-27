@@ -304,6 +304,7 @@ fn update_env_var_validation_and_redaction() -> TestResult {
 }
 
 #[test]
+#[cfg(unix)]
 fn update_env_var_dry_run_backup_execute_and_rollback() -> TestResult {
     let root = TempDir::new("env")?;
     let backups = TempDir::new("env-bak")?;
@@ -362,6 +363,7 @@ fn update_env_var_dry_run_backup_execute_and_rollback() -> TestResult {
 }
 
 #[test]
+#[cfg(unix)]
 fn delete_managed_file_tier_4_backup_execute_rollback_and_symlinks() -> TestResult {
     let root = TempDir::new("del")?;
     let backups = TempDir::new("del-bak")?;
