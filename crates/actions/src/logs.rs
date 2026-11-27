@@ -166,7 +166,7 @@ mod tests {
                 );
                 Ok(transport::RunOutput {
                     exit_code: Some(0),
-                    stdout: b"started\nAPI_KEY=sk-proj-1234567890abcdef1234567890\n".to_vec(),
+                    stdout: b"started\nAPI_KEY=test-key-not-real\n".to_vec(),
                     stderr: Vec::new(),
                     truncated: false,
                     elapsed: Duration::from_millis(2),
@@ -176,7 +176,7 @@ mod tests {
         let svc = ServiceName::new("nginx")?;
         let excerpt =
             read_service_logs_via_runner(&Fake, &svc, 10).map_err(|e| format!("runner: {e}"))?;
-        assert!(!excerpt.content.contains("sk-proj-1234567890"));
+        assert!(!excerpt.content.contains("test-key-not-real"));
         assert!(excerpt.content.contains("started"));
         Ok(())
     }

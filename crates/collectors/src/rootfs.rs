@@ -512,6 +512,7 @@ struct Walked {
 }
 
 /// One pending path component.
+#[cfg(unix)]
 enum Step {
     Name(OsString),
     Parent,
